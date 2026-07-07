@@ -1,0 +1,345 @@
+import { db } from './firebase';
+import { 
+  collection, 
+  getDocs, 
+  doc, 
+  setDoc, 
+  deleteDoc
+} from 'firebase/firestore';
+import { SymposiumEvent, Attendee, Team, Host, Judge, Result } from './types';
+import { 
+  INITIAL_EVENTS, 
+  INITIAL_ATTENDEES
+} from './initialData';
+
+// Firestore collection names mapped exactly to the prompt instructions
+const EVENTS_COL = 'events';
+const PARTICIPANTS_COL = 'participants';
+const TEAMS_COL = 'teams';
+const HOSTS_COL = 'hosts';
+const JUDGES_COL = 'judges';
+const RESULTS_COL = 'results';
+
+// Global state tracking for Firestore Offline Support
+export interface SyncStatus {
+  lastSyncTime: string;
+  pendingCount: number;
+  connectionStatus: 'Online' | 'Offline';
+}
+
+let syncStatus: SyncStatus = {
+  lastSyncTime: new Date().toLocaleTimeString(),
+  pendingCount: 0,
+  connectionStatus: 'Online'
+};
+
+// Check internet connection
+if (typeof window !== 'undefined') {
+  syncStatus.connectionStatus = navigator.onLine ? 'Online' : 'Offline';
+  window.addEventListener('online', () => {
+    syncStatus.connectionStatus = 'Online';
+    triggerPendingSync();
+  });
+  window.addEventListener('offline', () => {
+    syncStatus.connectionStatus = 'Offline';
+  });
+}
+
+export function getSyncStatus(): SyncStatus {
+  return { ...syncStatus };
+}
+
+// Queue for pending sync operations
+function getPendingOps(): any[] {
+  try {
+    const data = localStorage.getItem('pending_sync_ops');
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePendingOps(ops: any[]) {
+  try {
+    localStorage.setItem('pending_sync_ops', JSON.stringify(ops));
+    syncStatus.pendingCount = ops.length;
+  } catch (e) {
+    console.error('Failed to save pending ops to localStorage', e);
+  }
+}
+
+async function triggerPendingSync() {
+  const ops = getPendingOps();
+  if (ops.length === 0) return;
+  
+  console.log(`Attempting to sync ${ops.length} pending operations...`);
+  const remainingOps: any[] = [];
+  
+  for (const op of ops) {
+    try {
+      if (op.type === 'save') {
+        await setDoc(doc(db, op.collection, op.id), op.data);
+      } else if (op.type === 'delete') {
+        await deleteDoc(doc(db, op.collection, op.id));
+      }
+    } catch (e) {
+      console.warn(`Sync failed for doc ${op.id} in ${op.collection}, will retry later`, e);
+      remainingOps.push(op);
+    }
+  }
+  
+  savePendingOps(remainingOps);
+  syncStatus.lastSyncTime = new Date().toLocaleTimeString();
+}
+
+function queueSyncOperation(type: 'save' | 'delete', collectionName: string, id: string, data?: any) {
+  const ops = getPendingOps();
+  // Avoid duplicate operations for the same ID
+  const filtered = ops.filter(op => !(op.id === id && op.collection === collectionName));
+  filtered.push({ type, collection: collectionName, id, data, timestamp: Date.now() });
+  savePendingOps(filtered);
+}
+
+// Seed helper
+export async function seedDatabaseIfEmpty() {
+  try {
+    const eventsSnap = await getDocs(collection(db, EVENTS_COL));
+    if (eventsSnap.empty) {
+      console.log('Firestore is empty. Seeding symposium data...');
+      
+      // Seed Events
+      for (const ev of INITIAL_EVENTS) {
+        await setDoc(doc(db, EVENTS_COL, ev.id), ev);
+      }
+      
+      // Seed Participants (Attendees)
+      for (const att of INITIAL_ATTENDEES) {
+        await setDoc(doc(db, PARTICIPANTS_COL, att.id), att);
+      }
+      
+      console.log('Database seeded with Kuppam Engineering College symposium data!');
+    }
+  } catch (error) {
+    console.warn('Error seeding database (using offline fallback if restricted):', error);
+  }
+}
+
+// FETCH HELPER FUNCTIONS with robust localStorage caching fallback
+export async function fetchEventsFromFirestore(): Promise<SymposiumEvent[]> {
+  try {
+    const snap = await getDocs(collection(db, EVENTS_COL));
+    const list: SymposiumEvent[] = [];
+    snap.forEach(docSnap => {
+      list.push(docSnap.data() as SymposiumEvent);
+    });
+    
+    if (list.length > 0) {
+      localStorage.setItem('cached_symposium_events', JSON.stringify(list));
+      syncStatus.lastSyncTime = new Date().toLocaleTimeString();
+    }
+    return list.length > 0 ? list : getCachedEvents();
+  } catch (e) {
+    console.warn('Failed to load events from Firestore, using offline cache', e);
+    return getCachedEvents();
+  }
+}
+
+function getCachedEvents(): SymposiumEvent[] {
+  try {
+    const data = localStorage.getItem('cached_symposium_events');
+    return data ? JSON.parse(data) : INITIAL_EVENTS;
+  } catch {
+    return INITIAL_EVENTS;
+  }
+}
+
+export async function fetchAttendeesFromFirestore(): Promise<Attendee[]> {
+  try {
+    const snap = await getDocs(collection(db, PARTICIPANTS_COL));
+    const list: Attendee[] = [];
+    snap.forEach(docSnap => {
+      list.push(docSnap.data() as Attendee);
+    });
+    
+    if (list.length > 0) {
+      localStorage.setItem('cached_symposium_participants', JSON.stringify(list));
+      syncStatus.lastSyncTime = new Date().toLocaleTimeString();
+    }
+    return list.length > 0 ? list : getCachedAttendees();
+  } catch (e) {
+    console.warn('Failed to load participants from Firestore, using offline cache', e);
+    return getCachedAttendees();
+  }
+}
+
+function getCachedAttendees(): Attendee[] {
+  try {
+    const data = localStorage.getItem('cached_symposium_participants');
+    return data ? JSON.parse(data) : INITIAL_ATTENDEES;
+  } catch {
+    return INITIAL_ATTENDEES;
+  }
+}
+
+// SAVE/DELETE HELPERS with simultaneous Firestore write and Local fallback queue
+export async function saveEventToFirestore(event: SymposiumEvent) {
+  // Always update cache immediately
+  const events = getCachedEvents();
+  const index = events.findIndex(e => e.id === event.id);
+  if (index >= 0) {
+    events[index] = event;
+  } else {
+    events.push(event);
+  }
+  localStorage.setItem('cached_symposium_events', JSON.stringify(events));
+
+  // Write to Firestore and handle connection failure
+  try {
+    await setDoc(doc(db, EVENTS_COL, event.id), event);
+    syncStatus.lastSyncTime = new Date().toLocaleTimeString();
+  } catch (e) {
+    console.warn(`Firestore save failed for event ${event.id}, queuing offline operation`, e);
+    queueSyncOperation('save', EVENTS_COL, event.id, event);
+  }
+}
+
+export async function deleteEventFromFirestore(id: string) {
+  const events = getCachedEvents().filter(e => e.id !== id);
+  localStorage.setItem('cached_symposium_events', JSON.stringify(events));
+
+  try {
+    await deleteDoc(doc(db, EVENTS_COL, id));
+    syncStatus.lastSyncTime = new Date().toLocaleTimeString();
+  } catch (e) {
+    console.warn(`Firestore delete failed for event ${id}, queuing offline operation`, e);
+    queueSyncOperation('delete', EVENTS_COL, id);
+  }
+}
+
+export async function saveAttendeeToFirestore(attendee: Attendee) {
+  const attendees = getCachedAttendees();
+  const index = attendees.findIndex(a => a.id === attendee.id);
+  if (index >= 0) {
+    attendees[index] = attendee;
+  } else {
+    attendees.push(attendee);
+  }
+  localStorage.setItem('cached_symposium_participants', JSON.stringify(attendees));
+
+  try {
+    await setDoc(doc(db, PARTICIPANTS_COL, attendee.id), attendee);
+    syncStatus.lastSyncTime = new Date().toLocaleTimeString();
+  } catch (e) {
+    console.warn(`Firestore save failed for participant ${attendee.id}, queuing offline operation`, e);
+    queueSyncOperation('save', PARTICIPANTS_COL, attendee.id, attendee);
+  }
+}
+
+export async function deleteAttendeeFromFirestore(id: string) {
+  const attendees = getCachedAttendees().filter(a => a.id !== id);
+  localStorage.setItem('cached_symposium_participants', JSON.stringify(attendees));
+
+  try {
+    await deleteDoc(doc(db, PARTICIPANTS_COL, id));
+    syncStatus.lastSyncTime = new Date().toLocaleTimeString();
+  } catch (e) {
+    console.warn(`Firestore delete failed for participant ${id}, queuing offline operation`, e);
+    queueSyncOperation('delete', PARTICIPANTS_COL, id);
+  }
+}
+
+// ----------------------------------------------------------------------
+// NEW COLLECTIONS HELPERS: Teams, Hosts, Judges, Results
+// ----------------------------------------------------------------------
+
+export async function fetchTeams(): Promise<Team[]> {
+  try {
+    const snap = await getDocs(collection(db, TEAMS_COL));
+    const list: Team[] = [];
+    snap.forEach(docSnap => list.push(docSnap.data() as Team));
+    localStorage.setItem('cached_symposium_teams', JSON.stringify(list));
+    return list;
+  } catch {
+    const data = localStorage.getItem('cached_symposium_teams');
+    return data ? JSON.parse(data) : [];
+  }
+}
+
+export async function saveTeam(team: Team) {
+  try {
+    await setDoc(doc(db, TEAMS_COL, team.teamId), team);
+  } catch {
+    queueSyncOperation('save', TEAMS_COL, team.teamId, team);
+  }
+}
+
+export async function fetchHosts(): Promise<Host[]> {
+  try {
+    const snap = await getDocs(collection(db, HOSTS_COL));
+    const list: Host[] = [];
+    snap.forEach(docSnap => list.push(docSnap.data() as Host));
+    localStorage.setItem('cached_symposium_hosts', JSON.stringify(list));
+    return list;
+  } catch {
+    const data = localStorage.getItem('cached_symposium_hosts');
+    return data ? JSON.parse(data) : [];
+  }
+}
+
+export async function saveHost(host: Host) {
+  try {
+    await setDoc(doc(db, HOSTS_COL, host.hostId), host);
+  } catch {
+    queueSyncOperation('save', HOSTS_COL, host.hostId, host);
+  }
+}
+
+export async function fetchJudges(): Promise<Judge[]> {
+  try {
+    const snap = await getDocs(collection(db, JUDGES_COL));
+    const list: Judge[] = [];
+    snap.forEach(docSnap => list.push(docSnap.data() as Judge));
+    localStorage.setItem('cached_symposium_judges', JSON.stringify(list));
+    return list;
+  } catch {
+    const data = localStorage.getItem('cached_symposium_judges');
+    return data ? JSON.parse(data) : [];
+  }
+}
+
+export async function saveJudge(judge: Judge) {
+  try {
+    await setDoc(doc(db, JUDGES_COL, judge.judgeId), judge);
+  } catch {
+    queueSyncOperation('save', JUDGES_COL, judge.judgeId, judge);
+  }
+}
+
+export async function fetchResults(): Promise<Result[]> {
+  try {
+    const snap = await getDocs(collection(db, RESULTS_COL));
+    const list: Result[] = [];
+    snap.forEach(docSnap => list.push(docSnap.data() as Result));
+    localStorage.setItem('cached_symposium_results', JSON.stringify(list));
+    return list;
+  } catch {
+    const data = localStorage.getItem('cached_symposium_results');
+    return data ? JSON.parse(data) : [];
+  }
+}
+
+export async function saveResult(result: Result) {
+  try {
+    await setDoc(doc(db, RESULTS_COL, result.resultId), result);
+  } catch {
+    queueSyncOperation('save', RESULTS_COL, result.resultId, result);
+  }
+}
+
+// Mock functions to prevent any compiler errors in references to old functions
+export async function fetchSpeakersFromFirestore(): Promise<any[]> { return []; }
+export async function fetchSubmissionsFromFirestore(): Promise<any[]> { return []; }
+export async function saveSpeakerToFirestore(sp: any) {}
+export async function deleteSpeakerFromFirestore(id: string) {}
+export async function saveSubmissionToFirestore(sub: any) {}
+export async function deleteSubmissionFromFirestore(id: string) {}

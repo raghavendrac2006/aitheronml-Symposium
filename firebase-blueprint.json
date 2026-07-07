@@ -1,0 +1,148 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User account registration and metadata",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" }
+      },
+      "required": ["email", "name", "role"]
+    },
+    "Participant": {
+      "title": "Participant",
+      "description": "Symposium registration and attendance",
+      "type": "object",
+      "properties": {
+        "participantId": { "type": "string" },
+        "name": { "type": "string" },
+        "college": { "type": "string" },
+        "branch": { "type": "string" },
+        "year": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "eventId": { "type": "string" },
+        "teamId": { "type": "string" },
+        "registrationType": { "type": "string" },
+        "attendanceStatus": { "type": "string" },
+        "qrCode": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["participantId", "name", "college", "branch", "year", "phone", "email", "eventId", "registrationType", "attendanceStatus"]
+    },
+    "Event": {
+      "title": "Event",
+      "description": "Symposium event tracks",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string" },
+        "eventName": { "type": "string" },
+        "category": { "type": "string" },
+        "venue": { "type": "string" },
+        "eventDate": { "type": "string" },
+        "registrationOpen": { "type": "string" },
+        "registrationClose": { "type": "string" },
+        "hostIds": { "type": "array" },
+        "judgeIds": { "type": "array" },
+        "minimumTeamSize": { "type": "number" },
+        "maximumTeamSize": { "type": "number" },
+        "registeredCount": { "type": "number" },
+        "checkedInCount": { "type": "number" },
+        "winnerIds": { "type": "array" },
+        "status": { "type": "string" }
+      },
+      "required": ["eventId", "eventName", "category", "venue", "status"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "Symposium team structures",
+      "type": "object",
+      "properties": {
+        "teamId": { "type": "string" },
+        "teamName": { "type": "string" },
+        "leaderId": { "type": "string" },
+        "memberIds": { "type": "array" },
+        "eventId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["teamId", "teamName", "leaderId", "memberIds", "eventId"]
+    },
+    "Host": {
+      "title": "Host",
+      "description": "Event coordinators",
+      "type": "object",
+      "properties": {
+        "hostId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "assignedEvents": { "type": "array" },
+        "status": { "type": "string" }
+      },
+      "required": ["hostId", "name", "email"]
+    },
+    "Judge": {
+      "title": "Judge",
+      "description": "Symposium event judges",
+      "type": "object",
+      "properties": {
+        "judgeId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "assignedEvents": { "type": "array" },
+        "status": { "type": "string" }
+      },
+      "required": ["judgeId", "name", "email"]
+    },
+    "Result": {
+      "title": "Result",
+      "description": "Symposium event results",
+      "type": "object",
+      "properties": {
+        "resultId": { "type": "string" },
+        "eventId": { "type": "string" },
+        "rank1": { "type": "string" },
+        "rank2": { "type": "string" },
+        "rank3": { "type": "string" },
+        "judgeRemarks": { "type": "string" },
+        "published": { "type": "boolean" },
+        "publishedAt": { "type": "string" }
+      },
+      "required": ["resultId", "eventId", "published"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and system roles"
+    },
+    "/participants/{participantId}": {
+      "schema": "Participant",
+      "description": "Registered symposium participants"
+    },
+    "/events/{eventId}": {
+      "schema": "Event",
+      "description": "List of symposium track events"
+    },
+    "/teams/{teamId}": {
+      "schema": "Team",
+      "description": "Team definitions and members"
+    },
+    "/hosts/{hostId}": {
+      "schema": "Host",
+      "description": "Hosts and event coordinators details"
+    },
+    "/judges/{judgeId}": {
+      "schema": "Judge",
+      "description": "Symposium event judges details"
+    },
+    "/results/{resultId}": {
+      "schema": "Result",
+      "description": "Published and drafted results for each event"
+    }
+  }
+}

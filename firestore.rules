@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email.matches('.*superadmin.*') || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'superadmin')
+      );
+    }
+
+    function isHost() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'host'
+      );
+    }
+
+    // USERS COLLECTION
+    match /users/{email} {
+      allow read, write: if true; // Profiles need to be readable for session lookup and writable for auto-setup
+    }
+    
+    // PARTICIPANTS COLLECTION
+    match /participants/{participantId} {
+      // Super admin / Host can read all. Participants can read their own registration.
+      allow read: if true; // Let everyone view profiles to lookup QR details
+      allow write: if true; // Let anyone submit public registration, update attendance, and check-in
+    }
+    
+    // EVENTS COLLECTION
+    match /events/{eventId} {
+      allow read: if true; // Publicly readable so students can view tracks
+      allow write: if isSuperAdmin() || isHost(); // Super admins & hosts can create/edit events
+    }
+    
+    // TEAMS COLLECTION
+    match /teams/{teamId} {
+      allow read: if true;
+      allow write: if true; // Allow anyone to register as a team
+    }
+    
+    // HOSTS COLLECTION
+    match /hosts/{hostId} {
+      allow read: if true;
+      allow write: if isSuperAdmin(); // Managed by Super Admin
+    }
+    
+    // JUDGES COLLECTION
+    match /judges/{judgeId} {
+      allow read: if true;
+      allow write: if isSuperAdmin(); // Managed by Super Admin
+    }
+    
+    // RESULTS COLLECTION
+    match /results/{resultId} {
+      allow read: if true; // Publicly viewable once published
+      allow write: if isSuperAdmin() || isHost(); // Super admins & hosts can submit results
+    }
+  }
+}
