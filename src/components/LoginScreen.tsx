@@ -264,7 +264,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         <header className="absolute top-0 w-full z-20 flex px-4 md:px-8 py-6 justify-between items-center pt-8">
           {/* Left Side: Logo and College Name */}
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 md:w-16 md:h-16 rounded bg-white/90 backdrop-blur shadow-sm flex items-center justify-center p-1 overflow-hidden border border-outline-variant/30">
+            <div className="w-14 h-14 md:w-16 md:h-16 rounded bg-white shadow-md flex items-center justify-center p-1 overflow-hidden border-2 border-white">
               <img 
                 alt="Kuppam Engineering College Logo" 
                 className="w-full h-full object-contain" 
@@ -284,7 +284,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
 
           {/* Right Side: Symposium and Department Logos */}
           <div className="flex items-center gap-2 md:gap-4">
-            <div className="w-12 h-12 md:w-16 md:h-16 rounded bg-white/90 backdrop-blur shadow-sm flex items-center justify-center p-1 overflow-hidden border border-outline-variant/30">
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded bg-black/40 backdrop-blur shadow-md flex items-center justify-center p-1 overflow-hidden border-2 border-white">
               <img 
                 alt="Department Logo" 
                 className="w-full h-full object-contain" 
@@ -292,7 +292,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
                 referrerPolicy="no-referrer"
               />
             </div>
-            <div className="w-12 h-12 md:w-16 md:h-16 rounded bg-white/90 backdrop-blur shadow-sm flex items-center justify-center p-1 overflow-hidden border border-outline-variant/30">
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded bg-black/40 backdrop-blur shadow-md flex items-center justify-center p-1 overflow-hidden border-2 border-white">
               <img 
                 alt="Symposium Logo" 
                 className="w-full h-full object-contain" 
@@ -323,7 +323,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.2, duration: 0.6 }}
-            className="font-sans text-5xl md:text-7xl font-extrabold tracking-tight drop-shadow-xl text-white mt-4 bg-gradient-to-r from-primary-fixed to-white bg-clip-text text-transparent"
+            className="font-sans text-5xl md:text-7xl font-extrabold tracking-tight drop-shadow-2xl text-white mt-4"
           >
             AItheronML
           </motion.h1>

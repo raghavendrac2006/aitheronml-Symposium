@@ -113,9 +113,26 @@
         "publishedAt": { "type": "string" }
       },
       "required": ["resultId", "eventId", "published"]
+    },
+    "Batch": {
+      "title": "Batch",
+      "description": "Symposium evaluation batches or presentation slots",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "eventId": { "type": "string" },
+        "name": { "type": "string" },
+        "status": { "type": "string", "enum": ["Waiting", "Live", "Completed"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "eventId", "name", "status"]
     }
   },
   "firestore": {
+    "/batches/{batchId}": {
+      "schema": "Batch",
+      "description": "Symposium evaluation batches"
+    },
     "/users/{userId}": {
       "schema": "User",
       "description": "User profiles and system roles"

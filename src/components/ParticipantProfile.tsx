@@ -8,6 +8,7 @@ interface ParticipantProfileProps {
   onUpdateAttendee: (updated: Attendee) => void;
   onDeleteAttendee: (id: string) => void;
   onClose: () => void;
+  user?: { role: string; email: string; name: string };
 }
 
 export default function ParticipantProfile({ 
@@ -15,7 +16,8 @@ export default function ParticipantProfile({
   events,
   onUpdateAttendee, 
   onDeleteAttendee,
-  onClose 
+  onClose,
+  user
 }: ParticipantProfileProps) {
   
   const [isEditing, setIsEditing] = useState(false);
@@ -363,6 +365,24 @@ export default function ParticipantProfile({
                     </div>
                   </>
                 )}
+                {attendee.teamMembers && attendee.teamMembers.length > 0 && (
+                  <div className="col-span-1 md:col-span-2 border-t border-outline-variant/30 pt-4 mt-2">
+                    <p className="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider mb-2">Team Members Details</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {attendee.teamMembers.map((member, i) => (
+                        <div key={i} className="p-3 bg-surface-container border border-outline-variant rounded-xl text-xs space-y-1">
+                          <div className="flex justify-between font-bold">
+                            <span className="text-primary">{member.name}</span>
+                            <span className="text-on-surface-variant text-[10px]">Member #{i + 1}</span>
+                          </div>
+                          <div className="text-on-surface-variant text-[10px] font-mono">{member.participantId}</div>
+                          <div className="text-[11px]"><span className="text-on-surface-variant font-medium">Email:</span> {member.email}</div>
+                          <div className="text-[11px]"><span className="text-on-surface-variant font-medium">Phone:</span> {member.phone}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <p className="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">Pass Privilege</p>
                   <p className="text-base font-semibold text-on-surface mt-0.5">{attendee.accessLevel || 'General Delegate'}</p>
@@ -382,6 +402,76 @@ export default function ParticipantProfile({
         {/* Right Column: Access, Check-In, QR */}
         <div className="col-span-12 lg:col-span-4 space-y-6">
           
+          {/* Payment Verification Status */}
+          <div className="bg-surface-container border border-outline-variant rounded-xl p-5 shadow-xs flex flex-col justify-between gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary !text-lg">payments</span>
+                <span className="font-bold text-sm text-on-surface">Payment Status</span>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                attendee.paymentStatus === 'Paid' 
+                  ? 'bg-emerald-100 text-emerald-800' 
+                  : attendee.paymentStatus === 'Waived'
+                    ? 'bg-blue-100 text-blue-800'
+                    : 'bg-amber-100 text-amber-800'
+              }`}>
+                {attendee.paymentStatus || 'Pending'}
+              </span>
+            </div>
+
+            {(user?.role === 'superadmin' || user?.role === 'registration') ? (
+              <div className="space-y-2 mt-2">
+                <p className="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">Update Payment Status</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button 
+                    onClick={() => {
+                      onUpdateAttendee({ ...attendee, paymentStatus: 'Paid' });
+                      alert('Payment marked as Paid successfully.');
+                    }}
+                    className={`h-8 font-bold rounded-lg text-xs transition-all cursor-pointer ${
+                      attendee.paymentStatus === 'Paid'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-surface border border-outline text-on-surface hover:bg-surface-container'
+                    }`}
+                  >
+                    Paid
+                  </button>
+                  <button 
+                    onClick={() => {
+                      onUpdateAttendee({ ...attendee, paymentStatus: 'Waived' });
+                      alert('Payment marked as Waived successfully.');
+                    }}
+                    className={`h-8 font-bold rounded-lg text-xs transition-all cursor-pointer ${
+                      attendee.paymentStatus === 'Waived'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-surface border border-outline text-on-surface hover:bg-surface-container'
+                    }`}
+                  >
+                    Waived
+                  </button>
+                  <button 
+                    onClick={() => {
+                      onUpdateAttendee({ ...attendee, paymentStatus: 'Pending' });
+                      alert('Payment marked as Pending.');
+                    }}
+                    className={`h-8 font-bold rounded-lg text-xs transition-all cursor-pointer ${
+                      !attendee.paymentStatus || attendee.paymentStatus === 'Pending'
+                        ? 'bg-amber-600 text-white'
+                        : 'bg-surface border border-outline text-on-surface hover:bg-surface-container'
+                    }`}
+                  >
+                    Pending
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-[11px] text-on-surface-variant italic mt-1">
+                Only Registration Desk and Super Admin can modify payment status.
+              </p>
+            )}
+          </div>
+
           {/* Attendance Check-In Status */}
           <div className="bg-surface-container border border-outline-variant rounded-xl p-5 shadow-xs flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">

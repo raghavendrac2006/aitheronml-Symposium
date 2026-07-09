@@ -70,6 +70,25 @@ export interface Attendee {
   judgingStatus?: 'Not Started' | 'In Progress' | 'Completed';
   remarks?: string;
   criteriaScores?: Record<string, string>;
+  
+  // Operational Improvements Fields
+  batchId?: string;
+  batchName?: string;
+  paymentStatus?: 'Pending' | 'Paid' | 'Waived';
+  teamMembers?: Array<{
+    name: string;
+    phone: string;
+    email: string;
+    participantId: string;
+  }>;
+}
+
+export interface Batch {
+  id: string;
+  eventId: string;
+  name: string;
+  status: 'Waiting' | 'Live' | 'Completed';
+  createdAt: string;
 }
 
 export interface Team {

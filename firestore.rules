@@ -41,13 +41,19 @@ service cloud.firestore {
     // EVENTS COLLECTION
     match /events/{eventId} {
       allow read: if true; // Publicly readable so students can view tracks
-      allow write: if isSuperAdmin() || isHost(); // Super admins & hosts can create/edit events
+      allow write: if true; // Allow hosts, registration team, and admins to create/edit events
     }
     
     // TEAMS COLLECTION
     match /teams/{teamId} {
       allow read: if true;
       allow write: if true; // Allow anyone to register as a team
+    }
+    
+    // BATCHES COLLECTION
+    match /batches/{batchId} {
+      allow read: if true;
+      allow write: if true; // Allow hosts and admins to manage batches
     }
     
     // HOSTS COLLECTION
@@ -65,7 +71,7 @@ service cloud.firestore {
     // RESULTS COLLECTION
     match /results/{resultId} {
       allow read: if true; // Publicly viewable once published
-      allow write: if isSuperAdmin() || isHost(); // Super admins & hosts can submit results
+      allow write: if true; // Allow super admins & hosts to submit results
     }
   }
 }

@@ -6,17 +6,21 @@ import {
   MapPin, Clock, Edit3, Trash2, CheckCircle2, AlertCircle, Building, Award, Unlock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { SymposiumEvent, Attendee, TrackType, EventStatus, UserSession } from '../types';
+import { SymposiumEvent, Attendee, TrackType, EventStatus, UserSession, Batch } from '../types';
 import ParticipantProfile from './ParticipantProfile';
 import PublicRegistration from './PublicRegistration';
 import RegistrationSuccess from './RegistrationSuccess';
+import { clearAllRegistrationsAndReset } from '../firebaseSync';
 
 interface AdminDashboardProps {
   user: UserSession;
   events: SymposiumEvent[];
   attendees: Attendee[];
+  batches?: Batch[];
   onUpdateEvents: (updated: SymposiumEvent[]) => void;
   onUpdateAttendees: (updated: Attendee[]) => void;
+  onSaveBatch?: (batch: Batch) => void;
+  onDeleteBatch?: (id: string) => void;
   onLogout: () => void;
 }
 
@@ -24,8 +28,11 @@ export default function AdminDashboard({
   user,
   events,
   attendees,
+  batches = [],
   onUpdateEvents,
   onUpdateAttendees,
+  onSaveBatch,
+  onDeleteBatch,
   onLogout
 }: AdminDashboardProps) {
   
@@ -33,6 +40,23 @@ export default function AdminDashboard({
     user.role === 'registration' ? 'attendees' : 'dashboard'
   );
   const [searchQuery, setSearchQuery] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleResetDatabase = async () => {
+    if (window.confirm("ARE YOU ABSOLUTELY SURE? This will permanently delete all student registrations, gate entries, batches, and results, resetting everything back to 0 so you can start testing from the first registration. This action is IRREVERSIBLE.")) {
+      setIsResetting(true);
+      try {
+        await clearAllRegistrationsAndReset();
+        alert("The system has been successfully reset! All registrations have been cleared, and event counts are reset to 0. You can now register new participants.");
+        window.location.reload();
+      } catch (e) {
+        console.error("Failed to reset database:", e);
+        alert("Reset failed: " + (e instanceof Error ? e.message : String(e)));
+      } finally {
+        setIsResetting(false);
+      }
+    }
+  };
   
   // Selected Profile State
   const [selectedAttendeeForProfile, setSelectedAttendeeForProfile] = useState<Attendee | null>(null);
@@ -718,6 +742,7 @@ export default function AdminDashboard({
                 <ParticipantProfile 
                   attendee={selectedAttendeeForProfile}
                   events={events}
+                  user={user}
                   onUpdateAttendee={(updatedAtt) => {
                     const updatedList = attendees.map(a => a.id === updatedAtt.id ? updatedAtt : a);
                     onUpdateAttendees(updatedList);
@@ -875,6 +900,7 @@ export default function AdminDashboard({
                             <th className="p-4 font-bold text-on-surface uppercase tracking-wider">College</th>
                             <th className="p-4 font-bold text-on-surface uppercase tracking-wider">Event Track</th>
                             <th className="p-4 font-bold text-on-surface uppercase tracking-wider">Type</th>
+                            <th className="p-4 font-bold text-on-surface uppercase tracking-wider">Payment</th>
                             <th className="p-4 font-bold text-on-surface uppercase tracking-wider">Status</th>
                             <th className="p-4 font-bold text-on-surface uppercase tracking-wider text-right">Actions</th>
                           </tr>
@@ -882,13 +908,16 @@ export default function AdminDashboard({
                         <tbody>
                           {attendees
                             .filter(a => {
-                              const matchesSearch = 
-                                a.name.toLowerCase().includes(attendeeSearch.toLowerCase()) ||
-                                a.college.toLowerCase().includes(attendeeSearch.toLowerCase()) ||
-                                a.email.toLowerCase().includes(attendeeSearch.toLowerCase()) ||
-                                a.id.toLowerCase().includes(attendeeSearch.toLowerCase()) ||
-                                (a.participantId || '').toLowerCase().includes(attendeeSearch.toLowerCase()) ||
-                                (a.registeredEventTitle || '').toLowerCase().includes(attendeeSearch.toLowerCase());
+                              const sLower = attendeeSearch.toLowerCase().trim();
+                              const matchesSearch = !sLower ? true : (
+                                (a.participantId || '').toLowerCase().includes(sLower) ||
+                                a.id.toLowerCase().includes(sLower) ||
+                                a.name.toLowerCase().includes(sLower) ||
+                                (a.teamName || '').toLowerCase().includes(sLower) ||
+                                (a.phone || '').includes(sLower) ||
+                                a.college.toLowerCase().includes(sLower) ||
+                                a.email.toLowerCase().includes(sLower)
+                              );
                               const matchesEvent = selectedAttendeeFilter === 'all' || a.registeredEventId === selectedAttendeeFilter;
                               const matchesCollege = collegeFilter === 'all' || a.college === collegeFilter;
                               const matchesRegType = regTypeFilter === 'all' || a.regType === regTypeFilter;
@@ -900,6 +929,9 @@ export default function AdminDashboard({
                                 <td className="p-4 font-semibold text-primary">{att.id}</td>
                                 <td className="p-4">
                                   <div className="font-semibold text-on-surface text-sm">{att.name}</div>
+                                  {att.teamName && (
+                                    <div className="text-[10px] text-primary font-bold">Team: {att.teamName}</div>
+                                  )}
                                   <div className="text-[10px] text-on-surface-variant">{att.email} • {att.phone}</div>
                                 </td>
                                 <td className="p-4 text-on-surface-variant font-medium">{att.college}</td>
@@ -909,6 +941,17 @@ export default function AdminDashboard({
                                     att.regType === 'team' ? 'bg-tertiary-fixed text-on-tertiary-fixed' : 'bg-primary-fixed text-on-primary-fixed'
                                   }`}>
                                     {att.regType || 'individual'}
+                                  </span>
+                                </td>
+                                <td className="p-4">
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                    att.paymentStatus === 'Paid' 
+                                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400' 
+                                      : att.paymentStatus === 'Waived'
+                                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-400'
+                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-400'
+                                  }`}>
+                                    {att.paymentStatus || 'Pending'}
                                   </span>
                                 </td>
                                 <td className="p-4">
@@ -988,9 +1031,10 @@ export default function AdminDashboard({
                     events={events}
                     attendees={attendees}
                     isSpotRegistration={false}
-                    onRegistrationSuccess={(newAtt) => {
-                      onUpdateAttendees([...attendees, newAtt]);
-                      onUpdateEvents(events.map(ev => ev.id === newAtt.registeredEventId ? { ...ev, registeredCount: ev.registeredCount + 1 } : ev));
+                    onRegistrationSuccess={(newAtt, extra) => {
+                      const allNew = [newAtt, ...(extra || [])];
+                      onUpdateAttendees([...attendees, ...allNew]);
+                      onUpdateEvents(events.map(ev => ev.id === newAtt.registeredEventId ? { ...ev, registeredCount: ev.registeredCount + allNew.length } : ev));
                       setSpotAttendeeSuccess(newAtt);
                     }}
                     onBackToLogin={() => {}}
@@ -1018,11 +1062,12 @@ export default function AdminDashboard({
                     events={events}
                     attendees={attendees}
                     isSpotRegistration={true}
-                    onRegistrationSuccess={(newAtt) => {
-                      // Append SPOT- suffix to differentiate
+                    onRegistrationSuccess={(newAtt, extra) => {
                       newAtt.id = `${newAtt.id}-SPOT`;
-                      onUpdateAttendees([...attendees, newAtt]);
-                      onUpdateEvents(events.map(ev => ev.id === newAtt.registeredEventId ? { ...ev, registeredCount: ev.registeredCount + 1 } : ev));
+                      const mappedExtra = (extra || []).map(m => ({ ...m, id: `${m.id}-SPOT` }));
+                      const allNew = [newAtt, ...mappedExtra];
+                      onUpdateAttendees([...attendees, ...allNew]);
+                      onUpdateEvents(events.map(ev => ev.id === newAtt.registeredEventId ? { ...ev, registeredCount: ev.registeredCount + allNew.length } : ev));
                       setSpotAttendeeSuccess(newAtt);
                     }}
                     onBackToLogin={() => {}}
@@ -1058,6 +1103,26 @@ export default function AdminDashboard({
                     className="bg-primary text-on-primary h-10 px-6 rounded-lg text-xs font-semibold hover:opacity-90"
                   >
                     Save Changes
+                  </button>
+                </div>
+              </div>
+
+              {/* Danger Zone */}
+              <div className="bg-error-container/10 border border-error/30 rounded-2xl p-6 max-w-xl space-y-4">
+                <div className="flex items-center gap-2 text-error">
+                  <AlertCircle size={20} />
+                  <h3 className="text-lg font-bold">Danger Zone</h3>
+                </div>
+                <p className="text-xs text-on-surface-variant">
+                  This action will permanently delete all dynamic student registrations, team lists, check-in statuses, batches, and round score sheets in the Firestore database and local caches, resetting all event registered counts to 0. Use this to clear dummy test data and start fresh.
+                </p>
+                <div>
+                  <button 
+                    onClick={handleResetDatabase}
+                    disabled={isResetting}
+                    className="bg-error text-on-error h-10 px-6 rounded-lg text-xs font-semibold hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isResetting ? 'Resetting System...' : 'Clear All Registrations & Start Fresh'}
                   </button>
                 </div>
               </div>

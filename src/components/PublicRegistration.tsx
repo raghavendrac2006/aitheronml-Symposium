@@ -6,7 +6,7 @@ import { saveAttendeeToFirestore } from '../firebaseSync';
 interface PublicRegistrationProps {
   events: SymposiumEvent[];
   attendees?: Attendee[];
-  onRegistrationSuccess: (newAttendee: Attendee) => void;
+  onRegistrationSuccess: (newAttendee: Attendee, extraMembers?: Attendee[]) => void;
   onBackToLogin: () => void;
   isSpotRegistration?: boolean; // if true, bypasses landing decoration, simplifies header for admin portal
 }
@@ -28,11 +28,35 @@ export default function PublicRegistration({
   const [eventId, setEventId] = useState('');
   const [regType, setRegType] = useState<'individual' | 'team'>('individual');
   const [teamName, setTeamName] = useState('');
-  const [memberCount, setMemberCount] = useState<number>(2);
+  const [teamMembersInput, setTeamMembersInput] = useState<Array<{ name: string; phone: string; email: string }>>([
+    { name: '', phone: '', email: '' }
+  ]);
 
   // UI state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleAddMember = () => {
+    if (teamMembersInput.length >= 9) {
+      alert('Maximum of 10 team members allowed (Leader + 9 Members).');
+      return;
+    }
+    setTeamMembersInput([...teamMembersInput, { name: '', phone: '', email: '' }]);
+  };
+
+  const handleRemoveMember = (idx: number) => {
+    if (teamMembersInput.length <= 1) {
+      alert('A team must have at least 2 members (Leader + 1 Member).');
+      return;
+    }
+    setTeamMembersInput(teamMembersInput.filter((_, i) => i !== idx));
+  };
+
+  const handleMemberChange = (idx: number, field: 'name' | 'phone' | 'email', val: string) => {
+    const updated = [...teamMembersInput];
+    updated[idx][field] = val;
+    setTeamMembersInput(updated);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,10 +69,20 @@ export default function PublicRegistration({
       return;
     }
 
-    if (regType === 'team' && !teamName) {
-      setError('Please provide a team name for Team Entry.');
-      setLoading(false);
-      return;
+    if (regType === 'team') {
+      if (!teamName) {
+        setError('Please provide a team name for Team Entry.');
+        setLoading(false);
+        return;
+      }
+      for (let i = 0; i < teamMembersInput.length; i++) {
+        const m = teamMembersInput[i];
+        if (!m.name.trim() || !m.phone.trim() || !m.email.trim()) {
+          setError(`Please fill in all details for Team Member #${i + 1}.`);
+          setLoading(false);
+          return;
+        }
+      }
     }
 
     try {
@@ -82,12 +116,57 @@ export default function PublicRegistration({
       } else {
         nextNum = 1;
       }
-      const participantId = `SYM-${String(nextNum).padStart(6, '0')}`;
+
+      const leaderParticipantId = `SYM-${String(nextNum).padStart(6, '0')}`;
+      const sharedTeamId = regType === 'team' ? `TEAM-${leaderParticipantId}` : '';
+
+      const membersToSave: Attendee[] = [];
+      const teamMembersDataForLeader: Array<{ name: string; phone: string; email: string; participantId: string }> = [];
+
+      if (regType === 'team') {
+        teamMembersInput.forEach((m, index) => {
+          const mIdNum = nextNum + 1 + index;
+          const mParticipantId = `SYM-${String(mIdNum).padStart(6, '0')}`;
+          
+          const memberAttendee: Attendee = {
+            id: mParticipantId,
+            participantId: mParticipantId,
+            name: m.name.trim(),
+            college: collegeName.trim(),
+            branch: branch.trim(),
+            year: year,
+            phone: m.phone.trim(),
+            email: m.email.trim().toLowerCase(),
+            eventId: eventId,
+            registeredEventId: eventId,
+            registeredEventTitle: eventTitle,
+            teamId: sharedTeamId,
+            registrationType: 'team',
+            regType: 'team',
+            attendanceStatus: 'Pending',
+            paymentStatus: 'Pending',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            teamName: teamName.trim(),
+            registrationDate: new Date().toISOString(),
+            accessLevel: 'Team Member Pass',
+            secureToken: `${mParticipantId}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`
+          };
+
+          membersToSave.push(memberAttendee);
+          teamMembersDataForLeader.push({
+            name: m.name.trim(),
+            phone: m.phone.trim(),
+            email: m.email.trim().toLowerCase(),
+            participantId: mParticipantId
+          });
+        });
+      }
 
       // Create attendee object matching Section 11 schema perfectly
-      const newAttendee: Attendee = {
-        id: participantId,
-        participantId: participantId,
+      const leaderAttendee: Attendee = {
+        id: leaderParticipantId,
+        participantId: leaderParticipantId,
         name: fullName.trim(),
         college: collegeName.trim(),
         branch: branch.trim(),
@@ -97,24 +176,31 @@ export default function PublicRegistration({
         eventId: eventId,
         registeredEventId: eventId,
         registeredEventTitle: eventTitle,
-        teamId: regType === 'team' ? `team-${participantId}` : '',
+        teamId: sharedTeamId,
         registrationType: regType,
         regType: regType,
         attendanceStatus: 'Pending',
+        paymentStatus: 'Pending',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         teamName: regType === 'team' ? teamName.trim() : undefined,
-        memberCount: regType === 'team' ? Number(memberCount) : undefined,
+        memberCount: regType === 'team' ? 1 + teamMembersInput.length : undefined,
+        teamMembers: regType === 'team' ? teamMembersDataForLeader : undefined,
         registrationDate: new Date().toISOString(),
-        accessLevel: regType === 'team' ? 'Team All-Access' : 'Individual Pass',
-        secureToken: `${participantId}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`
+        accessLevel: regType === 'team' ? 'Team Leader Pass' : 'Individual Pass',
+        secureToken: `${leaderParticipantId}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`
       };
 
-      // Save to Firestore
-      await saveAttendeeToFirestore(newAttendee);
+      // Save leader to Firestore
+      await saveAttendeeToFirestore(leaderAttendee);
+
+      // Save other members to Firestore
+      for (const m of membersToSave) {
+        await saveAttendeeToFirestore(m);
+      }
 
       // Trigger callback with success data
-      onRegistrationSuccess(newAttendee);
+      onRegistrationSuccess(leaderAttendee, membersToSave);
 
     } catch (err: any) {
       console.error(err);
@@ -315,7 +401,7 @@ export default function PublicRegistration({
                 <motion.div 
                   initial={{ opacity: 0, height: 0 }} 
                   animate={{ opacity: 1, height: 'auto' }}
-                  className="space-y-4 pt-2"
+                  className="space-y-4 pt-2 border-l-2 border-primary/20 pl-4"
                 >
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-semibold text-primary uppercase ml-1">Team Name</label>
@@ -327,6 +413,74 @@ export default function PublicRegistration({
                       className="w-full h-12 px-4 rounded-lg border border-outline bg-transparent text-on-surface focus:border-primary focus:ring-1 focus:ring-primary transition-all text-sm"
                       required
                     />
+                  </div>
+
+                  <div className="space-y-4 pt-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-primary uppercase">Team Members</label>
+                      <button
+                        type="button"
+                        onClick={handleAddMember}
+                        className="px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-xs font-bold hover:bg-primary/20 transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined !text-sm">add</span>
+                        Add Member
+                      </button>
+                    </div>
+
+                    {teamMembersInput.map((member, index) => (
+                      <div key={index} className="p-4 bg-surface-container border border-outline rounded-xl space-y-3 relative">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-on-surface-variant">Team Member #{index + 1}</span>
+                          {teamMembersInput.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMember(index)}
+                              className="p-1 text-on-surface-variant hover:text-error transition-colors cursor-pointer"
+                              title="Remove member"
+                            >
+                              <span className="material-symbols-outlined !text-base">delete</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-on-surface-variant uppercase ml-1">Member Name</label>
+                            <input
+                              type="text"
+                              value={member.name}
+                              onChange={(e) => handleMemberChange(index, 'name', e.target.value)}
+                              placeholder="Full Name"
+                              className="w-full h-10 px-3 rounded-lg border border-outline bg-transparent text-on-surface focus:border-primary transition-all text-xs animate-none"
+                              required
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-on-surface-variant uppercase ml-1">Member Phone</label>
+                            <input
+                              type="tel"
+                              value={member.phone}
+                              onChange={(e) => handleMemberChange(index, 'phone', e.target.value)}
+                              placeholder="Phone Number"
+                              className="w-full h-10 px-3 rounded-lg border border-outline bg-transparent text-on-surface focus:border-primary transition-all text-xs"
+                              required
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-on-surface-variant uppercase ml-1">Member Email</label>
+                            <input
+                              type="email"
+                              value={member.email}
+                              onChange={(e) => handleMemberChange(index, 'email', e.target.value)}
+                              placeholder="Email Address"
+                              className="w-full h-10 px-3 rounded-lg border border-outline bg-transparent text-on-surface focus:border-primary transition-all text-xs"
+                              required
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </motion.div>
               )}

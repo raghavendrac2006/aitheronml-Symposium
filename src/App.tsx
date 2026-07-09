@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import HostDashboard from './components/HostDashboard';
-import { SymposiumEvent, Attendee, UserSession, MAP_EMAIL_TO_EVENT_ID, MAP_EMAIL_TO_NAME, normalizeEmail } from './types';
+import { SymposiumEvent, Attendee, UserSession, MAP_EMAIL_TO_EVENT_ID, MAP_EMAIL_TO_NAME, normalizeEmail, Batch } from './types';
 import { 
   INITIAL_EVENTS, 
   INITIAL_ATTENDEES
 } from './initialData';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, onSnapshot } from 'firebase/firestore';
 import { 
   seedDatabaseIfEmpty,
   fetchEventsFromFirestore,
@@ -17,7 +17,12 @@ import {
   saveEventToFirestore,
   deleteEventFromFirestore,
   saveAttendeeToFirestore,
-  deleteAttendeeFromFirestore
+  deleteAttendeeFromFirestore,
+  fetchBatches,
+  saveBatchToFirestore,
+  deleteBatchFromFirestore,
+  triggerPendingSync,
+  clearAllRegistrationsAndReset
 } from './firebaseSync';
 
 export default function App() {
@@ -28,6 +33,7 @@ export default function App() {
   // Core Data States
   const [events, setEvents] = useState<SymposiumEvent[]>([]);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
 
   // Initialize and load persistent state from Firestore & Auth
   useEffect(() => {
@@ -66,29 +72,97 @@ export default function App() {
       }
     });
 
-    // 2. Load Firestore Data
-    async function initFirestoreData() {
+    return () => {
+      unsubscribeAuth();
+    };
+  }, []);
+
+  // Initialize and load persistent state from Firestore & Auth on session change
+  useEffect(() => {
+    // Real-time Firestore Listeners
+    let unsubscribeEvents = () => {};
+    let unsubscribeAttendees = () => {};
+    let unsubscribeBatches = () => {};
+
+    async function initRealtimeData() {
       try {
+        if (localStorage.getItem('ai_symposium_has_reset_first_time_v2') !== 'true') {
+          await clearAllRegistrationsAndReset();
+          localStorage.setItem('ai_symposium_has_reset_first_time_v2', 'true');
+        }
+        await triggerPendingSync();
         await seedDatabaseIfEmpty();
 
-        const [fbEvents, fbAttendees] = await Promise.all([
-          fetchEventsFromFirestore(),
-          fetchAttendeesFromFirestore()
-        ]);
+        // A. Listen to Events
+        unsubscribeEvents = onSnapshot(collection(db, 'events'), (snapshot) => {
+          const fbEvents: SymposiumEvent[] = [];
+          snapshot.forEach((docSnap) => {
+            fbEvents.push(docSnap.data() as SymposiumEvent);
+          });
+          
+          let finalEvents = fbEvents.length > 0 ? fbEvents : INITIAL_EVENTS;
+          const fbEventIds = new Set(finalEvents.map(e => e.id));
+          const missingInitialEvents = INITIAL_EVENTS.filter(e => !fbEventIds.has(e.id));
+          if (missingInitialEvents.length > 0) {
+            finalEvents = [...finalEvents, ...missingInitialEvents];
+          }
+          setEvents(finalEvents);
+          localStorage.setItem('ai_symposium_events', JSON.stringify(finalEvents));
+          setIsLoading(false);
+        }, (error) => {
+          console.error("Firestore onSnapshot error for events, falling back to cache:", error);
+          const storedEvents = localStorage.getItem('ai_symposium_events');
+          setEvents(storedEvents ? JSON.parse(storedEvents) : INITIAL_EVENTS);
+          setIsLoading(false);
+        });
 
-        let finalEvents = fbEvents.length > 0 ? fbEvents : INITIAL_EVENTS;
-        const fbEventIds = new Set(finalEvents.map(e => e.id));
-        const missingInitialEvents = INITIAL_EVENTS.filter(e => !fbEventIds.has(e.id));
-        if (missingInitialEvents.length > 0) {
-          finalEvents = [...finalEvents, ...missingInitialEvents];
-        }
+        // B. Listen to Participants (Attendees)
+        unsubscribeAttendees = onSnapshot(collection(db, 'participants'), (snapshot) => {
+          const fbAttendees: Attendee[] = [];
+          snapshot.forEach((docSnap) => {
+            fbAttendees.push(docSnap.data() as Attendee);
+          });
+          
+          let finalAttendees = fbAttendees.length > 0 ? fbAttendees : INITIAL_ATTENDEES;
+          const fbAttendeeIds = new Set(finalAttendees.map(a => a.id));
+          const missingInitialAttendees = INITIAL_ATTENDEES.filter(a => !fbAttendeeIds.has(a.id));
+          if (missingInitialAttendees.length > 0) {
+            finalAttendees = [...finalAttendees, ...missingInitialAttendees];
+          }
 
-        setEvents(finalEvents);
-        setAttendees(fbAttendees.length > 0 ? fbAttendees : INITIAL_ATTENDEES);
+          setAttendees(finalAttendees);
+          localStorage.setItem('ai_symposium_attendees', JSON.stringify(finalAttendees));
+          localStorage.setItem('ai_symposium_attendees_last_saved', JSON.stringify(finalAttendees));
+          setIsLoading(false);
+        }, (error) => {
+          console.error("Firestore onSnapshot error for participants, falling back to cache:", error);
+          const storedAttendees = localStorage.getItem('ai_symposium_attendees');
+          let finalStoredAttendees = storedAttendees ? JSON.parse(storedAttendees) : INITIAL_ATTENDEES;
+          const storedAttendeeIds = new Set(finalStoredAttendees.map((a: any) => a.id));
+          const missingInitialAttendees = INITIAL_ATTENDEES.filter(a => !storedAttendeeIds.has(a.id));
+          if (missingInitialAttendees.length > 0) {
+            finalStoredAttendees = [...finalStoredAttendees, ...missingInitialAttendees];
+          }
+          setAttendees(finalStoredAttendees);
+          setIsLoading(false);
+        });
 
-        // Update localStorage as a fallback cache
-        localStorage.setItem('ai_symposium_events', JSON.stringify(finalEvents));
-        localStorage.setItem('ai_symposium_attendees', JSON.stringify(fbAttendees.length > 0 ? fbAttendees : INITIAL_ATTENDEES));
+        // C. Listen to Batches
+        unsubscribeBatches = onSnapshot(collection(db, 'batches'), (snapshot) => {
+          const fbBatches: Batch[] = [];
+          snapshot.forEach((docSnap) => {
+            fbBatches.push(docSnap.data() as Batch);
+          });
+          setBatches(fbBatches);
+          localStorage.setItem('ai_symposium_batches', JSON.stringify(fbBatches));
+          setIsLoading(false);
+        }, (error) => {
+          console.error("Firestore onSnapshot error for batches, falling back to cache:", error);
+          const storedBatches = localStorage.getItem('ai_symposium_batches');
+          setBatches(storedBatches ? JSON.parse(storedBatches) : []);
+          setIsLoading(false);
+        });
+
       } catch (error) {
         console.error("Failed to load data from Firestore, falling back to cache", error);
         
@@ -97,16 +171,28 @@ export default function App() {
         setEvents(storedEvents ? JSON.parse(storedEvents) : INITIAL_EVENTS);
 
         const storedAttendees = localStorage.getItem('ai_symposium_attendees');
-        setAttendees(storedAttendees ? JSON.parse(storedAttendees) : INITIAL_ATTENDEES);
-      } finally {
+        let finalStoredAttendees = storedAttendees ? JSON.parse(storedAttendees) : INITIAL_ATTENDEES;
+        const storedAttendeeIds = new Set(finalStoredAttendees.map((a: any) => a.id));
+        const missingInitialAttendees = INITIAL_ATTENDEES.filter(a => !storedAttendeeIds.has(a.id));
+        if (missingInitialAttendees.length > 0) {
+          finalStoredAttendees = [...finalStoredAttendees, ...missingInitialAttendees];
+        }
+        setAttendees(finalStoredAttendees);
+
+        const storedBatches = localStorage.getItem('ai_symposium_batches');
+        setBatches(storedBatches ? JSON.parse(storedBatches) : []);
         setIsLoading(false);
       }
     }
 
-    initFirestoreData();
+    initRealtimeData();
 
-    return () => unsubscribeAuth();
-  }, []);
+    return () => {
+      unsubscribeEvents();
+      unsubscribeAttendees();
+      unsubscribeBatches();
+    };
+  }, [session?.email]);
 
   // Sync state modifications dynamically to Firestore
   const updateEventsState = async (updated: SymposiumEvent[]) => {
@@ -115,21 +201,17 @@ export default function App() {
     localStorage.setItem('ai_symposium_events', JSON.stringify(updated));
 
     try {
-      const currentIds = new Set(updated.map(e => e.id));
-      const deleted = events.filter(e => !currentIds.has(e.id));
+      // Robust offline-safe dirty checking using a persistent cached state to avoid stale React closures
+      const cached = localStorage.getItem('ai_symposium_events_last_saved');
+      const lastSaved: SymposiumEvent[] = cached ? JSON.parse(cached) : [];
       
-      // Delete removed
-      for (const d of deleted) {
-        await deleteEventFromFirestore(d.id);
-      }
-
-      // Save new/edited
       for (const item of updated) {
-        const existing = events.find(e => e.id === item.id);
+        const existing = lastSaved.find(e => e.id === item.id);
         if (!existing || JSON.stringify(existing) !== JSON.stringify(item)) {
           await saveEventToFirestore(item);
         }
       }
+      localStorage.setItem('ai_symposium_events_last_saved', JSON.stringify(updated));
     } catch (e) {
       console.error("Error syncing events to Firestore:", e);
     }
@@ -140,22 +222,40 @@ export default function App() {
     localStorage.setItem('ai_symposium_attendees', JSON.stringify(updated));
 
     try {
-      const currentIds = new Set(updated.map(a => a.id));
-      const deleted = attendees.filter(a => !currentIds.has(a.id));
+      // Robust offline-safe dirty checking using a persistent cached state to avoid stale React closures
+      const cached = localStorage.getItem('ai_symposium_attendees_last_saved');
+      const lastSaved: Attendee[] = cached ? JSON.parse(cached) : [];
       
-      for (const d of deleted) {
-        await deleteAttendeeFromFirestore(d.id);
-      }
-
       for (const item of updated) {
-        const existing = attendees.find(a => a.id === item.id);
+        const existing = lastSaved.find(a => a.id === item.id);
         if (!existing || JSON.stringify(existing) !== JSON.stringify(item)) {
           await saveAttendeeToFirestore(item);
         }
       }
+      localStorage.setItem('ai_symposium_attendees_last_saved', JSON.stringify(updated));
     } catch (e) {
       console.error("Error syncing attendees to Firestore:", e);
     }
+  };
+
+  const handleSaveBatch = async (batch: Batch) => {
+    const updated = [...batches];
+    const index = updated.findIndex(b => b.id === batch.id);
+    if (index >= 0) {
+      updated[index] = batch;
+    } else {
+      updated.push(batch);
+    }
+    setBatches(updated);
+    localStorage.setItem('ai_symposium_batches', JSON.stringify(updated));
+    await saveBatchToFirestore(batch);
+  };
+
+  const handleDeleteBatch = async (id: string) => {
+    const updated = batches.filter(b => b.id !== id);
+    setBatches(updated);
+    localStorage.setItem('ai_symposium_batches', JSON.stringify(updated));
+    await deleteBatchFromFirestore(id);
   };
 
   // Auth Handles
@@ -197,8 +297,11 @@ export default function App() {
           user={session}
           events={events}
           attendees={attendees}
+          batches={batches}
           onUpdateEvents={updateEventsState}
           onUpdateAttendees={updateAttendeesState}
+          onSaveBatch={handleSaveBatch}
+          onDeleteBatch={handleDeleteBatch}
           onLogout={handleLogout}
         />
       ) : (
@@ -206,8 +309,11 @@ export default function App() {
           user={session}
           events={events}
           attendees={attendees}
+          batches={batches}
           onUpdateEvents={updateEventsState}
           onUpdateAttendees={updateAttendeesState}
+          onSaveBatch={handleSaveBatch}
+          onDeleteBatch={handleDeleteBatch}
           onLogout={handleLogout}
         />
       )}

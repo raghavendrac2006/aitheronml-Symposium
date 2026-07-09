@@ -2,17 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Calendar, Users, CheckCircle, Award, Play, Edit3, Clock, 
   MapPin, Bell, LogOut, Check, X, Shield, ChevronRight, CheckCircle2, UserCheck, 
-  AlertCircle, Trash2, Settings2, Plus, Info, Lock, Unlock, HelpCircle, FileText, ClipboardList
+  AlertCircle, Trash2, Settings2, Plus, Info, Lock, Unlock, HelpCircle, FileText, ClipboardList, Layers, RotateCcw,
+  Search, LogIn
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { SymposiumEvent, Attendee, ParticipantResult, MAP_EMAIL_TO_EVENT_ID } from '../types';
+import { SymposiumEvent, Attendee, ParticipantResult, MAP_EMAIL_TO_EVENT_ID, Batch } from '../types';
 import { INITIAL_EVENTS } from '../initialData';
 import ParticipantProfile from './ParticipantProfile';
 
 interface HostDashboardProps {
-  user: { email: string; name: string; assignedEventId?: string };
+  user: { email: string; name: string; assignedEventId?: string; role?: string };
   events: SymposiumEvent[];
   attendees: Attendee[];
+  batches?: Batch[];
+  onSaveBatch?: (batch: Batch) => void;
+  onDeleteBatch?: (id: string) => void;
   onUpdateEvents: (updated: SymposiumEvent[]) => void;
   onUpdateAttendees: (updated: Attendee[]) => void;
   onLogout: () => void;
@@ -22,12 +26,15 @@ export default function HostDashboard({
   user,
   events,
   attendees,
+  batches = [],
+  onSaveBatch,
+  onDeleteBatch,
   onUpdateEvents,
   onUpdateAttendees,
   onLogout
 }: HostDashboardProps) {
-  // Tabs: overview, participants, attendance, judging, results
-  const [activeTab, setActiveTab] = useState<'overview' | 'participants' | 'attendance' | 'judging' | 'results'>('overview');
+  // Tabs: overview, participants, batches, attendance, judging, results
+  const [activeTab, setActiveTab] = useState<'overview' | 'participants' | 'batches' | 'attendance' | 'judging' | 'results'>('overview');
   
   // Selected Profile State (for detail modal)
   const [selectedAttendeeForProfile, setSelectedAttendeeForProfile] = useState<Attendee | null>(null);
@@ -53,7 +60,7 @@ export default function HostDashboard({
   
   // Filter attendees for my events
   const myEventIds = myEvents.map(e => e.id);
-  const myAttendees = attendees.filter(a => myEventIds.includes(a.registeredEventId));
+  const myAttendees = attendees.filter(a => myEventIds.includes(a.registeredEventId) || myEventIds.includes(a.eventId));
 
   // Configurable Evaluation Criteria (Stored in component state, with localstorage sync fallback)
   const [evaluationCriteria, setEvaluationCriteria] = useState<Array<{ id: string; name: string; maxScore: number }>>(() => {
@@ -87,6 +94,20 @@ export default function HostDashboard({
   const [newCriterionMax, setNewCriterionMax] = useState('20');
   const [showCriteriaConfig, setShowCriteriaConfig] = useState(false);
 
+  // Batch states
+  const [selectedBatchId, setSelectedBatchId] = useState<string>('');
+  const [newBatchName, setNewBatchName] = useState('');
+  const [isCreatingBatch, setIsCreatingBatch] = useState(false);
+  const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
+  const [editingBatchName, setEditingBatchName] = useState('');
+  const [selectedJudgingBatchId, setSelectedJudgingBatchId] = useState<string>('all');
+
+  // Gate check-in desk states
+  const [showGateCheckIn, setShowGateCheckIn] = useState(false);
+  const [gateSearchQuery, setGateSearchQuery] = useState('');
+  const [gateFilter, setGateFilter] = useState<'all' | 'checked-in' | 'pending'>('all');
+  const [gateSelectedBatchId, setGateSelectedBatchId] = useState<string>('all');
+
   // Sync criteriaScores when selected attendee changes
   useEffect(() => {
     if (selectedAttendeeForJudging) {
@@ -116,6 +137,86 @@ export default function HostDashboard({
       setJudgingRemarks('');
     }
   }, [selectedAttendeeForJudging, evaluationCriteria]);
+
+  // Batch helper functions
+  const eventBatches = batches.filter(b => b.eventId === (myAssignedEvent?.id || ''));
+
+  const handleAssignToBatch = (attendeeId: string, batchId: string) => {
+    const targetBatch = batches.find(b => b.id === batchId);
+    const updatedAttendees = attendees.map(a => {
+      if (a.id === attendeeId) {
+        return {
+          ...a,
+          batchId: batchId || undefined,
+          batchName: targetBatch ? targetBatch.name : undefined
+        };
+      }
+      return a;
+    });
+    onUpdateAttendees(updatedAttendees);
+  };
+
+  const handleUpdateBatchStatus = (batchId: string, status: 'Waiting' | 'Live' | 'Completed') => {
+    const targetBatch = batches.find(b => b.id === batchId);
+    if (targetBatch && onSaveBatch) {
+      const updatedBatch = { ...targetBatch, status };
+      onSaveBatch(updatedBatch);
+    }
+  };
+
+  const handleCreateBatch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBatchName.trim() || !myAssignedEvent) return;
+    const newBatch: Batch = {
+      id: `batch-${myAssignedEvent.id}-${Date.now()}`,
+      eventId: myAssignedEvent.id,
+      name: newBatchName.trim(),
+      status: 'Waiting',
+      createdAt: new Date().toISOString()
+    };
+    if (onSaveBatch) {
+      onSaveBatch(newBatch);
+    }
+    setNewBatchName('');
+    setIsCreatingBatch(false);
+    setSelectedBatchId(newBatch.id);
+  };
+
+  const handleDeleteBatchClick = (id: string) => {
+    if (confirm('Are you sure you want to delete this batch? All participants in this batch will be unassigned.')) {
+      if (onDeleteBatch) {
+        onDeleteBatch(id);
+      }
+      // Unassign participants
+      const updatedAttendees = attendees.map(a => {
+        if (a.batchId === id) {
+          return { ...a, batchId: undefined, batchName: undefined };
+        }
+        return a;
+      });
+      onUpdateAttendees(updatedAttendees);
+      if (selectedBatchId === id) {
+        setSelectedBatchId('');
+      }
+    }
+  };
+
+  const handleRenameBatch = (id: string, name: string) => {
+    const targetBatch = batches.find(b => b.id === id);
+    if (targetBatch && onSaveBatch) {
+      const updatedBatch = { ...targetBatch, name };
+      onSaveBatch(updatedBatch);
+      // Update participants batchName as well!
+      const updatedAttendees = attendees.map(a => {
+        if (a.batchId === id) {
+          return { ...a, batchName: name };
+        }
+        return a;
+      });
+      onUpdateAttendees(updatedAttendees);
+      setEditingBatchId(null);
+    }
+  };
 
   // Filter & Search states inside modules
   const [searchQuery, setSearchQuery] = useState('');
@@ -163,7 +264,8 @@ export default function HostDashboard({
       return e;
     });
     onUpdateEvents(updated);
-    setConfirmationMessage('Event Started Successfully');
+    setShowGateCheckIn(true);
+    setConfirmationMessage('Event Started & Gate Check-In Desk Opened!');
     setTimeout(() => setConfirmationMessage(null), 4000);
   };
 
@@ -176,6 +278,27 @@ export default function HostDashboard({
     });
     onUpdateEvents(updated);
     setConfirmationMessage('Event Completed Successfully');
+    setTimeout(() => setConfirmationMessage(null), 4000);
+  };
+
+  const handleResetEvent = (newStatus: 'Upcoming' | 'Live') => {
+    const updated = events.map(e => {
+      if (e.id === myAssignedEvent.id) {
+        return { 
+          ...e, 
+          status: newStatus as any,
+          resultsSubmitted: false,
+          resultsPublished: false,
+          results: []
+        };
+      }
+      return e;
+    });
+    onUpdateEvents(updated);
+    if (newStatus === 'Live') {
+      setShowGateCheckIn(true);
+    }
+    setConfirmationMessage(`Event Reset to ${newStatus} Successfully`);
     setTimeout(() => setConfirmationMessage(null), 4000);
   };
 
@@ -314,6 +437,372 @@ export default function HostDashboard({
     setTimeout(() => setConfirmationMessage(null), 5000);
   };
 
+  if (showGateCheckIn) {
+    const presentCount = myAttendees.filter(a => a.attendanceStatus === 'Present').length;
+    const absentCount = myAttendees.filter(a => a.attendanceStatus === 'Absent').length;
+    const pendingCount = myAttendees.filter(a => !a.attendanceStatus || a.attendanceStatus === 'Pending').length;
+
+    return (
+      <div id="gate-check-in-desk" className="min-h-screen bg-background text-on-background flex flex-col font-sans">
+        {/* Header */}
+        <header className="bg-surface shadow-xs px-6 h-16 border-b border-outline-variant flex justify-between items-center z-50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-black shadow-xs">
+              🚪
+            </div>
+            <div>
+              <h1 className="font-extrabold text-sm text-primary tracking-tight leading-none">
+                Gate Entry Check-In Desk
+              </h1>
+              <p className="text-[10px] text-on-surface-variant font-bold mt-1 uppercase tracking-wider">
+                Symposium Track: {myAssignedEvent.title} • {myAssignedEvent.location}
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={() => {
+              setShowGateCheckIn(false);
+              setGateSearchQuery('');
+            }}
+            className="px-4 h-10 bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-bold rounded-lg border border-outline-variant/60 transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            Return to Workspace Hub ✕
+          </button>
+        </header>
+
+        {/* Workspace Grid */}
+        <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col lg:flex-row gap-6 overflow-hidden h-[calc(100vh-64px)]">
+          
+          {/* Left Desk Controls */}
+          <div className="w-full lg:w-[320px] shrink-0 space-y-4 flex flex-col justify-between">
+            <div className="space-y-4">
+              <div className="bg-surface border border-outline-variant rounded-2xl p-5 space-y-3.5 shadow-xs">
+                <span className="text-[10px] font-black text-primary uppercase tracking-wider block">Coordinator Instructions</span>
+                <p className="text-xs text-on-surface-variant leading-relaxed">
+                  Welcome students at the gate. Simply ask for their <strong>Participant ID</strong>, search it on the right list, and click <strong>Check-In</strong> to mark them as Present!
+                </p>
+                <div className="bg-primary/5 border border-primary/20 p-3 rounded-xl text-[10px] text-primary font-bold leading-relaxed">
+                  💡 PRO TIP: Set the auto-batch selector below to automatically put students into Batch 1 or Batch 2 upon check-in!
+                </div>
+              </div>
+
+              {/* Stats Block */}
+              <div className="bg-surface border border-outline-variant rounded-2xl p-4.5 space-y-3 shadow-xs">
+                <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-wider block border-b pb-1.5">Desk Check-in Stats</span>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-on-surface-variant font-semibold">Total Registered</span>
+                    <span className="font-mono font-black text-on-surface">{myAttendees.length}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-emerald-600 font-bold">Present (Checked-In)</span>
+                    <span className="font-mono font-black text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded">{presentCount}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-error font-bold">Absent</span>
+                    <span className="font-mono font-black text-error bg-error/10 px-2 py-0.5 rounded">{absentCount}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-amber-600 font-bold">Pending Arrival</span>
+                    <span className="font-mono font-black text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded">{pendingCount}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick action button */}
+            <div className="bg-surface border border-outline-variant rounded-2xl p-4 space-y-2 pb-4 shadow-xs">
+              <span className="text-[9px] font-black text-on-surface-variant uppercase block tracking-wider">Desk Actions</span>
+              <button
+                onClick={() => {
+                  const updated = attendees.map(a => {
+                    if ((a.registeredEventId === myAssignedEvent.id || a.eventId === myAssignedEvent.id) && (!a.attendanceStatus || a.attendanceStatus === 'Pending')) {
+                      return { ...a, attendanceStatus: 'Absent' } as Attendee;
+                    }
+                    return a;
+                  });
+                  onUpdateAttendees(updated);
+                  setConfirmationMessage('All remaining pending attendees marked Absent');
+                  setTimeout(() => setConfirmationMessage(null), 3000);
+                }}
+                disabled={isEventCompleted || isResultsPublished}
+                className="w-full py-2.5 bg-surface hover:bg-surface-container text-on-surface-variant border border-outline-variant/60 font-bold rounded-xl text-[10px] uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50"
+              >
+                Mark Pending as Absent
+              </button>
+            </div>
+          </div>
+
+          {/* Right Desk Roster Workspace */}
+          <div className="flex-1 bg-surface border border-outline-variant rounded-2xl p-5 flex flex-col h-full overflow-hidden shadow-xs">
+            
+            {/* Filter & Search Header */}
+            <div className="space-y-4 pb-4 border-b border-outline-variant/40">
+              <div className="flex flex-col md:flex-row gap-3">
+                {/* Search box with autoFocus */}
+                <div className="flex-1 relative">
+                  <Search className="w-4 h-4 text-outline absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    placeholder="Search by Participant ID, Name, or College... (Press Enter to Check-In)"
+                    autoFocus
+                    value={gateSearchQuery}
+                    onChange={(e) => setGateSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const queryStr = gateSearchQuery.toLowerCase().trim();
+                        if (!queryStr) return;
+                        
+                        const matches = myAttendees.filter(a => {
+                          return (
+                            (a.participantId || '').toLowerCase() === queryStr ||
+                            (a.id || '').toLowerCase() === queryStr ||
+                            a.name.toLowerCase().includes(queryStr)
+                          );
+                        });
+
+                        if (matches.length === 1) {
+                          const target = matches[0];
+                          let updatedBatchFields = {};
+                          if (gateSelectedBatchId !== 'all') {
+                            const targetBatch = batches.find(b => b.id === gateSelectedBatchId);
+                            if (targetBatch) {
+                              updatedBatchFields = {
+                                batchId: gateSelectedBatchId,
+                                batchName: targetBatch.name
+                              };
+                            }
+                          }
+
+                          const updated = attendees.map(a => {
+                            if (a.id === target.id) {
+                              return { 
+                                ...a, 
+                                attendanceStatus: 'Present',
+                                ...updatedBatchFields
+                              } as Attendee;
+                            }
+                            return a;
+                          });
+                          onUpdateAttendees(updated);
+                          setConfirmationMessage(`Successfully checked in ${target.name} (Attended)!`);
+                          setTimeout(() => setConfirmationMessage(null), 3500);
+                          setGateSearchQuery('');
+                        }
+                      }
+                    }}
+                    className="w-full h-10 pl-9 pr-8 bg-surface-container-low border border-outline rounded-xl text-xs font-semibold focus:border-primary focus:outline-none placeholder:text-outline"
+                  />
+                  {gateSearchQuery && (
+                    <button 
+                      onClick={() => setGateSearchQuery('')}
+                      className="absolute right-3 top-3 text-xs font-bold text-on-surface-variant hover:text-on-surface"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {/* Status selection filters */}
+                <div className="flex gap-1 bg-surface-container-low border border-outline-variant/60 rounded-xl p-1">
+                  {(['all', 'checked-in', 'pending'] as const).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setGateFilter(f)}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer capitalize ${
+                        gateFilter === f 
+                          ? 'bg-primary text-on-primary border-primary shadow-xs' 
+                          : 'bg-transparent text-on-surface-variant border-transparent hover:bg-surface-container'
+                      }`}
+                    >
+                      {f === 'checked-in' ? 'Present' : f === 'pending' ? 'Not Checked-In' : 'All Roster'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Auto assignment to Batch setting */}
+              <div className="flex flex-wrap items-center gap-3 bg-surface-container-low p-3 rounded-xl border border-outline-variant/40">
+                <span className="text-[10px] font-black text-on-surface-variant uppercase">Check-In Auto-Batcher Desk:</span>
+                <select
+                  value={gateSelectedBatchId}
+                  onChange={(e) => setGateSelectedBatchId(e.target.value)}
+                  className="h-8 px-2.5 bg-surface border border-outline rounded-lg text-xs text-on-surface font-extrabold"
+                >
+                  <option value="all">Keep general pool (No auto-assignment)</option>
+                  {eventBatches.map(b => (
+                    <option key={b.id} value={b.id}>Auto-assign to: {b.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Scrollable list of attendees */}
+            <div className="flex-1 overflow-y-auto space-y-2 mt-4 pr-1">
+              {myAttendees
+                .filter(a => {
+                  if (!gateSearchQuery.trim()) return true;
+                  const query = gateSearchQuery.toLowerCase();
+                  return (
+                    a.name.toLowerCase().includes(query) ||
+                    (a.participantId || '').toLowerCase().includes(query) ||
+                    (a.id || '').toLowerCase().includes(query) ||
+                    a.college.toLowerCase().includes(query)
+                  );
+                })
+                .filter(a => {
+                  if (gateFilter === 'checked-in') return a.attendanceStatus === 'Present';
+                  if (gateFilter === 'pending') return a.attendanceStatus !== 'Present';
+                  return true;
+                }).length === 0 ? (
+                <div className="p-16 text-center space-y-2">
+                  <p className="text-sm font-bold text-on-surface">No participants found</p>
+                  <p className="text-xs text-on-surface-variant">Verify spelling or try searching a different query.</p>
+                </div>
+              ) : (
+                myAttendees
+                  .filter(a => {
+                    if (!gateSearchQuery.trim()) return true;
+                    const query = gateSearchQuery.toLowerCase();
+                    return (
+                      a.name.toLowerCase().includes(query) ||
+                      (a.participantId || '').toLowerCase().includes(query) ||
+                      (a.id || '').toLowerCase().includes(query) ||
+                      a.college.toLowerCase().includes(query)
+                    );
+                  })
+                  .filter(a => {
+                    if (gateFilter === 'checked-in') return a.attendanceStatus === 'Present';
+                    if (gateFilter === 'pending') return a.attendanceStatus !== 'Present';
+                    return true;
+                  })
+                  .map(att => {
+                    const isCheckedIn = att.attendanceStatus === 'Present';
+
+                    return (
+                      <div 
+                        key={att.id}
+                        className={`p-4 border rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
+                          isCheckedIn 
+                            ? 'bg-emerald-500/5 border-emerald-500/30' 
+                            : 'bg-surface-container-lowest border-outline-variant/35 hover:border-outline-variant'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center gap-2.5">
+                            <span className="font-mono text-xs font-black text-primary bg-primary/10 border border-primary/20 px-2.5 py-0.5 rounded-lg shrink-0">
+                              {att.participantId || att.id}
+                            </span>
+                            <h3 className="font-black text-sm text-on-surface leading-none truncate">
+                              {att.name}
+                            </h3>
+                          </div>
+                          
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5 text-xs font-medium text-on-surface-variant">
+                            <span>🏫 {att.college}</span>
+                            {att.batchName && (
+                              <span className="bg-secondary-container text-on-secondary-container px-1.5 py-0.2 rounded font-black uppercase text-[9px] border border-secondary/10">
+                                📦 {att.batchName}
+                              </span>
+                            )}
+                            <span className="text-[10px] opacity-75 capitalize">
+                              👤 {att.registrationType || att.regType || 'Individual'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {/* Batch selection dropdown */}
+                          <select
+                            value={att.batchId || ''}
+                            onChange={(e) => handleAssignToBatch(att.id, e.target.value)}
+                            disabled={isEventCompleted || isResultsPublished}
+                            className="h-8 px-2 bg-surface border border-outline rounded-lg text-[10px] font-bold text-on-surface uppercase disabled:opacity-50 cursor-pointer"
+                          >
+                            <option value="">No Batch</option>
+                            {eventBatches.map(b => (
+                              <option key={b.id} value={b.id}>{b.name}</option>
+                            ))}
+                          </select>
+
+                          {/* Attended & Not Attended Button Group */}
+                          <div className="flex items-center gap-1 bg-surface-container-low border border-outline-variant/60 p-1 rounded-xl">
+                            {/* Attended (Present) */}
+                            <button
+                              onClick={() => {
+                                let updatedBatchFields = {};
+                                if (gateSelectedBatchId !== 'all') {
+                                  const targetBatch = batches.find(b => b.id === gateSelectedBatchId);
+                                  if (targetBatch) {
+                                    updatedBatchFields = {
+                                      batchId: gateSelectedBatchId,
+                                      batchName: targetBatch.name
+                                    };
+                                  }
+                                }
+                                const updated = attendees.map(a => {
+                                  if (a.id === att.id) {
+                                    return { 
+                                      ...a, 
+                                      attendanceStatus: 'Present',
+                                      ...updatedBatchFields
+                                    } as Attendee;
+                                  }
+                                  return a;
+                                });
+                                onUpdateAttendees(updated);
+                                setConfirmationMessage(`Successfully checked in ${att.name} (Attended)!`);
+                                setTimeout(() => setConfirmationMessage(null), 3000);
+                              }}
+                              disabled={isEventCompleted || isResultsPublished}
+                              className={`h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 border transition-all cursor-pointer ${
+                                att.attendanceStatus === 'Present'
+                                  ? 'bg-emerald-600 text-on-emerald border-emerald-600 shadow-xs'
+                                  : 'bg-transparent border-transparent text-on-surface-variant hover:bg-surface-container'
+                              } disabled:opacity-50`}
+                            >
+                              <Check className="w-3 h-3 font-bold" /> Attended
+                            </button>
+
+                            {/* Not Attended (Absent) */}
+                            <button
+                              onClick={() => {
+                                const updated = attendees.map(a => {
+                                  if (a.id === att.id) {
+                                    return { 
+                                      ...a, 
+                                      attendanceStatus: 'Absent'
+                                    } as Attendee;
+                                  }
+                                  return a;
+                                });
+                                onUpdateAttendees(updated);
+                                setConfirmationMessage(`Successfully marked ${att.name} as Not Attended!`);
+                                setTimeout(() => setConfirmationMessage(null), 3000);
+                              }}
+                              disabled={isEventCompleted || isResultsPublished}
+                              className={`h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 border transition-all cursor-pointer ${
+                                att.attendanceStatus === 'Absent'
+                                  ? 'bg-error text-on-error border-error shadow-xs'
+                                  : 'bg-transparent border-transparent text-on-surface-variant hover:bg-surface-container'
+                              } disabled:opacity-50`}
+                            >
+                              <X className="w-3 h-3" /> Not Attended
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div id="host-shell" className="min-h-screen bg-background text-on-background flex flex-col font-sans">
       
@@ -384,6 +873,18 @@ export default function HostDashboard({
             </button>
 
             <button 
+              onClick={() => setActiveTab('batches')}
+              className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold rounded-full transition-all ${
+                activeTab === 'batches' 
+                  ? 'bg-secondary-container text-on-secondary-container shadow-xs' 
+                  : 'text-on-surface-variant hover:bg-surface-variant/40'
+              }`}
+            >
+              <Layers className="w-4 h-4 shrink-0" />
+              <span>Batches</span>
+            </button>
+
+            <button 
               onClick={() => setActiveTab('attendance')}
               className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold rounded-full transition-all ${
                 activeTab === 'attendance' 
@@ -417,6 +918,14 @@ export default function HostDashboard({
             >
               <Award className="w-4 h-4 shrink-0" />
               <span>Results</span>
+            </button>
+
+            <button 
+              onClick={() => setShowGateCheckIn(true)}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-primary bg-primary/10 border border-primary/20 rounded-full hover:bg-primary/15 transition-all mt-3"
+            >
+              <LogIn className="w-4 h-4 shrink-0" />
+              <span>🚪 Gate Check-In Desk</span>
             </button>
           </div>
 
@@ -563,6 +1072,24 @@ export default function HostDashboard({
                         </div>
                       </div>
                     )}
+
+                    {!isResultsPublished && (
+                      <div className="bg-primary/5 border border-primary/20 p-4 rounded-xl space-y-2 mt-4">
+                        <div className="flex items-center gap-2">
+                          <LogIn className="w-4 h-4 text-primary" />
+                          <h4 className="text-xs font-black text-on-surface">Coordinator Entry Desk</h4>
+                        </div>
+                        <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                          Sitting at the gate? Open the dedicated portal to search, check-in, and batch participants as they enter the venue.
+                        </p>
+                        <button
+                          onClick={() => setShowGateCheckIn(true)}
+                          className="w-full py-2.5 bg-primary text-on-primary hover:bg-primary/95 font-bold rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          🚪 Open Gate Check-In Desk
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-3">
@@ -587,9 +1114,25 @@ export default function HostDashboard({
                     )}
 
                     {myAssignedEvent.status === 'Completed' && !isResultsPublished && (
-                      <div className="bg-amber-100 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200 border border-amber-300 p-3 rounded-xl text-center text-xs">
-                        <AlertCircle className="w-4 h-4 mx-auto mb-1 text-amber-700" />
-                        Event is completed. Attendance/Judging edits are deactivated. Proceed to compiling and publishing the Results tab!
+                      <div className="space-y-3">
+                        <div className="bg-amber-100 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200 border border-amber-300 p-3 rounded-xl text-center text-xs">
+                          <AlertCircle className="w-4 h-4 mx-auto mb-1 text-amber-700" />
+                          Event is completed. Attendance/Judging edits are deactivated. Proceed to compiling and publishing the Results tab!
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => handleResetEvent('Upcoming')}
+                            className="py-2.5 px-3 bg-surface border border-outline hover:bg-surface-container text-on-surface font-semibold rounded-lg text-[11px] transition-all cursor-pointer flex items-center justify-center gap-1"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-on-surface-variant" /> Reset to Upcoming
+                          </button>
+                          <button
+                            onClick={() => handleResetEvent('Live')}
+                            className="py-2.5 px-3 bg-primary text-on-primary hover:bg-primary/95 font-semibold rounded-lg text-[11px] transition-all cursor-pointer flex items-center justify-center gap-1"
+                          >
+                            <Play className="w-3.5 h-3.5" /> Re-open (Live)
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -739,6 +1282,288 @@ export default function HostDashboard({
             </motion.div>
           )}
 
+          {/* TAB: BATCHES */}
+          {activeTab === 'batches' && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-outline-variant/40">
+                <div>
+                  <h1 className="text-xl font-extrabold text-on-surface tracking-tight">Batch Management</h1>
+                  <p className="text-xs text-on-surface-variant">Divide participants into rounds or batches, manage statuses, and track attendance.</p>
+                </div>
+                <button
+                  onClick={() => setIsCreatingBatch(true)}
+                  className="px-4 py-2 bg-primary text-white rounded-full text-xs font-bold shadow-md hover:bg-primary/90 transition-all flex items-center gap-1.5 cursor-pointer self-start"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Create Batch</span>
+                </button>
+              </div>
+
+              {/* Create Batch Dialog Overlay Inline Card */}
+              {isCreatingBatch && (
+                <div className="p-4 bg-surface-container border border-outline-variant rounded-2xl max-w-md space-y-4">
+                  <h3 className="text-xs uppercase font-extrabold text-primary">Create New Batch</h3>
+                  <form onSubmit={handleCreateBatch} className="space-y-3">
+                    <input
+                      type="text"
+                      placeholder="e.g. Batch A (Morning Session)"
+                      value={newBatchName}
+                      onChange={(e) => setNewBatchName(e.target.value)}
+                      className="w-full h-10 px-3 bg-surface border border-outline rounded-lg text-xs"
+                      required
+                    />
+                    <div className="flex justify-end gap-2 text-xs font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setIsCreatingBatch(false)}
+                        className="px-3 py-1.5 border border-outline rounded-lg"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-3 py-1.5 bg-primary text-white rounded-lg"
+                      >
+                        Create
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Batches List Panel */}
+                <div className="bg-surface border border-outline-variant rounded-2xl p-4 shadow-xs space-y-3">
+                  <h3 className="text-xs uppercase font-extrabold text-on-surface-variant border-b border-outline-variant/40 pb-2">
+                    Event Batches ({eventBatches.length})
+                  </h3>
+
+                  {eventBatches.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-on-surface-variant font-medium">
+                      No batches created for this event yet. Create a batch to start organizing!
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-[450px] overflow-y-auto">
+                      {eventBatches.map(b => {
+                        const count = attendees.filter(a => a.batchId === b.id).length;
+                        const isSelected = selectedBatchId === b.id;
+                        return (
+                          <div
+                            key={b.id}
+                            onClick={() => setSelectedBatchId(b.id)}
+                            className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                              isSelected 
+                                ? 'bg-secondary-container/50 border-primary' 
+                                : 'bg-surface-container-low border-outline-variant hover:bg-surface-container'
+                            }`}
+                          >
+                            <div className="flex justify-between items-start">
+                              {editingBatchId === b.id ? (
+                                <div className="flex-1 flex gap-1 mr-2" onClick={e => e.stopPropagation()}>
+                                  <input
+                                    type="text"
+                                    value={editingBatchName}
+                                    onChange={e => setEditingBatchName(e.target.value)}
+                                    className="w-full h-8 px-2 bg-surface border border-outline rounded text-xs"
+                                  />
+                                  <button
+                                    onClick={() => handleRenameBatch(b.id, editingBatchName)}
+                                    className="p-1 bg-primary text-white rounded text-xs"
+                                  >
+                                    ✓
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingBatchId(null)}
+                                    className="p-1 border border-outline rounded text-xs"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="font-bold text-xs text-on-surface">{b.name}</div>
+                              )}
+
+                              <div className="flex gap-1.5" onClick={e => e.stopPropagation()}>
+                                <button
+                                  onClick={() => {
+                                    setEditingBatchId(b.id);
+                                    setEditingBatchName(b.name);
+                                  }}
+                                  className="p-1 text-on-surface-variant hover:text-primary transition-colors"
+                                  title="Rename"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteBatchClick(b.id)}
+                                  className="p-1 text-on-surface-variant hover:text-error transition-colors"
+                                  title="Delete Batch"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between mt-3 pt-2 border-t border-outline-variant/30 text-[10px]">
+                              <div className="flex items-center gap-1 font-bold text-on-surface-variant">
+                                <Users className="w-3.5 h-3.5" />
+                                <span>{count} participants</span>
+                              </div>
+                              <select
+                                value={b.status || 'Waiting'}
+                                onChange={e => handleUpdateBatchStatus(b.id, e.target.value as any)}
+                                onClick={e => e.stopPropagation()}
+                                className={`px-2 py-0.5 rounded-full font-bold text-[9px] uppercase border border-outline ${
+                                  b.status === 'Live' 
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+                                    : b.status === 'Completed'
+                                      ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                      : 'bg-amber-100 text-amber-800 border-amber-300'
+                                }`}
+                              >
+                                <option value="Waiting">Waiting</option>
+                                <option value="Live">Live</option>
+                                <option value="Completed">Completed</option>
+                              </select>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Batch Members Panel */}
+                <div className="lg:col-span-2 bg-surface border border-outline-variant rounded-2xl p-4 shadow-xs space-y-4">
+                  {selectedBatchId ? (() => {
+                    const activeBatch = eventBatches.find(b => b.id === selectedBatchId);
+                    if (!activeBatch) return <div className="text-xs text-on-surface-variant">Selected batch not found.</div>;
+                    const members = attendees.filter(a => a.batchId === selectedBatchId);
+                    const unassignedAttendees = attendees.filter(a => (a.registeredEventId === myAssignedEvent.id || a.eventId === myAssignedEvent.id) && !a.batchId);
+
+                    return (
+                      <>
+                        <div className="flex justify-between items-center border-b border-outline-variant/40 pb-2">
+                          <div>
+                            <span className="text-[10px] uppercase font-extrabold text-primary block">Active Batch View</span>
+                            <h4 className="text-sm font-extrabold text-on-surface">{activeBatch.name}</h4>
+                          </div>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] uppercase font-bold border ${
+                            activeBatch.status === 'Live' 
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+                              : activeBatch.status === 'Completed'
+                                ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                : 'bg-amber-100 text-amber-800 border-amber-300'
+                          }`}>
+                            {activeBatch.status || 'Waiting'}
+                          </span>
+                        </div>
+
+                        {/* Assign New Members Inline Form */}
+                        {unassignedAttendees.length > 0 && (
+                          <div className="p-3 bg-surface-container border border-outline-variant rounded-xl flex flex-col sm:flex-row items-center gap-3">
+                            <span className="text-xs font-bold text-on-surface shrink-0">Assign Participant:</span>
+                            <select
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleAssignToBatch(e.target.value, selectedBatchId);
+                                  e.target.value = '';
+                                }
+                              }}
+                              className="flex-1 h-9 px-3 bg-surface border border-outline rounded-lg text-xs text-on-surface"
+                            >
+                              <option value="">Select an unassigned participant...</option>
+                              {unassignedAttendees.map(u => (
+                                <option key={u.id} value={u.id}>
+                                  {u.participantId} - {u.name} ({u.teamName ? `Team: ${u.teamName}` : 'Individual'})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Batch Members List */}
+                        <div className="space-y-2">
+                          <h5 className="text-xs font-bold text-on-surface-variant">Batch Roster ({members.length})</h5>
+                          {members.length === 0 ? (
+                            <div className="py-12 border-2 border-dashed border-outline-variant rounded-xl text-center text-xs text-on-surface-variant font-medium">
+                              No participants assigned to this batch yet. Assign some above!
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left text-xs border-collapse">
+                                <thead>
+                                  <tr className="bg-surface-container border-b border-outline-variant text-on-surface">
+                                    <th className="p-3 font-bold">ID</th>
+                                    <th className="p-3 font-bold">Name</th>
+                                    <th className="p-3 font-bold">College</th>
+                                    <th className="p-3 font-bold">Attendance</th>
+                                    <th className="p-3 font-bold text-right">Action</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {members.map(m => (
+                                    <tr key={m.id} className="border-b border-outline-variant/30 hover:bg-surface-container/30 transition-colors">
+                                      <td className="p-3 font-bold text-primary">{m.participantId || m.id}</td>
+                                      <td className="p-3">
+                                        <div className="font-bold text-on-surface text-xs">{m.name}</div>
+                                        {m.teamName && (
+                                          <div className="text-[10px] text-primary font-bold">Team: {m.teamName}</div>
+                                        )}
+                                      </td>
+                                      <td className="p-3 text-on-surface-variant text-[11px] font-medium">{m.college}</td>
+                                      <td className="p-3">
+                                        <select
+                                          value={m.attendanceStatus || 'Pending'}
+                                          onChange={(e) => {
+                                            const updatedAttendees = attendees.map(att => {
+                                              if (att.id === m.id) {
+                                                return { ...att, attendanceStatus: e.target.value as any };
+                                              }
+                                              return att;
+                                            });
+                                            onUpdateAttendees(updatedAttendees);
+                                          }}
+                                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
+                                            m.attendanceStatus === 'Present' 
+                                              ? 'bg-emerald-100 text-emerald-800' 
+                                              : m.attendanceStatus === 'Absent'
+                                                ? 'bg-red-100 text-red-800'
+                                                : 'bg-amber-100 text-amber-800'
+                                          }`}
+                                        >
+                                          <option value="Pending">Pending</option>
+                                          <option value="Present">Present</option>
+                                          <option value="Absent">Absent</option>
+                                        </select>
+                                      </td>
+                                      <td className="p-3 text-right">
+                                        <button
+                                          onClick={() => handleAssignToBatch(m.id, '')}
+                                          className="text-[10px] text-error font-bold hover:underline"
+                                        >
+                                          Unassign
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })() : (
+                    <div className="py-24 text-center text-xs text-on-surface-variant font-medium">
+                      Select a batch from the left to view participants, track attendance, and assign new registrations.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {/* TAB: ATTENDANCE */}
           {activeTab === 'attendance' && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
@@ -802,7 +1627,7 @@ export default function HostDashboard({
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleMarkAttendance(att.id, 'Present')}
-                          disabled={isEventCompleted || isResultsPublished || !isEventLive}
+                          disabled={isEventCompleted || isResultsPublished}
                           className={`h-9 px-4 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
                             att.attendanceStatus === 'Present' 
                               ? 'bg-primary text-on-primary border-primary' 
@@ -813,7 +1638,7 @@ export default function HostDashboard({
                         </button>
                         <button
                           onClick={() => handleMarkAttendance(att.id, 'Absent')}
-                          disabled={isEventCompleted || isResultsPublished || !isEventLive}
+                          disabled={isEventCompleted || isResultsPublished}
                           className={`h-9 px-4 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
                             att.attendanceStatus === 'Absent' 
                               ? 'bg-error-container text-on-error-container border-error/20' 
@@ -950,6 +1775,21 @@ export default function HostDashboard({
                   <div className="space-y-2">
                     <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Select Checked-In Presentee</span>
                     
+                    {/* Batch wise selection filter */}
+                    <div className="flex flex-col gap-1 pb-1">
+                      <label className="text-[9px] font-bold text-primary uppercase">Select Batch</label>
+                      <select
+                        value={selectedJudgingBatchId}
+                        onChange={(e) => setSelectedJudgingBatchId(e.target.value)}
+                        className="w-full h-8 px-2 bg-surface border border-outline rounded text-xs text-on-surface font-semibold"
+                      >
+                        <option value="all">All Batches</option>
+                        {eventBatches.map(b => (
+                          <option key={b.id} value={b.id}>{b.name} ({b.status || 'Waiting'})</option>
+                        ))}
+                      </select>
+                    </div>
+
                     {/* Judging status filters */}
                     <div className="flex gap-1">
                       {(['all', 'Not Started', 'In Progress', 'Completed'] as const).map(tab => (
@@ -962,9 +1802,62 @@ export default function HostDashboard({
                               : 'bg-surface text-on-surface-variant'
                           }`}
                         >
-                          {tab === 'all' ? 'All' : tab}
+                          {tab === 'all' ? 'All Status' : tab}
                         </button>
                       ))}
+                    </div>
+                  </div>
+
+                  {/* Real-time Top 3 Leaderboard Standings Preview */}
+                  <div className="bg-primary/5 border border-primary/20 rounded-2xl p-3 space-y-2.5 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-[10px] font-black text-on-surface uppercase flex items-center gap-1">
+                        <Award className="w-3.5 h-3.5 text-primary" /> Live Standings (Top 3)
+                      </h4>
+                      <span className="text-[8px] font-black bg-primary/10 text-primary px-1.5 py-0.2 rounded-full uppercase tracking-wider">
+                        Dynamic Ranks
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {(() => {
+                        const top3 = myAttendees
+                          .filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed')
+                          .sort((a, b) => (b.score || 0) - (a.score || 0))
+                          .slice(0, 3);
+
+                        if (top3.length === 0) {
+                          return (
+                            <p className="text-[9px] text-on-surface-variant italic text-center py-1">
+                              No completed evaluations yet.
+                            </p>
+                          );
+                        }
+
+                        return top3.map((student, idx) => {
+                          const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉';
+                          const colors = idx === 0 ? 'text-amber-800 dark:text-amber-300 bg-amber-500/10 border-amber-500/20' : 
+                                         idx === 1 ? 'text-slate-800 dark:text-slate-300 bg-slate-500/10 border-slate-500/20' : 
+                                         'text-amber-700 dark:text-amber-400 bg-amber-700/5 border-amber-700/10';
+                          return (
+                            <div 
+                              key={student.id} 
+                              className={`flex justify-between items-center px-2.5 py-1.5 border rounded-xl ${colors} transition-all`}
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-xs font-bold">{medal}</span>
+                                <div className="min-w-0">
+                                  <span className="text-[11px] font-black block truncate leading-none">{student.name}</span>
+                                  <span className="text-[8px] font-medium opacity-85 block truncate font-mono uppercase">{student.participantId || student.id}</span>
+                                </div>
+                              </div>
+                              <span className="font-mono text-[11px] font-black whitespace-nowrap">
+                                {student.score} pts
+                              </span>
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
 
@@ -977,6 +1870,7 @@ export default function HostDashboard({
                     ) : (
                       myAttendees
                         .filter(a => a.attendanceStatus === 'Present')
+                        .filter(a => selectedJudgingBatchId === 'all' || a.batchId === selectedJudgingBatchId)
                         .filter(a => judgingFilter === 'all' || (a.judgingStatus || 'Not Started') === judgingFilter)
                         .map(att => (
                           <button
@@ -1073,6 +1967,12 @@ export default function HostDashboard({
                                   disabled={isResultsPublished || isEventCompleted || !isEventLive}
                                   value={currentVal}
                                   onChange={(e) => handleCriteriaScoreChange(crit.id, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleSaveEvaluation('Completed');
+                                    }
+                                  }}
                                   className={`w-full h-10 px-3 bg-surface border rounded-lg text-sm font-semibold text-on-surface ${
                                     isErr ? 'border-error text-error focus:border-error' : 'border-outline focus:border-primary'
                                   }`}

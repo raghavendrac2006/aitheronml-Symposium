@@ -6,7 +6,7 @@ import {
   setDoc, 
   deleteDoc
 } from 'firebase/firestore';
-import { SymposiumEvent, Attendee, Team, Host, Judge, Result } from './types';
+import { SymposiumEvent, Attendee, Team, Host, Judge, Result, Batch } from './types';
 import { 
   INITIAL_EVENTS, 
   INITIAL_ATTENDEES
@@ -68,7 +68,7 @@ function savePendingOps(ops: any[]) {
   }
 }
 
-async function triggerPendingSync() {
+export async function triggerPendingSync() {
   const ops = getPendingOps();
   if (ops.length === 0) return;
   
@@ -103,24 +103,27 @@ function queueSyncOperation(type: 'save' | 'delete', collectionName: string, id:
 // Seed helper
 export async function seedDatabaseIfEmpty() {
   try {
+    // 1. Seed Events if empty
     const eventsSnap = await getDocs(collection(db, EVENTS_COL));
     if (eventsSnap.empty) {
-      console.log('Firestore is empty. Seeding symposium data...');
-      
-      // Seed Events
+      console.log('Events collection is empty. Seeding events...');
       for (const ev of INITIAL_EVENTS) {
         await setDoc(doc(db, EVENTS_COL, ev.id), ev);
       }
-      
-      // Seed Participants (Attendees)
+      console.log('Events successfully seeded.');
+    }
+
+    // 2. Seed Participants (Attendees) if empty
+    const participantsSnap = await getDocs(collection(db, PARTICIPANTS_COL));
+    if (participantsSnap.empty) {
+      console.log('Participants collection is empty. Seeding participants...');
       for (const att of INITIAL_ATTENDEES) {
         await setDoc(doc(db, PARTICIPANTS_COL, att.id), att);
       }
-      
-      console.log('Database seeded with Kuppam Engineering College symposium data!');
+      console.log('Participants successfully seeded.');
     }
   } catch (error) {
-    console.warn('Error seeding database (using offline fallback if restricted):', error);
+    console.warn('Error seeding database independently:', error);
   }
 }
 
@@ -134,7 +137,7 @@ export async function fetchEventsFromFirestore(): Promise<SymposiumEvent[]> {
     });
     
     if (list.length > 0) {
-      localStorage.setItem('cached_symposium_events', JSON.stringify(list));
+      localStorage.setItem('ai_symposium_events', JSON.stringify(list));
       syncStatus.lastSyncTime = new Date().toLocaleTimeString();
     }
     return list.length > 0 ? list : getCachedEvents();
@@ -146,7 +149,7 @@ export async function fetchEventsFromFirestore(): Promise<SymposiumEvent[]> {
 
 function getCachedEvents(): SymposiumEvent[] {
   try {
-    const data = localStorage.getItem('cached_symposium_events');
+    const data = localStorage.getItem('ai_symposium_events');
     return data ? JSON.parse(data) : INITIAL_EVENTS;
   } catch {
     return INITIAL_EVENTS;
@@ -162,7 +165,7 @@ export async function fetchAttendeesFromFirestore(): Promise<Attendee[]> {
     });
     
     if (list.length > 0) {
-      localStorage.setItem('cached_symposium_participants', JSON.stringify(list));
+      localStorage.setItem('ai_symposium_attendees', JSON.stringify(list));
       syncStatus.lastSyncTime = new Date().toLocaleTimeString();
     }
     return list.length > 0 ? list : getCachedAttendees();
@@ -174,7 +177,7 @@ export async function fetchAttendeesFromFirestore(): Promise<Attendee[]> {
 
 function getCachedAttendees(): Attendee[] {
   try {
-    const data = localStorage.getItem('cached_symposium_participants');
+    const data = localStorage.getItem('ai_symposium_attendees');
     return data ? JSON.parse(data) : INITIAL_ATTENDEES;
   } catch {
     return INITIAL_ATTENDEES;
@@ -191,7 +194,7 @@ export async function saveEventToFirestore(event: SymposiumEvent) {
   } else {
     events.push(event);
   }
-  localStorage.setItem('cached_symposium_events', JSON.stringify(events));
+  localStorage.setItem('ai_symposium_events', JSON.stringify(events));
 
   // Write to Firestore and handle connection failure
   try {
@@ -205,7 +208,7 @@ export async function saveEventToFirestore(event: SymposiumEvent) {
 
 export async function deleteEventFromFirestore(id: string) {
   const events = getCachedEvents().filter(e => e.id !== id);
-  localStorage.setItem('cached_symposium_events', JSON.stringify(events));
+  localStorage.setItem('ai_symposium_events', JSON.stringify(events));
 
   try {
     await deleteDoc(doc(db, EVENTS_COL, id));
@@ -224,7 +227,7 @@ export async function saveAttendeeToFirestore(attendee: Attendee) {
   } else {
     attendees.push(attendee);
   }
-  localStorage.setItem('cached_symposium_participants', JSON.stringify(attendees));
+  localStorage.setItem('ai_symposium_attendees', JSON.stringify(attendees));
 
   try {
     await setDoc(doc(db, PARTICIPANTS_COL, attendee.id), attendee);
@@ -237,7 +240,7 @@ export async function saveAttendeeToFirestore(attendee: Attendee) {
 
 export async function deleteAttendeeFromFirestore(id: string) {
   const attendees = getCachedAttendees().filter(a => a.id !== id);
-  localStorage.setItem('cached_symposium_participants', JSON.stringify(attendees));
+  localStorage.setItem('ai_symposium_attendees', JSON.stringify(attendees));
 
   try {
     await deleteDoc(doc(db, PARTICIPANTS_COL, id));
@@ -249,18 +252,75 @@ export async function deleteAttendeeFromFirestore(id: string) {
 }
 
 // ----------------------------------------------------------------------
-// NEW COLLECTIONS HELPERS: Teams, Hosts, Judges, Results
+// NEW COLLECTIONS HELPERS: Teams, Hosts, Judges, Results, Batches
 // ----------------------------------------------------------------------
+
+const BATCHES_COL = 'batches';
+
+export async function fetchBatches(): Promise<Batch[]> {
+  try {
+    const snap = await getDocs(collection(db, BATCHES_COL));
+    const list: Batch[] = [];
+    snap.forEach(docSnap => list.push(docSnap.data() as Batch));
+    localStorage.setItem('ai_symposium_batches', JSON.stringify(list));
+    return list;
+  } catch (e) {
+    console.warn('Failed to load batches from Firestore, using offline cache', e);
+    const data = localStorage.getItem('ai_symposium_batches');
+    return data ? JSON.parse(data) : [];
+  }
+}
+
+export async function saveBatchToFirestore(batch: Batch) {
+  try {
+    const cached = localStorage.getItem('ai_symposium_batches');
+    const list: Batch[] = cached ? JSON.parse(cached) : [];
+    const idx = list.findIndex(b => b.id === batch.id);
+    if (idx >= 0) {
+      list[idx] = batch;
+    } else {
+      list.push(batch);
+    }
+    localStorage.setItem('ai_symposium_batches', JSON.stringify(list));
+  } catch (err) {
+    console.error('Error saving batch to cache', err);
+  }
+
+  try {
+    await setDoc(doc(db, BATCHES_COL, batch.id), batch);
+  } catch (e) {
+    console.warn(`Firestore save failed for batch ${batch.id}, queuing offline operation`, e);
+    queueSyncOperation('save', BATCHES_COL, batch.id, batch);
+  }
+}
+
+export async function deleteBatchFromFirestore(id: string) {
+  try {
+    const cached = localStorage.getItem('ai_symposium_batches');
+    const list: Batch[] = cached ? JSON.parse(cached) : [];
+    const updated = list.filter(b => b.id !== id);
+    localStorage.setItem('ai_symposium_batches', JSON.stringify(updated));
+  } catch (err) {
+    console.error('Error deleting batch from cache', err);
+  }
+
+  try {
+    await deleteDoc(doc(db, BATCHES_COL, id));
+  } catch (e) {
+    console.warn(`Firestore delete failed for batch ${id}, queuing offline operation`, e);
+    queueSyncOperation('delete', BATCHES_COL, id);
+  }
+}
 
 export async function fetchTeams(): Promise<Team[]> {
   try {
     const snap = await getDocs(collection(db, TEAMS_COL));
     const list: Team[] = [];
     snap.forEach(docSnap => list.push(docSnap.data() as Team));
-    localStorage.setItem('cached_symposium_teams', JSON.stringify(list));
+    localStorage.setItem('ai_symposium_teams', JSON.stringify(list));
     return list;
   } catch {
-    const data = localStorage.getItem('cached_symposium_teams');
+    const data = localStorage.getItem('ai_symposium_teams');
     return data ? JSON.parse(data) : [];
   }
 }
@@ -278,10 +338,10 @@ export async function fetchHosts(): Promise<Host[]> {
     const snap = await getDocs(collection(db, HOSTS_COL));
     const list: Host[] = [];
     snap.forEach(docSnap => list.push(docSnap.data() as Host));
-    localStorage.setItem('cached_symposium_hosts', JSON.stringify(list));
+    localStorage.setItem('ai_symposium_hosts', JSON.stringify(list));
     return list;
   } catch {
-    const data = localStorage.getItem('cached_symposium_hosts');
+    const data = localStorage.getItem('ai_symposium_hosts');
     return data ? JSON.parse(data) : [];
   }
 }
@@ -299,10 +359,10 @@ export async function fetchJudges(): Promise<Judge[]> {
     const snap = await getDocs(collection(db, JUDGES_COL));
     const list: Judge[] = [];
     snap.forEach(docSnap => list.push(docSnap.data() as Judge));
-    localStorage.setItem('cached_symposium_judges', JSON.stringify(list));
+    localStorage.setItem('ai_symposium_judges', JSON.stringify(list));
     return list;
   } catch {
-    const data = localStorage.getItem('cached_symposium_judges');
+    const data = localStorage.getItem('ai_symposium_judges');
     return data ? JSON.parse(data) : [];
   }
 }
@@ -320,10 +380,10 @@ export async function fetchResults(): Promise<Result[]> {
     const snap = await getDocs(collection(db, RESULTS_COL));
     const list: Result[] = [];
     snap.forEach(docSnap => list.push(docSnap.data() as Result));
-    localStorage.setItem('cached_symposium_results', JSON.stringify(list));
+    localStorage.setItem('ai_symposium_results', JSON.stringify(list));
     return list;
   } catch {
-    const data = localStorage.getItem('cached_symposium_results');
+    const data = localStorage.getItem('ai_symposium_results');
     return data ? JSON.parse(data) : [];
   }
 }
@@ -343,3 +403,65 @@ export async function saveSpeakerToFirestore(sp: any) {}
 export async function deleteSpeakerFromFirestore(id: string) {}
 export async function saveSubmissionToFirestore(sub: any) {}
 export async function deleteSubmissionFromFirestore(id: string) {}
+
+export async function clearAllRegistrationsAndReset() {
+  console.log('Starting full database reset to start from first registration...');
+
+  // 1. Delete all participants in Firestore
+  try {
+    const participantsSnap = await getDocs(collection(db, PARTICIPANTS_COL));
+    for (const docSnap of participantsSnap.docs) {
+      await deleteDoc(doc(db, PARTICIPANTS_COL, docSnap.id));
+    }
+    console.log('Firestore participants collection successfully cleared.');
+  } catch (err) {
+    console.error('Error clearing participants collection:', err);
+  }
+
+  // 2. Delete all batches in Firestore
+  try {
+    const batchesSnap = await getDocs(collection(db, BATCHES_COL));
+    for (const docSnap of batchesSnap.docs) {
+      await deleteDoc(doc(db, BATCHES_COL, docSnap.id));
+    }
+    console.log('Firestore batches collection successfully cleared.');
+  } catch (err) {
+    console.error('Error clearing batches collection:', err);
+  }
+
+  // 3. Delete all results/scores in Firestore
+  try {
+    const resultsSnap = await getDocs(collection(db, RESULTS_COL));
+    for (const docSnap of resultsSnap.docs) {
+      await deleteDoc(doc(db, RESULTS_COL, docSnap.id));
+    }
+    console.log('Firestore results collection successfully cleared.');
+  } catch (err) {
+    console.error('Error clearing results collection:', err);
+  }
+
+  // 4. Overwrite events in Firestore with pristine versions
+  try {
+    for (const ev of INITIAL_EVENTS) {
+      await setDoc(doc(db, EVENTS_COL, ev.id), ev);
+    }
+    console.log('Firestore events collection successfully reset to initial states.');
+  } catch (err) {
+    console.error('Error resetting events in Firestore:', err);
+  }
+
+  // 5. Clear localStorage
+  try {
+    localStorage.setItem('ai_symposium_attendees', JSON.stringify([]));
+    localStorage.setItem('ai_symposium_attendees_last_saved', JSON.stringify([]));
+    localStorage.setItem('ai_symposium_batches', JSON.stringify([]));
+    localStorage.setItem('ai_symposium_events', JSON.stringify(INITIAL_EVENTS));
+    localStorage.setItem('ai_symposium_events_last_saved', JSON.stringify(INITIAL_EVENTS));
+    localStorage.setItem('ai_symposium_results', JSON.stringify([]));
+    localStorage.removeItem('pending_sync_ops');
+    console.log('Local storage caches successfully cleared.');
+  } catch (err) {
+    console.error('Error clearing localStorage caches:', err);
+  }
+}
+
