@@ -889,15 +889,6 @@ export default function AdminDashboard({
                               return matchesSearch && matchesEvent && matchesCollege && matchesRegType && matchesStatus;
                             })
                             .map(att => {
-                              const isNew = att.createdAt && (Date.now() - new Date(att.createdAt).getTime() < 180000);
-                              if (isNew) {
-                                console.log(`-----------------------------------
-[STEP 8]
-Participant Rendered
-Participant ID: ${att.participantId || att.id}
-Timestamp: ${new Date().toLocaleTimeString()} (ISO: ${new Date().toISOString()})
------------------------------------`);
-                              }
                               return (
                                 <tr key={att.id} className="border-b border-outline-variant/30 hover:bg-surface-container/30 transition-colors">
                                   <td className="p-4 font-semibold text-primary">{att.id}</td>

@@ -56,16 +56,7 @@ export default function App() {
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
 
-  useEffect(() => {
-    if (!isLoading) {
-      console.log(`-----------------------------------
-[STEP 7]
-React State Updated
-Participant Count: ${attendees.length}
-Timestamp: ${new Date().toLocaleTimeString()} (ISO: ${new Date().toISOString()})
------------------------------------`);
-    }
-  }, [attendees, isLoading]);
+
 
   // Initialize and load persistent state from Firestore & Auth
   useEffect(() => {
@@ -199,14 +190,7 @@ Timestamp: ${new Date().toLocaleTimeString()} (ISO: ${new Date().toISOString()})
 
         // B. Listen to Participants (Attendees)
         unsubscribeAttendees = subscribeWithRetry('participants', (snapshot) => {
-          console.log(`-----------------------------------
-[STEP 5]
-Snapshot Received
-Timestamp: ${new Date().toLocaleTimeString()} (ISO: ${new Date().toISOString()})
-Snapshot Size: ${snapshot.size}
-fromCache: ${snapshot.metadata.fromCache}
-hasPendingWrites: ${snapshot.metadata.hasPendingWrites}
------------------------------------`);
+
 
           const fbAttendees: Attendee[] = [];
           snapshot.forEach((docSnap) => {
@@ -222,11 +206,7 @@ hasPendingWrites: ${snapshot.metadata.hasPendingWrites}
 
           const migrated = finalAttendees.map(migrateAttendee);
 
-          console.log(`-----------------------------------
-[STEP 6]
-Updating React State
-Timestamp: ${new Date().toLocaleTimeString()} (ISO: ${new Date().toISOString()})
------------------------------------`);
+
           setAttendees(migrated);
           localStorage.setItem('ai_symposium_attendees', JSON.stringify(migrated));
           localStorage.setItem('ai_symposium_attendees_last_saved', JSON.stringify(migrated));

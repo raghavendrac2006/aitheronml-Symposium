@@ -62,12 +62,6 @@ export default function PublicRegistration({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log(`-----------------------------------
-[STEP 1]
-Submit Button Clicked
-Timestamp: ${new Date().toLocaleTimeString()}
-ISO Timestamp: ${new Date().toISOString()}
------------------------------------`);
     setError(null);
     setLoading(true);
 
@@ -216,7 +210,7 @@ ISO Timestamp: ${new Date().toISOString()}
       onRegistrationSuccess(leaderAttendee, membersToSave);
 
     } catch (err: any) {
-      console.error(err);
+      console.error("Registration failed:", err);
       setError('Registration failed. Firestore write unsuccessful.');
     } finally {
       setLoading(false);

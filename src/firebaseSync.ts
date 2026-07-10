@@ -241,12 +241,6 @@ export async function deleteEventFromFirestore(id: string) {
 }
 
 export async function saveAttendeeToFirestore(attendee: Attendee) {
-  console.log(`-----------------------------------
-[STEP 2]
-Entered saveAttendeeToFirestore()
-Timestamp: ${new Date().toLocaleTimeString()}
------------------------------------`);
-
   const attendees = getCachedAttendees();
   const index = attendees.findIndex(a => a.id === attendee.id);
   if (index >= 0) {
@@ -257,31 +251,10 @@ Timestamp: ${new Date().toLocaleTimeString()}
   localStorage.setItem('ai_symposium_attendees', JSON.stringify(attendees));
 
   try {
-    console.log(`-----------------------------------
-[STEP 3]
-Starting Firestore setDoc()
-Timestamp: ${new Date().toLocaleTimeString()}
------------------------------------`);
-    const writeStart = performance.now();
     await setDoc(doc(db, PARTICIPANTS_COL, attendee.id), sanitizeForFirestore(attendee));
-    const writeEnd = performance.now();
-
-    console.log(`-----------------------------------
-[STEP 4]
-Firestore Write Finished
-Write Duration: ${(writeEnd - writeStart).toFixed(2)} ms
-Timestamp: ${new Date().toLocaleTimeString()}
------------------------------------`);
-
     syncStatus.lastSyncTime = new Date().toLocaleTimeString();
   } catch (error: any) {
-    console.error("FULL FIRESTORE ERROR");
-    console.error(error);
-    console.error("Error Code:", error.code);
-    console.error("Error Name:", error.name);
-    console.error("Error Message:", error.message);
-    console.error("Stack:", error.stack);
-    console.error("JSON:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    console.error("Registration failed:", error);
     throw error;
   }
 }
