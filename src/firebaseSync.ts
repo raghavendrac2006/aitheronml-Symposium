@@ -20,6 +20,27 @@ const HOSTS_COL = 'hosts';
 const JUDGES_COL = 'judges';
 const RESULTS_COL = 'results';
 
+// Helper to recursively strip undefined properties before writing to Firestore
+export function sanitizeForFirestore<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  if (obj instanceof Date) {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeForFirestore(item)) as any;
+  }
+  if (typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([_, v]) => v !== undefined)
+        .map(([k, v]) => [k, sanitizeForFirestore(v)])
+    ) as any;
+  }
+  return obj;
+}
+
 // Global state tracking for Firestore Offline Support
 export interface SyncStatus {
   lastSyncTime: string;
@@ -78,7 +99,7 @@ export async function triggerPendingSync() {
   for (const op of ops) {
     try {
       if (op.type === 'save') {
-        await setDoc(doc(db, op.collection, op.id), op.data);
+        await setDoc(doc(db, op.collection, op.id), sanitizeForFirestore(op.data));
       } else if (op.type === 'delete') {
         await deleteDoc(doc(db, op.collection, op.id));
       }
@@ -108,7 +129,7 @@ export async function seedDatabaseIfEmpty() {
     if (eventsSnap.empty) {
       console.log('Events collection is empty. Seeding events...');
       for (const ev of INITIAL_EVENTS) {
-        await setDoc(doc(db, EVENTS_COL, ev.id), ev);
+        await setDoc(doc(db, EVENTS_COL, ev.id), sanitizeForFirestore(ev));
       }
       console.log('Events successfully seeded.');
     }
@@ -118,7 +139,7 @@ export async function seedDatabaseIfEmpty() {
     if (participantsSnap.empty) {
       console.log('Participants collection is empty. Seeding participants...');
       for (const att of INITIAL_ATTENDEES) {
-        await setDoc(doc(db, PARTICIPANTS_COL, att.id), att);
+        await setDoc(doc(db, PARTICIPANTS_COL, att.id), sanitizeForFirestore(att));
       }
       console.log('Participants successfully seeded.');
     }
@@ -198,7 +219,7 @@ export async function saveEventToFirestore(event: SymposiumEvent) {
 
   // Write to Firestore and handle connection failure
   try {
-    await setDoc(doc(db, EVENTS_COL, event.id), event);
+    await setDoc(doc(db, EVENTS_COL, event.id), sanitizeForFirestore(event));
     syncStatus.lastSyncTime = new Date().toLocaleTimeString();
   } catch (e) {
     console.warn(`Firestore save failed for event ${event.id}, queuing offline operation`, e);
@@ -220,6 +241,12 @@ export async function deleteEventFromFirestore(id: string) {
 }
 
 export async function saveAttendeeToFirestore(attendee: Attendee) {
+  console.log(`-----------------------------------
+[STEP 2]
+Entered saveAttendeeToFirestore()
+Timestamp: ${new Date().toLocaleTimeString()}
+-----------------------------------`);
+
   const attendees = getCachedAttendees();
   const index = attendees.findIndex(a => a.id === attendee.id);
   if (index >= 0) {
@@ -230,11 +257,32 @@ export async function saveAttendeeToFirestore(attendee: Attendee) {
   localStorage.setItem('ai_symposium_attendees', JSON.stringify(attendees));
 
   try {
-    await setDoc(doc(db, PARTICIPANTS_COL, attendee.id), attendee);
+    console.log(`-----------------------------------
+[STEP 3]
+Starting Firestore setDoc()
+Timestamp: ${new Date().toLocaleTimeString()}
+-----------------------------------`);
+    const writeStart = performance.now();
+    await setDoc(doc(db, PARTICIPANTS_COL, attendee.id), sanitizeForFirestore(attendee));
+    const writeEnd = performance.now();
+
+    console.log(`-----------------------------------
+[STEP 4]
+Firestore Write Finished
+Write Duration: ${(writeEnd - writeStart).toFixed(2)} ms
+Timestamp: ${new Date().toLocaleTimeString()}
+-----------------------------------`);
+
     syncStatus.lastSyncTime = new Date().toLocaleTimeString();
-  } catch (e) {
-    console.warn(`Firestore save failed for participant ${attendee.id}, queuing offline operation`, e);
-    queueSyncOperation('save', PARTICIPANTS_COL, attendee.id, attendee);
+  } catch (error: any) {
+    console.error("FULL FIRESTORE ERROR");
+    console.error(error);
+    console.error("Error Code:", error.code);
+    console.error("Error Name:", error.name);
+    console.error("Error Message:", error.message);
+    console.error("Stack:", error.stack);
+    console.error("JSON:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    throw error;
   }
 }
 
@@ -287,7 +335,7 @@ export async function saveBatchToFirestore(batch: Batch) {
   }
 
   try {
-    await setDoc(doc(db, BATCHES_COL, batch.id), batch);
+    await setDoc(doc(db, BATCHES_COL, batch.id), sanitizeForFirestore(batch));
   } catch (e) {
     console.warn(`Firestore save failed for batch ${batch.id}, queuing offline operation`, e);
     queueSyncOperation('save', BATCHES_COL, batch.id, batch);
@@ -327,7 +375,7 @@ export async function fetchTeams(): Promise<Team[]> {
 
 export async function saveTeam(team: Team) {
   try {
-    await setDoc(doc(db, TEAMS_COL, team.teamId), team);
+    await setDoc(doc(db, TEAMS_COL, team.teamId), sanitizeForFirestore(team));
   } catch {
     queueSyncOperation('save', TEAMS_COL, team.teamId, team);
   }
@@ -348,7 +396,7 @@ export async function fetchHosts(): Promise<Host[]> {
 
 export async function saveHost(host: Host) {
   try {
-    await setDoc(doc(db, HOSTS_COL, host.hostId), host);
+    await setDoc(doc(db, HOSTS_COL, host.hostId), sanitizeForFirestore(host));
   } catch {
     queueSyncOperation('save', HOSTS_COL, host.hostId, host);
   }
@@ -369,7 +417,7 @@ export async function fetchJudges(): Promise<Judge[]> {
 
 export async function saveJudge(judge: Judge) {
   try {
-    await setDoc(doc(db, JUDGES_COL, judge.judgeId), judge);
+    await setDoc(doc(db, JUDGES_COL, judge.judgeId), sanitizeForFirestore(judge));
   } catch {
     queueSyncOperation('save', JUDGES_COL, judge.judgeId, judge);
   }
@@ -390,7 +438,7 @@ export async function fetchResults(): Promise<Result[]> {
 
 export async function saveResult(result: Result) {
   try {
-    await setDoc(doc(db, RESULTS_COL, result.resultId), result);
+    await setDoc(doc(db, RESULTS_COL, result.resultId), sanitizeForFirestore(result));
   } catch {
     queueSyncOperation('save', RESULTS_COL, result.resultId, result);
   }
@@ -443,7 +491,7 @@ export async function clearAllRegistrationsAndReset() {
   // 4. Overwrite events in Firestore with pristine versions
   try {
     for (const ev of INITIAL_EVENTS) {
-      await setDoc(doc(db, EVENTS_COL, ev.id), ev);
+      await setDoc(doc(db, EVENTS_COL, ev.id), sanitizeForFirestore(ev));
     }
     console.log('Firestore events collection successfully reset to initial states.');
   } catch (err) {

@@ -97,6 +97,8 @@ export default function HostDashboard({
   // Batch states
   const [selectedBatchId, setSelectedBatchId] = useState<string>('');
   const [newBatchName, setNewBatchName] = useState('');
+  const [batchCount, setBatchCount] = useState<number>(3);
+  const [dynamicBatchNames, setDynamicBatchNames] = useState<string[]>(['Batch 1', 'Batch 2', 'Batch 3']);
   const [isCreatingBatch, setIsCreatingBatch] = useState(false);
   const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
   const [editingBatchName, setEditingBatchName] = useState('');
@@ -141,6 +143,12 @@ export default function HostDashboard({
   // Batch helper functions
   const eventBatches = batches.filter(b => b.eventId === (myAssignedEvent?.id || ''));
 
+  useEffect(() => {
+    if (eventBatches.length > 0 && (selectedJudgingBatchId === 'all' || !eventBatches.some(b => b.id === selectedJudgingBatchId))) {
+      setSelectedJudgingBatchId(eventBatches[0].id);
+    }
+  }, [eventBatches]);
+
   const handleAssignToBatch = (attendeeId: string, batchId: string) => {
     const targetBatch = batches.find(b => b.id === batchId);
     const updatedAttendees = attendees.map(a => {
@@ -166,20 +174,86 @@ export default function HostDashboard({
 
   const handleCreateBatch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newBatchName.trim() || !myAssignedEvent) return;
-    const newBatch: Batch = {
-      id: `batch-${myAssignedEvent.id}-${Date.now()}`,
-      eventId: myAssignedEvent.id,
-      name: newBatchName.trim(),
-      status: 'Waiting',
-      createdAt: new Date().toISOString()
-    };
-    if (onSaveBatch) {
-      onSaveBatch(newBatch);
+    if (!myAssignedEvent) return;
+
+    // Filter dynamicBatchNames to ensure none are empty
+    const namesToUse = dynamicBatchNames.map(n => n.trim()).filter(Boolean);
+    const K = namesToUse.length;
+    if (K <= 0) return alert("Please specify at least one batch name.");
+
+    // Generate K batch objects
+    const newBatchesList: Batch[] = [];
+    const nowStr = new Date().toISOString();
+    
+    // Sort attendees by createdAt / registration order to enforce first-come first-served
+    const sortedAttendees = [...myAttendees].sort((a, b) => {
+      const timeA = a.createdAt || a.id || '';
+      const timeB = b.createdAt || b.id || '';
+      return timeA.localeCompare(timeB);
+    });
+
+    const N = sortedAttendees.length;
+    
+    // Create Batches
+    for (let i = 0; i < K; i++) {
+      const bName = namesToUse[i];
+      const newB: Batch = {
+        id: `batch-${myAssignedEvent.id}-${Date.now()}-${i}`,
+        eventId: myAssignedEvent.id,
+        name: bName,
+        status: 'Waiting',
+        createdAt: nowStr
+      };
+      newBatchesList.push(newB);
     }
-    setNewBatchName('');
+
+    // Divide attendees
+    const baseSize = Math.floor(N / K);
+    const remainder = N % K;
+    
+    // To match: "One batch must consist of 16 participants, but one participant is getting extra, 
+    // so that extra participant will be assigned to the second batch, the last batch, in that way."
+    // So the first K - remainder batches get baseSize elements, and the last remainder batches get baseSize + 1 elements.
+    
+    const updatedAttendees = [...attendees];
+    let currentIdx = 0;
+    
+    for (let i = 0; i < K; i++) {
+      const groupSize = (i >= K - remainder) ? (baseSize + 1) : baseSize;
+      const currentBatchId = newBatchesList[i].id;
+      const currentBatchName = newBatchesList[i].name;
+
+      for (let j = 0; j < groupSize; j++) {
+        if (currentIdx < N) {
+          const attendeeToUpdate = sortedAttendees[currentIdx];
+          // Find this attendee in the global attendees array and update it
+          const globalIdx = updatedAttendees.findIndex(a => a.id === attendeeToUpdate.id);
+          if (globalIdx >= 0) {
+            updatedAttendees[globalIdx] = {
+              ...updatedAttendees[globalIdx],
+              batchId: currentBatchId,
+              batchName: currentBatchName
+            };
+          }
+          currentIdx++;
+        }
+      }
+    }
+
+    // Save Batches
+    if (onSaveBatch) {
+      for (const b of newBatchesList) {
+        onSaveBatch(b);
+      }
+    }
+
+    // Update Attendees
+    onUpdateAttendees(updatedAttendees);
+
     setIsCreatingBatch(false);
-    setSelectedBatchId(newBatch.id);
+    if (newBatchesList.length > 0) {
+      setSelectedBatchId(newBatchesList[0].id);
+    }
   };
 
   const handleDeleteBatchClick = (id: string) => {
@@ -307,7 +381,11 @@ export default function HostDashboard({
     if (isEventCompleted || isResultsPublished) return;
     const updated = attendees.map(a => {
       if (a.id === attendeeId) {
-        return { ...a, attendanceStatus: status } as Attendee;
+        return { 
+          ...a, 
+          attendanceStatus: status,
+          checkedInAt: status === 'Present' ? (a.checkedInAt || new Date().toISOString()) : undefined
+        } as Attendee;
       }
       return a;
     });
@@ -437,7 +515,7 @@ export default function HostDashboard({
     setTimeout(() => setConfirmationMessage(null), 5000);
   };
 
-  if (showGateCheckIn) {
+  if (false) {
     const presentCount = myAttendees.filter(a => a.attendanceStatus === 'Present').length;
     const absentCount = myAttendees.filter(a => a.attendanceStatus === 'Absent').length;
     const pendingCount = myAttendees.filter(a => !a.attendanceStatus || a.attendanceStatus === 'Pending').length;
@@ -579,6 +657,7 @@ export default function HostDashboard({
                               return { 
                                 ...a, 
                                 attendanceStatus: 'Present',
+                                checkedInAt: a.checkedInAt || new Date().toISOString(),
                                 ...updatedBatchFields
                               } as Attendee;
                             }
@@ -745,6 +824,7 @@ export default function HostDashboard({
                                     return { 
                                       ...a, 
                                       attendanceStatus: 'Present',
+                                      checkedInAt: a.checkedInAt || new Date().toISOString(),
                                       ...updatedBatchFields
                                     } as Attendee;
                                   }
@@ -920,13 +1000,6 @@ export default function HostDashboard({
               <span>Results</span>
             </button>
 
-            <button 
-              onClick={() => setShowGateCheckIn(true)}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-primary bg-primary/10 border border-primary/20 rounded-full hover:bg-primary/15 transition-all mt-3"
-            >
-              <LogIn className="w-4 h-4 shrink-0" />
-              <span>🚪 Gate Check-In Desk</span>
-            </button>
           </div>
 
           <div className="mt-auto px-3 pt-4 border-t border-outline-variant/60">
@@ -1019,14 +1092,14 @@ export default function HostDashboard({
                     <div className="space-y-1">
                       <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Assigned Hosts</span>
                       <span className="text-xs font-semibold text-on-surface block bg-surface-container-low px-2.5 py-1.5 border rounded-lg">
-                        🧑‍🏫 {myAssignedEvent.hostName || user.name} ({myAssignedEvent.hostEmail})
+                        🧑‍🏫 {myAssignedEvent.hostName || user.name}
                       </span>
                     </div>
 
                     <div className="space-y-1">
                       <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Assigned Judges</span>
                       <span className="text-xs font-semibold text-on-surface block bg-surface-container-low px-2.5 py-1.5 border rounded-lg truncate">
-                        ⚖️ {myAssignedEvent.judgeIds?.join(', ') || 'External Evaluation Panel'}
+                        ⚖️ {myAssignedEvent.judgeIds?.map(j => j.includes('@') ? j.split('@')[0].replace(/[^a-zA-Z0-9]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : j).join(', ') || 'External Evaluation Panel'}
                       </span>
                     </div>
                   </div>
@@ -1073,23 +1146,6 @@ export default function HostDashboard({
                       </div>
                     )}
 
-                    {!isResultsPublished && (
-                      <div className="bg-primary/5 border border-primary/20 p-4 rounded-xl space-y-2 mt-4">
-                        <div className="flex items-center gap-2">
-                          <LogIn className="w-4 h-4 text-primary" />
-                          <h4 className="text-xs font-black text-on-surface">Coordinator Entry Desk</h4>
-                        </div>
-                        <p className="text-[10px] text-on-surface-variant leading-relaxed">
-                          Sitting at the gate? Open the dedicated portal to search, check-in, and batch participants as they enter the venue.
-                        </p>
-                        <button
-                          onClick={() => setShowGateCheckIn(true)}
-                          className="w-full py-2.5 bg-primary text-on-primary hover:bg-primary/95 font-bold rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-                        >
-                          🚪 Open Gate Check-In Desk
-                        </button>
-                      </div>
-                    )}
                   </div>
 
                   <div className="space-y-3">
@@ -1291,7 +1347,11 @@ export default function HostDashboard({
                   <p className="text-xs text-on-surface-variant">Divide participants into rounds or batches, manage statuses, and track attendance.</p>
                 </div>
                 <button
-                  onClick={() => setIsCreatingBatch(true)}
+                  onClick={() => {
+                    setIsCreatingBatch(true);
+                    setBatchCount(3);
+                    setDynamicBatchNames(['Batch 1', 'Batch 2', 'Batch 3']);
+                  }}
                   className="px-4 py-2 bg-primary text-white rounded-full text-xs font-bold shadow-md hover:bg-primary/90 transition-all flex items-center gap-1.5 cursor-pointer self-start"
                 >
                   <Plus className="w-4 h-4" />
@@ -1301,30 +1361,84 @@ export default function HostDashboard({
 
               {/* Create Batch Dialog Overlay Inline Card */}
               {isCreatingBatch && (
-                <div className="p-4 bg-surface-container border border-outline-variant rounded-2xl max-w-md space-y-4">
-                  <h3 className="text-xs uppercase font-extrabold text-primary">Create New Batch</h3>
-                  <form onSubmit={handleCreateBatch} className="space-y-3">
-                    <input
-                      type="text"
-                      placeholder="e.g. Batch A (Morning Session)"
-                      value={newBatchName}
-                      onChange={(e) => setNewBatchName(e.target.value)}
-                      className="w-full h-10 px-3 bg-surface border border-outline rounded-lg text-xs"
-                      required
-                    />
-                    <div className="flex justify-end gap-2 text-xs font-bold">
+                <div className="p-5 bg-surface-container border border-outline-variant rounded-2xl max-w-md space-y-4 shadow-md">
+                  <h3 className="text-sm font-extrabold text-primary">Create & Distribute Batches</h3>
+                  
+                  <div className="bg-primary/5 p-3 rounded-xl border border-primary/20 text-xs text-primary leading-normal">
+                    💡 All <strong>{myAttendees.length}</strong> participants registered for this event will be automatically divided equally across these batches on a first-come, first-served basis.
+                  </div>
+
+                  <form onSubmit={handleCreateBatch} className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase mb-1.5">
+                        How many batches do you want to create?
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={batchCount}
+                        onChange={(e) => {
+                          const count = Math.max(1, parseInt(e.target.value) || 1);
+                          setBatchCount(count);
+                          setDynamicBatchNames(prev => {
+                            const next = [...prev];
+                            if (next.length < count) {
+                              for (let i = next.length; i < count; i++) {
+                                next.push(`Batch ${i + 1}`);
+                              }
+                            } else {
+                              next.splice(count);
+                            }
+                            return next;
+                          });
+                        }}
+                        className="w-full h-10 px-3 bg-surface border border-outline rounded-lg text-xs font-semibold text-on-surface"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase">
+                        Batch Names
+                      </label>
+                      {dynamicBatchNames.map((name, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-on-surface-variant shrink-0 w-16">
+                            Batch {index + 1}:
+                          </span>
+                          <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setDynamicBatchNames(prev => {
+                                const next = [...prev];
+                                next[index] = val;
+                                return next;
+                              });
+                            }}
+                            placeholder={`Batch ${index + 1} Name`}
+                            className="flex-1 h-10 px-3 bg-surface border border-outline rounded-lg text-xs text-on-surface"
+                            required
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex justify-end gap-2 text-xs font-bold pt-2 border-t border-outline-variant/30">
                       <button
                         type="button"
                         onClick={() => setIsCreatingBatch(false)}
-                        className="px-3 py-1.5 border border-outline rounded-lg"
+                        className="px-4 h-9 border border-outline rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer"
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
-                        className="px-3 py-1.5 bg-primary text-white rounded-lg"
+                        className="px-4 h-9 bg-primary text-on-primary rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
                       >
-                        Create
+                        Create & Divide
                       </button>
                     </div>
                   </form>
@@ -1872,6 +1986,11 @@ export default function HostDashboard({
                         .filter(a => a.attendanceStatus === 'Present')
                         .filter(a => selectedJudgingBatchId === 'all' || a.batchId === selectedJudgingBatchId)
                         .filter(a => judgingFilter === 'all' || (a.judgingStatus || 'Not Started') === judgingFilter)
+                        .sort((a, b) => {
+                          const timeA = a.checkedInAt || a.createdAt || '';
+                          const timeB = b.checkedInAt || b.createdAt || '';
+                          return timeA.localeCompare(timeB);
+                        })
                         .map(att => (
                           <button
                             key={att.id}
@@ -2035,164 +2154,374 @@ export default function HostDashboard({
             </motion.div>
           )}
 
-          {/* TAB: RESULTS */}
-          {activeTab === 'results' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-              
-              <div className="pb-3 border-b border-outline-variant/40 flex justify-between items-center">
-                <div>
-                  <h1 className="text-2xl font-extrabold text-on-surface tracking-tight">Compiled Standings & Results</h1>
-                  <p className="text-xs text-on-surface-variant">Compile final evaluations, compute dynamic ranks, and certify outcomes.</p>
+              {/* Ranks compilation Podium / Batch-wise Standings */}
+              {eventBatches.length > 0 ? (
+                <div className="space-y-8">
+                  {eventBatches.map(batch => {
+                    const batchAttendees = myAttendees
+                      .filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed' && a.batchId === batch.id)
+                      .sort((a, b) => (b.score || 0) - (a.score || 0));
+
+                    return (
+                      <div key={batch.id} className="bg-surface rounded-2xl border border-outline-variant p-6 space-y-6 shadow-xs">
+                        <div className="flex justify-between items-center border-b border-outline-variant/40 pb-3">
+                          <div>
+                            <h3 className="text-lg font-black text-on-surface flex items-center gap-2">
+                              <Award className="w-5 h-5 text-primary" /> {batch.name} Standings
+                            </h3>
+                            <p className="text-[10px] text-on-surface-variant font-medium">Rankings compiled specifically for {batch.name}.</p>
+                          </div>
+                          <span className={`text-[10px] font-black px-2.5 py-0.5 border rounded-full uppercase tracking-wider ${
+                            batch.status === 'Completed' ? 'bg-teal-50 text-teal-700 border-teal-200' :
+                            batch.status === 'Live' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                            'bg-surface-variant text-on-surface-variant'
+                          }`}>
+                            {batch.status || 'Waiting'}
+                          </span>
+                        </div>
+
+                        {/* Batch Podium */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          {/* 1st Place */}
+                          <div className="bg-amber-50 dark:bg-amber-950/10 border-2 border-amber-400 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-44 shadow-xs">
+                            <div className="absolute -right-4 -bottom-4 text-amber-300/30 font-black text-7xl pointer-events-none select-none">1</div>
+                            <div>
+                              <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">🥇 First Place</span>
+                              <h4 className="text-lg font-black text-on-surface mt-2 truncate">
+                                {batchAttendees[0]?.name || 'Unassigned'}
+                              </h4>
+                              <p className="text-xs text-on-surface-variant font-medium truncate">
+                                {batchAttendees[0]?.college || 'N/A'}
+                              </p>
+                            </div>
+                            <div className="text-xs font-bold mt-4">
+                              Score:{' '}
+                              <span className="text-lg font-black text-amber-800 dark:text-amber-300">
+                                {batchAttendees[0]?.score || 0} pts
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* 2nd Place */}
+                          <div className="bg-surface-container border border-outline-variant p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-44 shadow-xs">
+                            <div className="absolute -right-4 -bottom-4 text-on-surface-variant/10 font-black text-7xl pointer-events-none select-none">2</div>
+                            <div>
+                              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">🥈 Second Place</span>
+                              <h4 className="text-lg font-black text-on-surface mt-2 truncate">
+                                {batchAttendees[1]?.name || 'Unassigned'}
+                              </h4>
+                              <p className="text-xs text-on-surface-variant font-medium truncate">
+                                {batchAttendees[1]?.college || 'N/A'}
+                              </p>
+                            </div>
+                            <div className="text-xs font-bold mt-4">
+                              Score:{' '}
+                              <span className="text-lg font-black text-primary">
+                                {batchAttendees[1]?.score || 0} pts
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* 3rd Place */}
+                          <div className="bg-amber-900/5 dark:bg-amber-900/10 border border-amber-800/10 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-44 shadow-xs">
+                            <div className="absolute -right-4 -bottom-4 text-amber-900/10 font-black text-7xl pointer-events-none select-none">3</div>
+                            <div>
+                              <span className="text-[10px] font-bold text-amber-900/85 dark:text-amber-400 uppercase tracking-wider block">🥉 Third Place</span>
+                              <h4 className="text-lg font-black text-on-surface mt-2 truncate">
+                                {batchAttendees[2]?.name || 'Unassigned'}
+                              </h4>
+                              <p className="text-xs text-on-surface-variant font-medium truncate">
+                                {batchAttendees[2]?.college || 'N/A'}
+                              </p>
+                            </div>
+                            <div className="text-xs font-bold mt-4">
+                              Score:{' '}
+                              <span className="text-lg font-black text-primary">
+                                {batchAttendees[2]?.score || 0} pts
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Batch Detailed Table */}
+                        <div className="bg-surface rounded-2xl border border-outline-variant/60 p-4 shadow-xs space-y-2">
+                          <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Full Batch Leaderboard</span>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs border-collapse">
+                              <thead>
+                                <tr className="bg-surface-container border-b">
+                                  <th className="p-2.5 font-bold text-on-surface uppercase w-16">Rank</th>
+                                  <th className="p-2.5 font-bold text-on-surface uppercase w-28">ID</th>
+                                  <th className="p-2.5 font-bold text-on-surface uppercase">Participant</th>
+                                  <th className="p-2.5 font-bold text-on-surface uppercase">College</th>
+                                  <th className="p-2.5 font-bold text-on-surface uppercase w-28">Total Score</th>
+                                  <th className="p-2.5 font-bold text-on-surface uppercase">Judge Remarks</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {batchAttendees.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={6} className="p-4 text-center text-on-surface-variant italic">No evaluated presentees in this batch.</td>
+                                  </tr>
+                                ) : (
+                                  batchAttendees.map((att, idx) => (
+                                    <tr key={att.id} className="border-b border-outline-variant/30 hover:bg-surface-container-low transition-all">
+                                      <td className="p-2.5 font-bold">
+                                        {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
+                                      </td>
+                                      <td className="p-2.5 font-mono font-bold text-primary">{att.participantId || att.id}</td>
+                                      <td className="p-2.5 font-extrabold text-on-surface">{att.name}</td>
+                                      <td className="p-2.5 text-on-surface-variant font-medium">{att.college}</td>
+                                      <td className="p-2.5 font-black text-primary">{att.score || 0}</td>
+                                      <td className="p-2.5 text-on-surface-variant italic truncate max-w-xs">{att.remarks || 'No remarks.'}</td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Unbatched Standings (if any) */}
+                  {(() => {
+                    const unassignedAttendees = myAttendees
+                      .filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed' && !a.batchId)
+                      .sort((a, b) => (b.score || 0) - (a.score || 0));
+
+                    if (unassignedAttendees.length === 0) return null;
+
+                    return (
+                      <div className="bg-surface rounded-2xl border border-outline-variant p-6 space-y-6 shadow-xs">
+                        <div className="flex justify-between items-center border-b border-outline-variant/40 pb-3">
+                          <div>
+                            <h3 className="text-lg font-black text-on-surface flex items-center gap-2">
+                              <Award className="w-5 h-5 text-primary" /> Unbatched Participants Standings
+                            </h3>
+                            <p className="text-[10px] text-on-surface-variant font-medium">Rankings of evaluated participants not assigned to any batch.</p>
+                          </div>
+                        </div>
+
+                        {/* Unbatched Podium */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          {/* 1st Place */}
+                          <div className="bg-amber-50 dark:bg-amber-950/10 border-2 border-amber-400 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-44 shadow-xs">
+                            <div className="absolute -right-4 -bottom-4 text-amber-300/30 font-black text-7xl pointer-events-none select-none">1</div>
+                            <div>
+                              <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">🥇 First Place</span>
+                              <h4 className="text-lg font-black text-on-surface mt-2 truncate">
+                                {unassignedAttendees[0]?.name || 'Unassigned'}
+                              </h4>
+                              <p className="text-xs text-on-surface-variant font-medium truncate">
+                                {unassignedAttendees[0]?.college || 'N/A'}
+                              </p>
+                            </div>
+                            <div className="text-xs font-bold mt-4">
+                              Score:{' '}
+                              <span className="text-lg font-black text-amber-800 dark:text-amber-300">
+                                {unassignedAttendees[0]?.score || 0} pts
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* 2nd Place */}
+                          <div className="bg-surface-container border border-outline-variant p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-44 shadow-xs">
+                            <div className="absolute -right-4 -bottom-4 text-on-surface-variant/10 font-black text-7xl pointer-events-none select-none">2</div>
+                            <div>
+                              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">🥈 Second Place</span>
+                              <h4 className="text-lg font-black text-on-surface mt-2 truncate">
+                                {unassignedAttendees[1]?.name || 'Unassigned'}
+                              </h4>
+                              <p className="text-xs text-on-surface-variant font-medium truncate">
+                                {unassignedAttendees[1]?.college || 'N/A'}
+                              </p>
+                            </div>
+                            <div className="text-xs font-bold mt-4">
+                              Score:{' '}
+                              <span className="text-lg font-black text-primary">
+                                {unassignedAttendees[1]?.score || 0} pts
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* 3rd Place */}
+                          <div className="bg-amber-900/5 dark:bg-amber-900/10 border border-amber-800/10 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-44 shadow-xs">
+                            <div className="absolute -right-4 -bottom-4 text-amber-900/10 font-black text-7xl pointer-events-none select-none">3</div>
+                            <div>
+                              <span className="text-[10px] font-bold text-amber-900/85 dark:text-amber-400 uppercase tracking-wider block">🥉 Third Place</span>
+                              <h4 className="text-lg font-black text-on-surface mt-2 truncate">
+                                {unassignedAttendees[2]?.name || 'Unassigned'}
+                              </h4>
+                              <p className="text-xs text-on-surface-variant font-medium truncate">
+                                {unassignedAttendees[2]?.college || 'N/A'}
+                              </p>
+                            </div>
+                            <div className="text-xs font-bold mt-4">
+                              Score:{' '}
+                              <span className="text-lg font-black text-primary">
+                                {unassignedAttendees[2]?.score || 0} pts
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Unbatched Detailed Table */}
+                        <div className="bg-surface rounded-2xl border border-outline-variant/60 p-4 shadow-xs space-y-2">
+                          <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Full Unbatched Leaderboard</span>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs border-collapse">
+                              <thead>
+                                <tr className="bg-surface-container border-b">
+                                  <th className="p-2.5 font-bold text-on-surface uppercase w-16">Rank</th>
+                                  <th className="p-2.5 font-bold text-on-surface uppercase w-28">ID</th>
+                                  <th className="p-2.5 font-bold text-on-surface uppercase">Participant</th>
+                                  <th className="p-2.5 font-bold text-on-surface uppercase">College</th>
+                                  <th className="p-2.5 font-bold text-on-surface uppercase w-28">Total Score</th>
+                                  <th className="p-2.5 font-bold text-on-surface uppercase">Judge Remarks</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {unassignedAttendees.map((att, idx) => (
+                                  <tr key={att.id} className="border-b border-outline-variant/30 hover:bg-surface-container-low transition-all">
+                                    <td className="p-2.5 font-bold">
+                                      {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
+                                    </td>
+                                    <td className="p-2.5 font-mono font-bold text-primary">{att.participantId || att.id}</td>
+                                    <td className="p-2.5 font-extrabold text-on-surface">{att.name}</td>
+                                    <td className="p-2.5 text-on-surface-variant font-medium">{att.college}</td>
+                                    <td className="p-2.5 font-black text-primary">{att.score || 0}</td>
+                                    <td className="p-2.5 text-on-surface-variant italic truncate max-w-xs">{att.remarks || 'No remarks.'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    
+                    {/* FIRST PLACE */}
+                    <div className="bg-amber-50 dark:bg-amber-950/10 border-2 border-amber-400 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-48 shadow-sm">
+                      <div className="absolute -right-4 -bottom-4 text-amber-300/30 font-black text-8xl pointer-events-none select-none">1</div>
+                      
+                      <div>
+                        <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">🥇 Grand Winner (Rank 1)</span>
+                        <h3 className="text-xl font-black text-on-surface mt-2">
+                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[0]?.name || 'Unassigned'}
+                        </h3>
+                        <p className="text-xs text-on-surface-variant font-medium truncate">
+                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[0]?.college || 'N/A'}
+                        </p>
+                      </div>
 
-                {!isResultsPublished && isEventCompleted && (
-                  <button 
-                    onClick={handlePublishResults}
-                    className="px-4 h-10 bg-primary text-on-primary hover:opacity-95 rounded-lg text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-xs"
-                  >
-                    <Award className="w-4 h-4 animate-bounce" /> Compile & Publish Results
-                  </button>
-                )}
-              </div>
+                      <div className="text-xs font-bold mt-4">
+                        Score:{' '}
+                        <span className="text-lg font-black text-amber-800 dark:text-amber-300">
+                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[0]?.score || 0}
+                        </span>
+                      </div>
+                    </div>
 
-              {isResultsPublished && (
-                <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 text-emerald-700 dark:text-emerald-300 p-4 rounded-xl text-xs flex items-center gap-2">
-                  <Lock className="w-5 h-5 text-emerald-600 shrink-0" />
-                  <div className="space-y-1">
-                    <span className="font-extrabold block">Official Results Certified & Published</span>
-                    <span className="text-[10px] block leading-tight">
-                      Results are locked. Modification of evaluations, check-ins, or rankings is deactivated. Only Super Admin can unlock.
-                    </span>
-                  </div>
-                </div>
-              )}
+                    {/* SECOND PLACE */}
+                    <div className="bg-surface-container border-2 border-outline p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-48 shadow-xs">
+                      <div className="absolute -right-4 -bottom-4 text-on-surface-variant/10 font-black text-8xl pointer-events-none select-none">2</div>
+                      
+                      <div>
+                        <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">🥈 Runner Up (Rank 2)</span>
+                        <h3 className="text-xl font-black text-on-surface mt-2">
+                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[1]?.name || 'Unassigned'}
+                        </h3>
+                        <p className="text-xs text-on-surface-variant font-medium truncate">
+                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[1]?.college || 'N/A'}
+                        </p>
+                      </div>
 
-              {!isEventCompleted && !isResultsPublished && (
-                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 text-amber-800 dark:text-amber-200 p-4 rounded-xl text-xs flex items-center gap-2 mb-4">
-                  <AlertCircle className="w-4.5 h-4.5 text-amber-600 shrink-0" />
-                  <span>The physical event is still in progress. Ranks can only be compiled and certified once the event lifecycle is Ended.</span>
-                </div>
-              )}
+                      <div className="text-xs font-bold mt-4">
+                        Score:{' '}
+                        <span className="text-lg font-black text-primary">
+                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[1]?.score || 0}
+                        </span>
+                      </div>
+                    </div>
 
-              {/* Ranks compilation Podium */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                
-                {/* FIRST PLACE */}
-                <div className="bg-amber-50 dark:bg-amber-950/10 border-2 border-amber-400 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-48 shadow-sm">
-                  <div className="absolute -right-4 -bottom-4 text-amber-300/30 font-black text-8xl pointer-events-none select-none">1</div>
-                  
-                  <div>
-                    <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">🥇 Grand Winner (Rank 1)</span>
-                    <h3 className="text-xl font-black text-on-surface mt-2">
-                      {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[0]?.name || 'Unassigned'}
-                    </h3>
-                    <p className="text-xs text-on-surface-variant font-medium truncate">
-                      {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[0]?.college || 'N/A'}
-                    </p>
-                  </div>
+                    {/* THIRD PLACE */}
+                    <div className="bg-amber-900/5 dark:bg-amber-900/10 border border-amber-800/20 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-48 shadow-xs">
+                      <div className="absolute -right-4 -bottom-4 text-amber-900/10 font-black text-8xl pointer-events-none select-none">3</div>
+                      
+                      <div>
+                        <span className="text-[10px] font-bold text-amber-900/85 dark:text-amber-400 uppercase tracking-wider block">🥉 Second Runner Up (Rank 3)</span>
+                        <h3 className="text-xl font-black text-on-surface mt-2">
+                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[2]?.name || 'Unassigned'}
+                        </h3>
+                        <p className="text-xs text-on-surface-variant font-medium truncate">
+                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[2]?.college || 'N/A'}
+                        </p>
+                      </div>
 
-                  <div className="text-xs font-bold mt-4">
-                    Score:{' '}
-                    <span className="text-lg font-black text-amber-800 dark:text-amber-300">
-                      {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[0]?.score || 0}
-                    </span>
-                  </div>
-                </div>
+                      <div className="text-xs font-bold mt-4">
+                        Score:{' '}
+                        <span className="text-lg font-black text-primary">
+                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[2]?.score || 0}
+                        </span>
+                      </div>
+                    </div>
 
-                {/* SECOND PLACE */}
-                <div className="bg-surface-container border-2 border-outline p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-48 shadow-xs">
-                  <div className="absolute -right-4 -bottom-4 text-on-surface-variant/10 font-black text-8xl pointer-events-none select-none">2</div>
-                  
-                  <div>
-                    <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">🥈 Runner Up (Rank 2)</span>
-                    <h3 className="text-xl font-black text-on-surface mt-2">
-                      {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[1]?.name || 'Unassigned'}
-                    </h3>
-                    <p className="text-xs text-on-surface-variant font-medium truncate">
-                      {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[1]?.college || 'N/A'}
-                    </p>
-                  </div>
-
-                  <div className="text-xs font-bold mt-4">
-                    Score:{' '}
-                    <span className="text-lg font-black text-primary">
-                      {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[1]?.score || 0}
-                    </span>
-                  </div>
-                </div>
-
-                {/* THIRD PLACE */}
-                <div className="bg-amber-900/5 dark:bg-amber-900/10 border border-amber-800/20 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-48 shadow-xs">
-                  <div className="absolute -right-4 -bottom-4 text-amber-900/10 font-black text-8xl pointer-events-none select-none">3</div>
-                  
-                  <div>
-                    <span className="text-[10px] font-bold text-amber-900/85 dark:text-amber-400 uppercase tracking-wider block">🥉 Second Runner Up (Rank 3)</span>
-                    <h3 className="text-xl font-black text-on-surface mt-2">
-                      {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[2]?.name || 'Unassigned'}
-                    </h3>
-                    <p className="text-xs text-on-surface-variant font-medium truncate">
-                      {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[2]?.college || 'N/A'}
-                    </p>
                   </div>
 
-                  <div className="text-xs font-bold mt-4">
-                    Score:{' '}
-                    <span className="text-lg font-black text-primary">
-                      {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[2]?.score || 0}
-                    </span>
-                  </div>
-                </div>
+                  {/* Comprehensive Leaderboard Score list */}
+                  <div className="bg-surface rounded-2xl border border-outline-variant p-5 shadow-xs space-y-4">
+                    <div className="border-b pb-2">
+                      <h3 className="font-extrabold text-xs text-primary uppercase tracking-wider">Comprehensive Score Registry</h3>
+                      <p className="text-[10px] text-on-surface-variant">Ranks ordered dynamically by total calculated assessor score metrics.</p>
+                    </div>
 
-              </div>
-
-              {/* Comprehensive Leaderboard Score list */}
-              <div className="bg-surface rounded-2xl border border-outline-variant p-5 shadow-xs space-y-4">
-                <div className="border-b pb-2">
-                  <h3 className="font-extrabold text-xs text-primary uppercase tracking-wider">Comprehensive Score Registry</h3>
-                  <p className="text-[10px] text-on-surface-variant">Ranks ordered dynamically by total calculated assessor score metrics.</p>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-surface-container border-b">
-                        <th className="p-3 font-bold text-on-surface uppercase">Rank</th>
-                        <th className="p-3 font-bold text-on-surface uppercase">ID</th>
-                        <th className="p-3 font-bold text-on-surface uppercase">Participant</th>
-                        <th className="p-3 font-bold text-on-surface uppercase">College</th>
-                        <th className="p-3 font-bold text-on-surface uppercase">Total Score</th>
-                        <th className="p-3 font-bold text-on-surface uppercase">Judge Remarks</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="p-6 text-center text-on-surface-variant italic">No evaluated presentees recorded yet.</td>
-                        </tr>
-                      ) : (
-                        myAttendees
-                          .filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed')
-                          .sort((a, b) => (b.score || 0) - (a.score || 0))
-                          .map((att, idx) => (
-                            <tr key={att.id} className="border-b border-outline-variant/30 hover:bg-surface-container-low transition-all">
-                              <td className="p-3 font-bold">
-                                {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
-                              </td>
-                              <td className="p-3 font-mono font-bold text-primary">{att.participantId || att.id}</td>
-                              <td className="p-3 font-extrabold text-on-surface text-sm">{att.name}</td>
-                              <td className="p-3 text-on-surface-variant font-medium">{att.college}</td>
-                              <td className="p-3 font-black text-primary text-sm">{att.score || 0}</td>
-                              <td className="p-3 text-on-surface-variant italic truncate max-w-xs">{att.remarks || 'No assessor feedback remarks recorded.'}</td>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-surface-container border-b">
+                            <th className="p-3 font-bold text-on-surface uppercase">Rank</th>
+                            <th className="p-3 font-bold text-on-surface uppercase">ID</th>
+                            <th className="p-3 font-bold text-on-surface uppercase">Participant</th>
+                            <th className="p-3 font-bold text-on-surface uppercase">College</th>
+                            <th className="p-3 font-bold text-on-surface uppercase">Total Score</th>
+                            <th className="p-3 font-bold text-on-surface uppercase">Judge Remarks</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="p-6 text-center text-on-surface-variant italic">No evaluated presentees recorded yet.</td>
                             </tr>
-                          ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-            </motion.div>
-          )}
+                          ) : (
+                            myAttendees
+                              .filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed')
+                              .sort((a, b) => (b.score || 0) - (a.score || 0))
+                              .map((att, idx) => (
+                                <tr key={att.id} className="border-b border-outline-variant/30 hover:bg-surface-container-low transition-all">
+                                  <td className="p-3 font-bold">
+                                    {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
+                                  </td>
+                                  <td className="p-3 font-mono font-bold text-primary">{att.participantId || att.id}</td>
+                                  <td className="p-3 font-extrabold text-on-surface text-sm">{att.name}</td>
+                                  <td className="p-3 text-on-surface-variant font-medium">{att.college}</td>
+                                  <td className="p-3 font-black text-primary text-sm">{att.score || 0}</td>
+                                  <td className="p-3 text-on-surface-variant italic truncate max-w-xs">{att.remarks || 'No assessor feedback remarks recorded.'}</td>
+                                </tr>
+                              ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
 
         </main>
       </div>

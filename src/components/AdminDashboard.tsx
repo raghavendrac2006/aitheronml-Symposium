@@ -37,7 +37,7 @@ export default function AdminDashboard({
 }: AdminDashboardProps) {
   
   const [activeTab, setActiveTab] = useState<'dashboard' | 'symposia' | 'attendees' | 'settings' | 'spot-registration' | 'new-registration'>(
-    user.role === 'registration' ? 'attendees' : 'dashboard'
+    'dashboard'
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [isResetting, setIsResetting] = useState(false);
@@ -207,11 +207,12 @@ export default function AdminDashboard({
   };
 
   // Quick statistics calculated dynamically
-  const activeHostsSet = new Set(events.map(e => e.hostEmail));
-  const dynamicTotalParticipants = attendees.length + 1200; // Offset for realistic high count
+  const activeHostsSet = new Set(events.map(e => e.hostEmail).filter(Boolean));
+  const dynamicTotalParticipants = attendees.length;
   const dynamicTotalEvents = events.length;
-  const dynamicActiveHosts = activeHostsSet.size + 28; // Dynamic sizing
-  const todaysRegistrations = attendees.filter(a => a.id.startsWith('at-')).length + 45; // Simulated fresh additions
+  const dynamicActiveHosts = activeHostsSet.size;
+  const todayPrefix = new Date().toISOString().split('T')[0];
+  const todaysRegistrations = attendees.filter(a => a.createdAt && a.createdAt.startsWith(todayPrefix)).length;
 
   // Filter lists based on search
   const filteredEvents = events.filter(e => 
@@ -300,6 +301,22 @@ export default function AdminDashboard({
                   onClick={() => {
                     setSelectedAttendeeForProfile(null);
                     setSpotAttendeeSuccess(null);
+                    setActiveTab('dashboard');
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all ${
+                    activeTab === 'dashboard' 
+                      ? 'bg-secondary-container text-on-secondary-container' 
+                      : 'text-on-surface-variant hover:bg-surface-container'
+                  }`}
+                >
+                  <LayoutDashboard className="w-4 h-4 shrink-0" />
+                  <span>Overview</span>
+                </button>
+
+                <button 
+                  onClick={() => {
+                    setSelectedAttendeeForProfile(null);
+                    setSpotAttendeeSuccess(null);
                     setActiveTab('new-registration');
                   }}
                   className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all ${
@@ -366,17 +383,7 @@ export default function AdminDashboard({
                   <span>Dashboard</span>
                 </button>
 
-                <button 
-                  onClick={() => setActiveTab('symposia')}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all ${
-                    activeTab === 'symposia' 
-                      ? 'bg-secondary-container text-on-secondary-container' 
-                      : 'text-on-surface-variant hover:bg-surface-container'
-                  }`}
-                >
-                  <Calendar className="w-4 h-4 shrink-0" />
-                  <span>Symposia</span>
-                </button>
+
 
                 <button 
                   onClick={() => {
@@ -473,7 +480,7 @@ export default function AdminDashboard({
                   </div>
                   <div className="mt-2 flex items-center gap-1 text-[11px] text-primary font-bold">
                     <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
-                    <span>+12% this week</span>
+                    <span>Real-time database sync</span>
                   </div>
                 </div>
 
@@ -505,7 +512,7 @@ export default function AdminDashboard({
                     {dynamicActiveHosts}
                   </div>
                   <div className="mt-2 text-[11px] text-on-surface-variant font-medium">
-                    All faculty assigned
+                    Assigned coordinator roles
                   </div>
                 </div>
 
@@ -521,8 +528,29 @@ export default function AdminDashboard({
                     {todaysRegistrations}
                   </div>
                   <div className="mt-2 flex items-center gap-1 text-[11px] text-primary font-bold">
-                    <span>Peak registrar hour</span>
+                    <span>Registered on {new Date().toLocaleDateString()}</span>
                   </div>
+                </div>
+              </div>
+
+              {/* Wall pasted Self-Registration QR Code Card */}
+              <div className="bg-surface rounded-2xl p-6 border border-surface-variant shadow-xs flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="space-y-2 text-center md:text-left">
+                  <h3 className="text-lg font-bold text-on-surface">Wall Self-Registration QR Code</h3>
+                  <p className="text-xs text-on-surface-variant max-w-lg leading-relaxed">
+                    Project or print this QR code. Participants can scan it with their mobile devices to open the self-registration form directly, bypassing the admin login screen.
+                  </p>
+                  <div className="pt-2 text-xs font-semibold text-primary">
+                    Registration Link: <a href={`${window.location.origin}/?mode=register&hideAdminSignIn=true`} target="_blank" rel="noopener noreferrer" className="underline hover:text-primary/80">{window.location.origin}/?mode=register&hideAdminSignIn=true</a>
+                  </div>
+                </div>
+                <div className="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-outline-variant shrink-0">
+                  <img 
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(window.location.origin + '/?mode=register&hideAdminSignIn=true')}`}
+                    alt="Registration QR Code" 
+                    className="w-36 h-36"
+                  />
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1.5">Scan to Register</span>
                 </div>
               </div>
 
@@ -532,25 +560,27 @@ export default function AdminDashboard({
                 {/* Header row with + New Event button */}
                 <div className="flex items-center justify-between mb-6 border-b border-outline-variant/30 pb-4">
                   <h2 className="text-xl font-bold text-on-surface">All Symposium Events</h2>
-                  <button 
-                    onClick={() => setIsNewEventOpen(true)}
-                    className="h-10 bg-primary text-on-primary font-semibold text-xs px-4 rounded-xl hover:bg-primary/95 shadow-xs transition-all flex items-center gap-2 cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    New Event
-                  </button>
+                  {user.role === 'superadmin' && (
+                    <button 
+                      onClick={() => setIsNewEventOpen(true)}
+                      className="h-10 bg-primary text-on-primary font-semibold text-xs px-4 rounded-xl hover:bg-primary/95 shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      New Event
+                    </button>
+                  )}
                 </div>
 
-                {/* Two main tracks layout grids */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Two main tracks layout grids stacked vertically */}
+                <div className="space-y-8">
                   
-                  {/* Left and center columns: Technical Track list */}
-                  <div className="lg:col-span-2 space-y-4">
+                  {/* Technical Track list */}
+                  <div className="space-y-4">
                     <h3 className="text-sm font-extrabold text-primary uppercase tracking-wider border-b border-primary/20 pb-1.5 mb-3">
                       Technical Track
                     </h3>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       {filteredEvents.filter(e => e.track === 'Technical').map(ev => (
                         <div 
                           key={ev.id}
@@ -596,7 +626,7 @@ export default function AdminDashboard({
                               onClick={() => setSelectedEventForManage(ev)}
                               className="w-full h-8 border border-primary text-primary hover:bg-primary hover:text-on-primary rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer"
                             >
-                              <Edit3 className="w-3 h-3" /> Manage Event
+                              <Edit3 className="w-3.5 h-3.5" /> Manage Event
                             </button>
                           </div>
                         </div>
@@ -604,13 +634,13 @@ export default function AdminDashboard({
                     </div>
                   </div>
 
-                  {/* Right column: Non-Technical Track list */}
+                  {/* Non-Technical Track list */}
                   <div className="space-y-4">
                     <h3 className="text-sm font-extrabold text-secondary uppercase tracking-wider border-b border-secondary/25 pb-1.5 mb-3">
                       Non-Technical Track
                     </h3>
 
-                    <div className="flex flex-col gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       {filteredEvents.filter(e => e.track === 'Non-Technical').map(ev => (
                         <div 
                           key={ev.id}
@@ -625,7 +655,7 @@ export default function AdminDashboard({
                               </div>
                               <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
                                 ev.status === 'Live' 
-                                  ? 'bg-error-container text-on-error-container' 
+                                  ? 'bg-error-container text-on-error-container animate-pulse' 
                                   : ev.status === 'Completed'
                                     ? 'bg-primary/10 text-primary'
                                     : 'bg-surface-variant text-on-surface-variant'
@@ -664,74 +694,7 @@ export default function AdminDashboard({
             </motion.div>
           )}
 
-          {/* Symposia Tab Workspace */}
-          {activeTab === 'symposia' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-              <div>
-                <h1 className="text-3xl font-bold text-on-surface tracking-tight">Symposia Settings</h1>
-                <p className="text-sm text-on-surface-variant mt-1">Configure academic symposium metadata and active tracks.</p>
-              </div>
 
-              <div className="bg-surface rounded-2xl border border-outline-variant/40 p-6 shadow-xs max-w-3xl">
-                <h3 className="text-lg font-bold text-primary mb-4 flex items-center gap-2">
-                  <Calendar className="w-5 h-5" /> Institutional Configuration
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <div>
-                    <label className="block text-xs font-semibold text-on-surface-variant uppercase mb-1">Host College / Institution</label>
-                    <input 
-                      type="text" 
-                      defaultValue="Kuppam Engineering College" 
-                      className="w-full h-10 px-3 bg-surface-container border border-outline rounded-lg text-sm text-on-surface"
-                      readOnly
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-on-surface-variant uppercase mb-1">Accreditation status</label>
-                    <input 
-                      type="text" 
-                      defaultValue="Autonomous Institution (NAAC A Grade)" 
-                      className="w-full h-10 px-3 bg-surface-container border border-outline rounded-lg text-sm text-on-surface"
-                      readOnly
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-on-surface-variant uppercase mb-1">Symposium Title Name</label>
-                    <input 
-                      type="text" 
-                      defaultValue="AItheronML 2026" 
-                      className="w-full h-10 px-3 bg-surface-container border border-outline rounded-lg text-sm text-on-surface font-semibold text-primary"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-on-surface-variant uppercase mb-1">Event Date</label>
-                    <input 
-                      type="date" 
-                      defaultValue="2026-07-08" 
-                      className="w-full h-10 px-3 bg-surface-container border border-outline rounded-lg text-sm text-on-surface"
-                    />
-                  </div>
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-xs font-semibold text-on-surface-variant uppercase mb-1">Symposium Description</label>
-                  <textarea 
-                    rows={3}
-                    defaultValue="National Level Technical Symposium organized by the Department of Computer Science & Engineering (Artificial Intelligence and Machine Learning) at Kuppam Engineering College."
-                    className="w-full p-3 bg-surface-container border border-outline rounded-lg text-sm text-on-surface"
-                  />
-                </div>
-
-                <button 
-                  onClick={() => alert('Symposium details successfully saved.')}
-                  className="bg-primary text-on-primary h-10 px-6 rounded-lg text-xs font-semibold hover:opacity-90 transition-opacity"
-                >
-                  Save Configuration
-                </button>
-              </div>
-            </motion.div>
-          )}
 
 
 
@@ -902,6 +865,7 @@ export default function AdminDashboard({
                             <th className="p-4 font-bold text-on-surface uppercase tracking-wider">Type</th>
                             <th className="p-4 font-bold text-on-surface uppercase tracking-wider">Payment</th>
                             <th className="p-4 font-bold text-on-surface uppercase tracking-wider">Status</th>
+                            <th className="p-4 font-bold text-on-surface uppercase tracking-wider text-center">Check-In</th>
                             <th className="p-4 font-bold text-on-surface uppercase tracking-wider text-right">Actions</th>
                           </tr>
                         </thead>
@@ -924,9 +888,19 @@ export default function AdminDashboard({
                               const matchesStatus = attendanceStatusFilter === 'all' || a.attendanceStatus === attendanceStatusFilter;
                               return matchesSearch && matchesEvent && matchesCollege && matchesRegType && matchesStatus;
                             })
-                            .map(att => (
-                              <tr key={att.id} className="border-b border-outline-variant/30 hover:bg-surface-container/30 transition-colors">
-                                <td className="p-4 font-semibold text-primary">{att.id}</td>
+                            .map(att => {
+                              const isNew = att.createdAt && (Date.now() - new Date(att.createdAt).getTime() < 180000);
+                              if (isNew) {
+                                console.log(`-----------------------------------
+[STEP 8]
+Participant Rendered
+Participant ID: ${att.participantId || att.id}
+Timestamp: ${new Date().toLocaleTimeString()} (ISO: ${new Date().toISOString()})
+-----------------------------------`);
+                              }
+                              return (
+                                <tr key={att.id} className="border-b border-outline-variant/30 hover:bg-surface-container/30 transition-colors">
+                                  <td className="p-4 font-semibold text-primary">{att.id}</td>
                                 <td className="p-4">
                                   <div className="font-semibold text-on-surface text-sm">{att.name}</div>
                                   {att.teamName && (
@@ -944,27 +918,85 @@ export default function AdminDashboard({
                                   </span>
                                 </td>
                                 <td className="p-4">
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                    att.paymentStatus === 'Paid' 
-                                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400' 
-                                      : att.paymentStatus === 'Waived'
-                                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-400'
-                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-400'
-                                  }`}>
-                                    {att.paymentStatus || 'Pending'}
-                                  </span>
-                                </td>
-                                <td className="p-4">
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                    att.attendanceStatus === 'Present' 
-                                      ? 'bg-primary/10 text-primary' 
-                                      : att.attendanceStatus === 'Absent' 
-                                        ? 'bg-error-container text-on-error-container' 
-                                        : 'bg-surface-variant text-on-surface-variant'
-                                  }`}>
-                                    {att.attendanceStatus}
-                                  </span>
-                                </td>
+                                   <button
+                                     onClick={() => {
+                                       const nextPaymentStatus = att.paymentStatus === 'Paid' ? 'Pending' : 'Paid';
+                                       const updated = attendees.map(a => {
+                                         if (a.id === att.id) {
+                                           return { ...a, paymentStatus: nextPaymentStatus } as Attendee;
+                                         }
+                                         return a;
+                                       });
+                                       onUpdateAttendees(updated);
+                                     }}
+                                     className={`h-7 px-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 border transition-all cursor-pointer ${
+                                       att.paymentStatus === 'Paid'
+                                         ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                                         : 'bg-transparent border-outline text-on-surface-variant hover:bg-surface-container'
+                                     }`}
+                                   >
+                                     {att.paymentStatus === 'Paid' ? (
+                                       <>
+                                         <Check className="w-3 h-3" /> Paid
+                                       </>
+                                     ) : (
+                                       'Not Paid'
+                                     )}
+                                   </button>
+                                 </td>
+                                 <td className="p-4">
+                                   <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                     att.attendanceStatus === 'Present' 
+                                       ? 'bg-primary/10 text-primary' 
+                                       : att.attendanceStatus === 'Absent' 
+                                         ? 'bg-error-container text-on-error-container' 
+                                         : 'bg-surface-variant text-on-surface-variant'
+                                   }`}>
+                                     {att.attendanceStatus}
+                                   </span>
+                                 </td>
+                                 <td className="p-4 text-center">
+                                   {att.attendanceStatus === 'Present' ? (
+                                     <button
+                                       onClick={() => {
+                                         const updated = attendees.map(a => {
+                                           if (a.id === att.id) {
+                                             return {
+                                               ...a,
+                                               attendanceStatus: 'Pending',
+                                               checkedInAt: undefined
+                                             } as Attendee;
+                                           }
+                                           return a;
+                                         });
+                                         onUpdateAttendees(updated);
+                                       }}
+                                       className="px-2.5 h-7 bg-emerald-600 border border-emerald-600 text-white hover:bg-emerald-700 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 mx-auto cursor-pointer shadow-xs"
+                                       title="Click to Undo Check-In"
+                                     >
+                                       <Check className="w-3 h-3" /> Checked In
+                                     </button>
+                                   ) : (
+                                     <button
+                                       onClick={() => {
+                                         const updated = attendees.map(a => {
+                                           if (a.id === att.id) {
+                                             return {
+                                               ...a,
+                                               attendanceStatus: 'Present',
+                                               checkedInAt: a.checkedInAt || new Date().toISOString()
+                                             } as Attendee;
+                                           }
+                                           return a;
+                                         });
+                                         onUpdateAttendees(updated);
+                                       }}
+                                       className="px-3 h-7 bg-transparent border border-outline text-on-surface-variant hover:bg-surface-container rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center justify-center mx-auto cursor-pointer shadow-xs"
+                                     >
+                                       Check In
+                                     </button>
+                                   )}
+                                 </td>
                                 <td className="p-4 text-right">
                                   <div className="flex justify-end gap-1.5">
                                     <button 
@@ -1003,7 +1035,8 @@ export default function AdminDashboard({
                                   </div>
                                 </td>
                               </tr>
-                            ))}
+                            );
+                            })}
                         </tbody>
                       </table>
                     </div>

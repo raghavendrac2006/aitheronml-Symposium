@@ -412,9 +412,7 @@ export default function ParticipantProfile({
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
                 attendee.paymentStatus === 'Paid' 
                   ? 'bg-emerald-100 text-emerald-800' 
-                  : attendee.paymentStatus === 'Waived'
-                    ? 'bg-blue-100 text-blue-800'
-                    : 'bg-amber-100 text-amber-800'
+                  : 'bg-amber-100 text-amber-800'
               }`}>
                 {attendee.paymentStatus || 'Pending'}
               </span>
@@ -423,7 +421,7 @@ export default function ParticipantProfile({
             {(user?.role === 'superadmin' || user?.role === 'registration') ? (
               <div className="space-y-2 mt-2">
                 <p className="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">Update Payment Status</p>
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-2 gap-1.5">
                   <button 
                     onClick={() => {
                       onUpdateAttendee({ ...attendee, paymentStatus: 'Paid' });
@@ -436,19 +434,6 @@ export default function ParticipantProfile({
                     }`}
                   >
                     Paid
-                  </button>
-                  <button 
-                    onClick={() => {
-                      onUpdateAttendee({ ...attendee, paymentStatus: 'Waived' });
-                      alert('Payment marked as Waived successfully.');
-                    }}
-                    className={`h-8 font-bold rounded-lg text-xs transition-all cursor-pointer ${
-                      attendee.paymentStatus === 'Waived'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-surface border border-outline text-on-surface hover:bg-surface-container'
-                    }`}
-                  >
-                    Waived
                   </button>
                   <button 
                     onClick={() => {

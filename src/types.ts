@@ -75,6 +75,7 @@ export interface Attendee {
   batchId?: string;
   batchName?: string;
   paymentStatus?: 'Pending' | 'Paid' | 'Waived';
+  checkedInAt?: string;
   teamMembers?: Array<{
     name: string;
     phone: string;

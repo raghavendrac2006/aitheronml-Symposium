@@ -9,6 +9,7 @@ interface PublicRegistrationProps {
   onRegistrationSuccess: (newAttendee: Attendee, extraMembers?: Attendee[]) => void;
   onBackToLogin: () => void;
   isSpotRegistration?: boolean; // if true, bypasses landing decoration, simplifies header for admin portal
+  hideAdminSignIn?: boolean;
 }
 
 export default function PublicRegistration({ 
@@ -16,7 +17,8 @@ export default function PublicRegistration({
   attendees = [],
   onRegistrationSuccess, 
   onBackToLogin,
-  isSpotRegistration = false
+  isSpotRegistration = false,
+  hideAdminSignIn = false
 }: PublicRegistrationProps) {
   // Form state
   const [fullName, setFullName] = useState('');
@@ -60,6 +62,12 @@ export default function PublicRegistration({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log(`-----------------------------------
+[STEP 1]
+Submit Button Clicked
+Timestamp: ${new Date().toLocaleTimeString()}
+ISO Timestamp: ${new Date().toISOString()}
+-----------------------------------`);
     setError(null);
     setLoading(true);
 
@@ -108,7 +116,8 @@ export default function PublicRegistration({
       if (allAtts.length > 0) {
         const symIds = allAtts
           .map(a => {
-            const m = a.participantId?.match(/^SYM-(\d+)$/);
+            const cleanId = (a.participantId || a.id || '').replace('-SPOT', '');
+            const m = cleanId.match(/^SYM-(\d+)$/);
             return m ? parseInt(m[1], 10) : 0;
           });
         const maxId = Math.max(...symIds, 0);
@@ -118,6 +127,7 @@ export default function PublicRegistration({
       }
 
       const leaderParticipantId = `SYM-${String(nextNum).padStart(6, '0')}`;
+      const finalLeaderId = isSpotRegistration ? `${leaderParticipantId}-SPOT` : leaderParticipantId;
       const sharedTeamId = regType === 'team' ? `TEAM-${leaderParticipantId}` : '';
 
       const membersToSave: Attendee[] = [];
@@ -127,10 +137,11 @@ export default function PublicRegistration({
         teamMembersInput.forEach((m, index) => {
           const mIdNum = nextNum + 1 + index;
           const mParticipantId = `SYM-${String(mIdNum).padStart(6, '0')}`;
+          const finalMemberId = isSpotRegistration ? `${mParticipantId}-SPOT` : mParticipantId;
           
           const memberAttendee: Attendee = {
-            id: mParticipantId,
-            participantId: mParticipantId,
+            id: finalMemberId,
+            participantId: finalMemberId,
             name: m.name.trim(),
             college: collegeName.trim(),
             branch: branch.trim(),
@@ -143,8 +154,9 @@ export default function PublicRegistration({
             teamId: sharedTeamId,
             registrationType: 'team',
             regType: 'team',
-            attendanceStatus: 'Pending',
-            paymentStatus: 'Pending',
+            attendanceStatus: isSpotRegistration ? 'Present' : 'Pending',
+            paymentStatus: isSpotRegistration ? 'Paid' : 'Pending',
+            checkedInAt: isSpotRegistration ? new Date().toISOString() : undefined,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             teamName: teamName.trim(),
@@ -158,15 +170,15 @@ export default function PublicRegistration({
             name: m.name.trim(),
             phone: m.phone.trim(),
             email: m.email.trim().toLowerCase(),
-            participantId: mParticipantId
+            participantId: finalMemberId
           });
         });
       }
 
       // Create attendee object matching Section 11 schema perfectly
       const leaderAttendee: Attendee = {
-        id: leaderParticipantId,
-        participantId: leaderParticipantId,
+        id: finalLeaderId,
+        participantId: finalLeaderId,
         name: fullName.trim(),
         college: collegeName.trim(),
         branch: branch.trim(),
@@ -179,8 +191,9 @@ export default function PublicRegistration({
         teamId: sharedTeamId,
         registrationType: regType,
         regType: regType,
-        attendanceStatus: 'Pending',
-        paymentStatus: 'Pending',
+        attendanceStatus: isSpotRegistration ? 'Present' : 'Pending',
+        paymentStatus: isSpotRegistration ? 'Paid' : 'Pending',
+        checkedInAt: isSpotRegistration ? new Date().toISOString() : undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         teamName: regType === 'team' ? teamName.trim() : undefined,
@@ -204,16 +217,16 @@ export default function PublicRegistration({
 
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || 'Failed to complete registration. Please try again.');
+      setError('Registration failed. Firestore write unsuccessful.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className={`w-full min-h-screen bg-background text-on-background flex flex-col items-center ${isSpotRegistration ? 'p-0' : 'py-8'}`}>
+    <div className={`w-full min-h-screen bg-background text-on-background flex flex-col items-center ${isSpotRegistration ? 'p-0' : 'py-4 md:py-8'}`}>
       {!isSpotRegistration && (
-        <header className="w-full max-w-2xl px-6 py-4 flex items-center justify-between mb-4">
+        <header className="w-full max-w-2xl px-4 md:px-6 py-3 md:py-4 flex items-center justify-between mb-2 md:mb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center shadow-md overflow-hidden text-white font-bold text-lg">
               AI
@@ -223,21 +236,23 @@ export default function PublicRegistration({
               <p className="text-[10px] text-on-surface-variant uppercase tracking-wider font-semibold">Symposium OS</p>
             </div>
           </div>
-          <button 
-            onClick={onBackToLogin}
-            className="text-primary hover:bg-secondary-container px-4 py-2 rounded-full font-semibold text-xs transition-all"
-          >
-            Sign In as Admin
-          </button>
+          {!hideAdminSignIn && (
+            <button 
+              onClick={onBackToLogin}
+              className="text-primary hover:bg-secondary-container px-4 py-2 rounded-full font-semibold text-xs transition-all"
+            >
+              Sign In as Admin
+            </button>
+          )}
         </header>
       )}
 
-      <main className="w-full max-w-2xl px-4 flex-grow flex flex-col justify-center">
+      <main className="w-full max-w-2xl px-2 md:px-4 flex-grow flex flex-col justify-center">
         <motion.div 
           initial={{ opacity: 0, y: 15 }} 
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="bg-surface-container-lowest rounded-2xl shadow-lg border border-outline-variant p-6 md:p-8"
+          className="bg-surface-container-lowest rounded-2xl shadow-lg border border-outline-variant p-4 md:p-8"
         >
           {/* Header */}
           <div className="text-center mb-8">
