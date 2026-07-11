@@ -276,15 +276,15 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         <div className="flex items-center gap-4">
           <div className="flex gap-2">
             <img 
-              alt="CSE AI&amp;ML Logo" 
+              alt="AItheronML Logo" 
               className="w-12 h-12 md:w-16 md:h-16 object-contain" 
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuBfVNxhI4hlz74i8jpOEScujvU8Yj9wJ6mUXpB8uAeHUOzaxYxSbq7MC6tyY_zKaIOndyYVHspX5gnWTlROzl3rm0dqo-rRD9GAfaY6UHQBwwjEwlPeIYdb6Agc9N23gluV80xX7L2ZKdtg6hAEQOdg69tuuM4uV9pssYenJgWtvUN5XmIWQJBnp8TfG_WssjluhF85hTqzBvluE5uIXRz_J4FgQnseW7Q84a-F4_Fu5UoWnkPmDWDorBVfLb7hcwDvdB6vPUTkTi-f"
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuCNp7wPZZt0kyC0HnoRobbyP7YNijLj2AgCWj2CIBtUiyM2wZtHai4BCSoy5EPpKIjpXJVLoVJYbyvN-X1eXJm2Jm41oYFQl2a7F9ucujLCb70JSfK6htpklUrKbWQLfa19D5mAcdVjGm0h0b1iCpzn2MosuBRyAqhBBJGdgz0pd8gMrz_1PwhJ2UyXWukg6PeRcw6QUNXOXrOe0OTr7IIzuThhZ53zow2Ytv0QQWHNJEzHQMRB7_GNYZJbEN4h4zc65YDlZq6UGKsG"
               referrerPolicy="no-referrer"
             />
             <img 
-              alt="AItheronML Logo" 
+              alt="CSE AI&amp;ML Logo" 
               className="w-12 h-12 md:w-16 md:h-16 object-contain" 
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuDNjUSMqxvbevuodKNEqJikkk1HG5iAnbV5M_ZK1ye5LuKVBMFEQAe48GUcLuhmjVS9PokHQ8o42Ho6Z0PDbgBWKZQyyYUNS4HooEvT9BTI52ltQERzPx--1PfNdDhbBZpjM9xjFXS7ThLlbr7STe8LqkYZtzdxNbZPLBZeIbJnGZVMTLggA-pOmTjFqMiK_Jx7ZrPX1muEmyTKquhXWKolRCZRwqcIqeTfAaj2nm2qQ1Z1WYitbvwj9NUADU4XS-GVkTc9AKdd9Xs"
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuBt28uq_wm7gJZMv8HipcL93mqUC84oZw6TudoX5AwnON6PlaApJaLQ9O6idymZom791HTPJvDkv23WFptz-CLeMAqVl77oKXaxM0YxrjK8CFKILiXfDvhJw8aBkuCqeOwLIm4rw4XglcnJebMDPWPnWa1WwFqNOS8X7_lnHfGrP9gWL2DGscxbZnbEegTgkwxvDE_HWHcdgToc-ikUxWMQt1NRSo3GpBWjXboWfrOnECQnwMXYzIdCb87KvGXwcC6xMbWbEL9gH_IS"
               referrerPolicy="no-referrer"
             />
           </div>
@@ -292,7 +292,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
       </header>
 
       {/* Main Hero Content */}
-      <main className="relative z-20 flex flex-col items-center justify-center flex-grow text-center px-4 -mt-12 w-full">
+      <main className="relative z-20 flex flex-col items-center justify-center flex-grow text-center px-4 mt-8 w-full">
         <div className="max-w-4xl space-y-4">
           <div className="mb-6 space-y-2">
             <p className="text-white font-bold uppercase tracking-widest text-lg opacity-100">Department of Computer Science and Engineering</p>
