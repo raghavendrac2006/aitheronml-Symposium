@@ -245,17 +245,17 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
   return (
     <div 
       id="login-container" 
-      className="min-h-screen text-white flex flex-col justify-between items-center relative font-sans px-4 py-6 md:px-8"
+      className="min-h-screen text-white flex flex-col justify-between items-center relative font-sans px-4 py-4 md:px-8 overflow-y-auto"
       style={{ background: 'radial-gradient(circle, #5b589c 0%, #2f2b60 100%)' }}
     >
       {/* Top Header */}
-      <header className="w-full flex justify-between items-center z-10 py-2">
+      <header className="w-full flex justify-between items-center z-10 py-1">
         {/* Left Side: Logo and College Name */}
         <div className="flex items-center gap-3">
           <img 
             alt="Kuppam Engineering College Logo" 
-            className="w-10 h-10 md:w-14 md:h-14 object-contain" 
-            src="https://lh3.googleusercontent.com/aida/AP1WRLtgnUPvtqegkk_J3i7PChobpIKH9MRx0UKcGNvB8DzjiCTygldxeqENFAPbA96vDMK7WPjj2JVby1YtdG5Y30h3QMHtUqh1_LklimkPlmOmo0Sr54ItyiU1nXbcWzQJGsb5YIYgAPd014zTnW-uxE5bnwOMfqsIq-mOZkGmKEpkKbukQNtFIAcO8fj57fzbwHwd4aXlXPqMysCPqDBUzQYM_bw_6KBmsXWB2KxH2kn7t0O0DLhV_n6K59xt"
+            className="w-10 h-10 md:w-12 md:h-12 object-contain" 
+            src="https://upload.wikimedia.org/wikipedia/commons/4/4e/Kuppam_Engineering_College%2C_Kuppam.png"
             referrerPolicy="no-referrer"
           />
           <div className="flex flex-col">
@@ -272,13 +272,13 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         <div className="flex items-center gap-2">
           <img 
             alt="Symposium Logo" 
-            className="w-10 h-10 md:w-12 md:h-12 object-contain" 
+            className="w-10 h-10 md:w-11 md:h-11 object-contain" 
             src="https://lh3.googleusercontent.com/aida-public/AB6AXuCNp7wPZZt0kyC0HnoRobbyP7YNijLj2AgCWj2CIBtUiyM2wZtHai4BCSoy5EPpKIjpXJVLoVJYbyvN-X1eXJm2Jm41oYFQl2a7F9ucujLCb70JSfK6htpklUrKbWQLfa19D5mAcdVjGm0h0b1iCpzn2MosuBRyAqhBBJGdgz0pd8gMrz_1PwhJ2UyXWukg6PeRcw6QUNXOXrOe0OTr7IIzuThhZ53zow2Ytv0QQWHNJEzHQMRB7_GNYZJbEN4h4zc65YDlZq6UGKsG"
             referrerPolicy="no-referrer"
           />
           <img 
             alt="Department Logo" 
-            className="w-10 h-10 md:w-12 md:h-12 object-contain rounded" 
+            className="w-10 h-10 md:w-11 md:h-11 object-contain rounded" 
             src="https://lh3.googleusercontent.com/aida-public/AB6AXuBt28uq_wm7gJZMv8HipcL93mqUC84oZw6TudoX5AwnON6PlaApJaLQ9O6idymZom791HTPJvDkv23WFptz-CLeMAqVl77oKXaxM0YxrjK8CFKILiXfDvhJw8aBkuCqeOwLIm4rw4XglcnJebMDPWPnWa1WwFqNOS8X7_lnHfGrP9gWL2DGscxbZnbEegTgkwxvDE_HWHcdgToc-ikUxWMQt1NRSo3GpBWjXboWfrOnECQnwMXYzIdCb87KvGXwcC6xMbWbEL9gH_IS"
             referrerPolicy="no-referrer"
           />
@@ -286,15 +286,15 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
       </header>
 
       {/* Main Centered Section */}
-      <main className="w-full flex-grow flex flex-col justify-center items-center z-10 py-6">
-        <div className="w-full max-w-xl flex flex-col items-center gap-6">
+      <main className="w-full flex-grow flex flex-col justify-center items-center z-10 py-2">
+        <div className="w-full max-w-xl flex flex-col items-center gap-4">
           
           {/* Centered branding with increased department font sizes */}
           <div className="text-center px-4 flex flex-col items-center">
-            <h3 className="font-extrabold text-sm md:text-lg tracking-widest text-white/95 uppercase mb-1 drop-shadow-sm">
+            <h3 className="font-extrabold text-sm md:text-lg tracking-widest text-white/95 uppercase mb-0.5 drop-shadow-sm">
               Department of Computer Science and Engineering
             </h3>
-            <h4 className="font-bold text-xs md:text-sm tracking-wider text-white/80 uppercase mb-4 drop-shadow-sm">
+            <h4 className="font-bold text-xs md:text-sm tracking-wider text-white/80 uppercase mb-2 drop-shadow-sm">
               (Artificial Intelligence &amp; Machine Learning)
             </h4>
             
@@ -302,16 +302,16 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5 }}
-              className="font-bold tracking-tight text-white mt-1 leading-none drop-shadow"
-              style={{ fontSize: 'clamp(2.5rem, 6.5vw, 4.5rem)' }}
+              className="font-bold tracking-tight text-white mt-0.5 leading-none drop-shadow"
+              style={{ fontSize: 'clamp(2.25rem, 6vw, 4.25rem)' }}
             >
               AitheronML 2K25
             </motion.h1>
             
-            <p className="text-white/90 font-medium text-xs md:text-sm tracking-wide mt-4">
+            <p className="text-white/90 font-medium text-xs md:text-sm tracking-wide mt-2">
               National Level Technical Symposium
             </p>
-            <p className="text-white/70 text-[10px] md:text-xs italic tracking-wider mt-1">
+            <p className="text-white/70 text-[10px] md:text-xs italic tracking-wider mt-0.5">
               Unleashing the Future of Intelligence
             </p>
           </div>
@@ -321,22 +321,22 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.5 }}
-            className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 md:p-8 relative text-gray-800 text-left"
+            className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-5 md:p-6 relative text-gray-800 text-left"
           >
-            <h2 className="text-lg font-bold text-gray-900 tracking-tight mb-4">Login</h2>
+            <h2 className="text-lg font-bold text-gray-900 tracking-tight mb-3">Login</h2>
 
             {error && (
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-xs flex items-start gap-2 border border-red-100"
+                className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-xs flex items-start gap-2 border border-red-100"
               >
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{error}</span>
               </motion.div>
             )}
 
-            <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+            <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
               
               {/* Email Address */}
               <div className="flex flex-col">
@@ -349,7 +349,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
                 <input
                   id="login-email"
                   type="email"
-                  className="w-full h-11 px-3 mt-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none transition-all"
+                  className="w-full h-10 px-3 mt-1 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none transition-all"
                   placeholder="name@example.com"
                   required
                   value={email}
@@ -379,7 +379,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
                 <input
                   id="login-password"
                   type="password"
-                  className="w-full h-11 px-3 mt-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none transition-all"
+                  className="w-full h-10 px-3 mt-1 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none transition-all"
                   placeholder="••••••••"
                   required
                   value={password}
@@ -391,7 +391,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
               <button 
                 id="sign-in-btn"
                 disabled={isSubmitting}
-                className="w-full h-11 mt-2 bg-[#030852] hover:bg-[#020536] text-white rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full h-10 mt-1 bg-[#030852] hover:bg-[#020536] text-white rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
                 type="submit"
               >
                 {isSubmitting ? (
