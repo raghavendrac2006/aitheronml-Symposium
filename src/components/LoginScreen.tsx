@@ -243,111 +243,98 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
   };
 
   return (
-    <div id="login-container" className="min-h-screen bg-background text-on-surface flex flex-col relative font-sans">
+    <div id="login-container" className="min-h-screen bg-black text-on-surface flex flex-col items-center justify-center relative font-sans overflow-y-auto px-4 py-12">
       
-      {/* Background Section with Kuppam College Main Building Hero */}
-      <section className="relative w-full h-[512px] md:h-[614px] flex flex-col justify-center items-center overflow-hidden">
-        {/* Background Image Wrapper */}
-        <div className="absolute inset-0 z-0">
-          <div 
-            className="w-full h-full bg-cover bg-center transition-all duration-700" 
-            style={{ 
-              backgroundImage: 'url("https://lh3.googleusercontent.com/aida/AP1WRLtYMsBrLjnHA4PXsD56kBusXwugqcAYGO5DRkkSh0sO16WbB_72wtbIlxOWdtt2GxoJ0zgXr-7iXw09u3DknMAFLtIm66lFxxeZR4X6grYrR7t3DQEnF6DaF_JXwBCuiWygIk2XGX5iiFbk3ihn1egOyFYfh4htaPr3K39kt6MJMiMeEwnZj0-CtJ2MrN3Vcade0nOy81NUUMT4cRc2juiCzjVJ41Qx8egVmtNPaVtUjtXHkqW4Z1iaw8_3")' 
-            }}
-          />
-          <div className="absolute inset-0 bg-black/60" />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/40 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
+      {/* Background Section with Kuppam College Main Building Hero spanning the entire viewport */}
+      <div className="absolute inset-0 z-0">
+        <div 
+          className="w-full h-full bg-cover bg-center transition-all duration-700" 
+          style={{ 
+            backgroundImage: 'url("https://lh3.googleusercontent.com/aida/AP1WRLtYMsBrLjnHA4PXsD56kBusXwugqcAYGO5DRkkSh0sO16WbB_72wtbIlxOWdtt2GxoJ0zgXr-7iXw09u3DknMAFLtIm66lFxxeZR4X6grYrR7t3DQEnF6DaF_JXwBCuiWygIk2XGX5iiFbk3ihn1egOyFYfh4htaPr3K39kt6MJMiMeEwnZj0-CtJ2MrN3Vcade0nOy81NUUMT4cRc2juiCzjVJ41Qx8egVmtNPaVtUjtXHkqW4Z1iaw8_3")' 
+          }}
+        />
+        {/* Subtle dark overlay so the login form remains readable */}
+        <div className="absolute inset-0 bg-black/75" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/70" />
+      </div>
+
+      {/* Header with Kuppam Engineering College Logo at top-left corner */}
+      <header className="absolute top-0 left-0 w-full z-20 flex px-6 md:px-8 py-6 justify-between items-center">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 md:w-14 md:h-14 rounded bg-white shadow-md flex items-center justify-center p-1 overflow-hidden border-2 border-white">
+            <img 
+              alt="Kuppam Engineering College Logo" 
+              className="w-full h-full object-contain" 
+              src="https://lh3.googleusercontent.com/aida/AP1WRLtgnUPvtqegkk_J3i7PChobpIKH9MRx0UKcGNvB8DzjiCTygldxeqENFAPbA96vDMK7WPjj2JVby1YtdG5Y30h3QMHtUqh1_LklimkPlmOmo0Sr54ItyiU1nXbcWzQJGsb5YIYgAPd014zTnW-uxE5bnwOMfqsIq-mOZkGmKEpkKbukQNtFIAcO8fj57fzbwHwd4aXlXPqMysCPqDBUzQYM_bw_6KBmsXWB2KxH2kn7t0O0DLhV_n6K59xt"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+          <div className="flex flex-col">
+            <span className="font-extrabold text-white text-base md:text-lg tracking-tight drop-shadow-md leading-none mb-0.5">
+              Kuppam Engineering College
+            </span>
+            <span className="text-[9px] md:text-xs font-semibold text-gray-300 uppercase tracking-widest opacity-90 leading-none">
+              Autonomous
+            </span>
+          </div>
         </div>
-
-        {/* Header content matching Screen 1 */}
-        <header className="absolute top-0 w-full z-20 flex px-4 md:px-8 py-6 justify-between items-center pt-8">
-          {/* Left Side: Logo and College Name */}
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 md:w-16 md:h-16 rounded bg-white shadow-md flex items-center justify-center p-1 overflow-hidden border-2 border-white">
-              <img 
-                alt="Kuppam Engineering College Logo" 
-                className="w-full h-full object-contain" 
-                src="https://lh3.googleusercontent.com/aida/AP1WRLtgnUPvtqegkk_J3i7PChobpIKH9MRx0UKcGNvB8DzjiCTygldxeqENFAPbA96vDMK7WPjj2JVby1YtdG5Y30h3QMHtUqh1_LklimkPlmOmo0Sr54ItyiU1nXbcWzQJGsb5YIYgAPd014zTnW-uxE5bnwOMfqsIq-mOZkGmKEpkKbukQNtFIAcO8fj57fzbwHwd4aXlXPqMysCPqDBUzQYM_bw_6KBmsXWB2KxH2kn7t0O0DLhV_n6K59xt"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-bold text-white text-lg md:text-2xl tracking-tight drop-shadow-md">
-                Kuppam Engineering College
-              </span>
-              <span className="text-xs md:text-sm font-semibold text-gray-200 uppercase tracking-widest opacity-90">
-                Autonomous
-              </span>
-            </div>
+        
+        {/* Right Side: Department and Symposium logos (hidden on mobile to prevent clutter) */}
+        <div className="hidden sm:flex items-center gap-2">
+          <div className="w-10 h-10 rounded bg-black/40 backdrop-blur shadow-md flex items-center justify-center p-1 overflow-hidden border border-white/20">
+            <img 
+              alt="Department Logo" 
+              className="w-full h-full object-contain" 
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuBt28uq_wm7gJZMv8HipcL93mqUC84oZw6TudoX5AwnON6PlaApJaLQ9O6idymZom791HTPJvDkv23WFptz-CLeMAqVl77oKXaxM0YxrjK8CFKILiXfDvhJw8aBkuCqeOwLIm4rw4XglcnJebMDPWPnWa1WwFqNOS8X7_lnHfGrP9gWL2DGscxbZnbEegTgkwxvDE_HWHcdgToc-ikUxWMQt1NRSo3GpBWjXboWfrOnECQnwMXYzIdCb87KvGXwcC6xMbWbEL9gH_IS"
+              referrerPolicy="no-referrer"
+            />
           </div>
-
-          {/* Right Side: Symposium and Department Logos */}
-          <div className="flex items-center gap-2 md:gap-4">
-            <div className="w-12 h-12 md:w-16 md:h-16 rounded bg-black/40 backdrop-blur shadow-md flex items-center justify-center p-1 overflow-hidden border-2 border-white">
-              <img 
-                alt="Department Logo" 
-                className="w-full h-full object-contain" 
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBt28uq_wm7gJZMv8HipcL93mqUC84oZw6TudoX5AwnON6PlaApJaLQ9O6idymZom791HTPJvDkv23WFptz-CLeMAqVl77oKXaxM0YxrjK8CFKILiXfDvhJw8aBkuCqeOwLIm4rw4XglcnJebMDPWPnWa1WwFqNOS8X7_lnHfGrP9gWL2DGscxbZnbEegTgkwxvDE_HWHcdgToc-ikUxWMQt1NRSo3GpBWjXboWfrOnECQnwMXYzIdCb87KvGXwcC6xMbWbEL9gH_IS"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-            <div className="w-12 h-12 md:w-16 md:h-16 rounded bg-black/40 backdrop-blur shadow-md flex items-center justify-center p-1 overflow-hidden border-2 border-white">
-              <img 
-                alt="Symposium Logo" 
-                className="w-full h-full object-contain" 
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuCNp7wPZZt0kyC0HnoRobbyP7YNijLj2AgCWj2CIBtUiyM2wZtHai4BCSoy5EPpKIjpXJVLoVJYbyvN-X1eXJm2Jm41oYFQl2a7F9ucujLCb70JSfK6htpklUrKbWQLfa19D5mAcdVjGm0h0b1iCpzn2MosuBRyAqhBBJGdgz0pd8gMrz_1PwhJ2UyXWukg6PeRcw6QUNXOXrOe0OTr7IIzuThhZ53zow2Ytv0QQWHNJEzHQMRB7_GNYZJbEN4h4zc65YDlZq6UGKsG"
-                referrerPolicy="no-referrer"
-              />
-            </div>
+          <div className="w-10 h-10 rounded bg-black/40 backdrop-blur shadow-md flex items-center justify-center p-1 overflow-hidden border border-white/20">
+            <img 
+              alt="Symposium Logo" 
+              className="w-full h-full object-contain" 
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuCNp7wPZZt0kyC0HnoRobbyP7YNijLj2AgCWj2CIBtUiyM2wZtHai4BCSoy5EPpKIjpXJVLoVJYbyvN-X1eXJm2Jm41oYFQl2a7F9ucujLCb70JSfK6htpklUrKbWQLfa19D5mAcdVjGm0h0b1iCpzn2MosuBRyAqhBBJGdgz0pd8gMrz_1PwhJ2UyXWukg6PeRcw6QUNXOXrOe0OTr7IIzuThhZ53zow2Ytv0QQWHNJEzHQMRB7_GNYZJbEN4h4zc65YDlZq6UGKsG"
+              referrerPolicy="no-referrer"
+            />
           </div>
-        </header>
+        </div>
+      </header>
 
-        {/* Central Brand Slogans */}
-        <div className="relative z-10 text-center px-4 flex flex-col items-center max-w-4xl mx-auto mt-24">
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="flex flex-col gap-1 mb-2 text-white text-center"
-          >
-            <span className="font-bold text-lg md:text-2xl uppercase tracking-wider drop-shadow-lg text-white">
-              Computer Science and Engineering
-            </span>
-            <span className="font-bold text-base md:text-xl uppercase tracking-wide drop-shadow-md text-gray-200">
-              (Artificial Intelligence &amp; Machine Learning)
-            </span>
-          </motion.div>
-
+      {/* Main Content Column with Centered Branding and Login Card */}
+      <div className="relative z-10 w-full max-w-md flex flex-col items-center gap-6 mt-20">
+        
+        {/* Centered AItheronML branding */}
+        <div className="text-center text-white px-2">
+          <span className="block font-bold text-[10px] md:text-xs uppercase tracking-widest text-gray-300 drop-shadow-sm leading-relaxed">
+            Computer Science and Engineering (AI &amp; ML)
+          </span>
           <motion.h1 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2, duration: 0.6 }}
-            className="font-sans text-5xl md:text-7xl font-extrabold tracking-tight drop-shadow-2xl text-white mt-4"
+            transition={{ duration: 0.5 }}
+            className="text-4xl md:text-5xl font-black tracking-tight drop-shadow-lg text-white mt-1 leading-tight"
           >
             AItheronML
           </motion.h1>
-          <p className="text-gray-300 max-w-md mx-auto text-sm md:text-base mt-2 drop-shadow">
-            State-of-the-Art Symposium OS for Institutional Research & Event Integration.
+          <p className="text-gray-400 text-xs mt-1 max-w-xs mx-auto drop-shadow leading-relaxed">
+            State-of-the-Art Symposium OS
           </p>
         </div>
-      </section>
 
-      {/* Login Portal Card Section */}
-      <section className="relative z-20 flex-grow flex items-start justify-center px-4 -mt-20 md:-mt-32 pb-16">
+        {/* Login Portal Card */}
         <motion.div 
-          initial={{ opacity: 0, y: 40 }}
+          initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.5 }}
-          className="w-full max-w-md bg-surface-container-lowest rounded-2xl shadow-xl border border-outline-variant/40 p-6 md:p-8 backdrop-blur-sm relative"
+          transition={{ delay: 0.2, duration: 0.5 }}
+          className="w-full bg-surface-container-lowest/90 backdrop-blur-md rounded-2xl shadow-2xl border border-outline-variant/30 p-6 md:p-8 relative"
         >
           {/* Lock Icon and welcome label */}
           <div className="text-center mb-6">
             <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3 shadow-inner">
               <Lock className="w-6 h-6" />
             </div>
-            <h2 className="text-2xl font-bold text-on-surface tracking-tight">Welcome</h2>
-            <p className="text-sm text-on-surface-variant mt-1">
+            <h2 className="text-xl font-extrabold text-on-surface tracking-tight">Sign In</h2>
+            <p className="text-xs text-on-surface-variant mt-1">
               Enter your credentials to access the symposium dashboard.
             </p>
           </div>
@@ -475,7 +462,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
             </p>
           </div>
         </motion.div>
-      </section>
+      </div>
 
       {/* Account Pre-fill floating bubble helper */}
       <div className="fixed bottom-4 right-4 z-40 bg-surface border border-outline-variant p-3 rounded-xl shadow-lg max-w-xs transition-all hover:scale-105">

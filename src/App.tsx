@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import HostDashboard from './components/HostDashboard';
@@ -44,11 +45,34 @@ function migrateAttendee(a: Attendee): Attendee {
   return a;
 }
 
+export const ROUTE_TO_EVENT_ID: Record<string, string> = {
+  '/paperpresentation': 'paper_presentation',
+  '/posterpresentation': 'poster_presentation',
+  '/vibecoding': 'vibe_coding',
+  '/projectexpo': 'project_expo',
+  '/photography': 'photography',
+  '/treasurehunt': 'treasure_hunt',
+  '/freefire': 'free_fire',
+  '/dumbcharades': 'dumb_charades',
+};
+
 export default function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
+  );
+}
+
+function AppContent() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const isPublicReg = searchParams.get('mode') === 'register' || searchParams.get('register') === 'true';
+
   // Session State
   const [session, setSession] = useState<UserSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isPublicRegistrationMode, setIsPublicRegistrationMode] = useState(false);
   const [publicRegSuccessAttendee, setPublicRegSuccessAttendee] = useState<Attendee | null>(null);
 
   // Core Data States
@@ -60,11 +84,6 @@ export default function App() {
 
   // Initialize and load persistent state from Firestore & Auth
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('mode') === 'register' || params.get('register') === 'true') {
-      setIsPublicRegistrationMode(true);
-    }
-
     // 1. Auth Listener
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -346,7 +365,26 @@ export default function App() {
   const handleLogin = (email: string, role: 'superadmin' | 'host' | 'registration', name: string, assignedEventId?: string) => {
     const normalized = normalizeEmail(email);
     const resolvedEventId = assignedEventId || MAP_EMAIL_TO_EVENT_ID[normalized] || '';
-    setSession({ email: normalized, role, name, assignedEventId: resolvedEventId });
+    const userSession: UserSession = { email: normalized, role, name, assignedEventId: resolvedEventId };
+    setSession(userSession);
+    
+    // Redirect on login
+    if (role === 'superadmin') {
+      navigate('/admin', { replace: true });
+    } else if (role === 'registration') {
+      navigate('/registration', { replace: true });
+    } else if (role === 'host') {
+      const eventRoute = Object.keys(ROUTE_TO_EVENT_ID).find(
+        key => ROUTE_TO_EVENT_ID[key] === resolvedEventId
+      );
+      if (eventRoute) {
+        navigate(eventRoute, { replace: true });
+      } else {
+        navigate('/login', { replace: true });
+      }
+    } else {
+      navigate('/login', { replace: true });
+    }
   };
 
   const handleLogout = async () => {
@@ -356,6 +394,27 @@ export default function App() {
       console.error("Firebase signOut error", e);
     }
     setSession(null);
+    navigate('/login', { replace: true });
+  };
+
+  // Protective Route Checks
+  const requireAdmin = (element: React.ReactNode) => {
+    if (!session) return <Navigate to="/login" replace />;
+    if (session.role !== 'superadmin') return <Navigate to="/login" replace />;
+    return element;
+  };
+
+  const requireRegistration = (element: React.ReactNode) => {
+    if (!session) return <Navigate to="/login" replace />;
+    if (session.role !== 'registration') return <Navigate to="/login" replace />;
+    return element;
+  };
+
+  const requireHost = (eventId: string, element: React.ReactNode) => {
+    if (!session) return <Navigate to="/login" replace />;
+    if (session.role !== 'host') return <Navigate to="/login" replace />;
+    if (session.assignedEventId !== eventId) return <Navigate to="/login" replace />;
+    return element;
   };
 
   if (isLoading) {
@@ -372,9 +431,10 @@ export default function App() {
     );
   }
 
-  return (
-    <div id="symposium-app-root" className="min-h-screen bg-background text-on-background selection:bg-primary/20">
-      {isPublicRegistrationMode ? (
+  // Handle Public Registration Flow (e.g. ?mode=register)
+  if (isPublicReg) {
+    return (
+      <div id="symposium-app-root" className="min-h-screen bg-background text-on-background selection:bg-primary/20">
         <div className="min-h-screen bg-background text-on-background w-full">
           {publicRegSuccessAttendee ? (
             <RegistrationSuccess
@@ -400,33 +460,171 @@ export default function App() {
             />
           )}
         </div>
-      ) : !session ? (
-        <LoginScreen onLogin={handleLogin} />
-      ) : (session.role === 'superadmin' || session.role === 'registration') ? (
-        <AdminDashboard 
-          user={session}
-          events={events}
-          attendees={attendees}
-          batches={batches}
-          onUpdateEvents={updateEventsState}
-          onUpdateAttendees={updateAttendeesState}
-          onSaveBatch={handleSaveBatch}
-          onDeleteBatch={handleDeleteBatch}
-          onLogout={handleLogout}
-        />
-      ) : (
-        <HostDashboard 
-          user={session}
-          events={events}
-          attendees={attendees}
-          batches={batches}
-          onUpdateEvents={updateEventsState}
-          onUpdateAttendees={updateAttendeesState}
-          onSaveBatch={handleSaveBatch}
-          onDeleteBatch={handleDeleteBatch}
-          onLogout={handleLogout}
-        />
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div id="symposium-app-root" className="min-h-screen bg-background text-on-background selection:bg-primary/20">
+      <Routes>
+        <Route path="/login" element={session ? <Navigate to="/" replace /> : <LoginScreen onLogin={handleLogin} />} />
+        
+        <Route path="/admin" element={requireAdmin(
+          <AdminDashboard 
+            user={session!}
+            events={events}
+            attendees={attendees}
+            batches={batches}
+            onUpdateEvents={updateEventsState}
+            onUpdateAttendees={updateAttendeesState}
+            onSaveBatch={handleSaveBatch}
+            onDeleteBatch={handleDeleteBatch}
+            onLogout={handleLogout}
+          />
+        )} />
+
+        <Route path="/registration" element={requireRegistration(
+          <AdminDashboard 
+            user={session!}
+            events={events}
+            attendees={attendees}
+            batches={batches}
+            onUpdateEvents={updateEventsState}
+            onUpdateAttendees={updateAttendeesState}
+            onSaveBatch={handleSaveBatch}
+            onDeleteBatch={handleDeleteBatch}
+            onLogout={handleLogout}
+          />
+        )} />
+
+        <Route path="/paperpresentation" element={requireHost('paper_presentation', (
+          <HostDashboard 
+            user={session!}
+            events={events}
+            attendees={attendees}
+            batches={batches}
+            onUpdateEvents={updateEventsState}
+            onUpdateAttendees={updateAttendeesState}
+            onSaveBatch={handleSaveBatch}
+            onDeleteBatch={handleDeleteBatch}
+            onLogout={handleLogout}
+          />
+        ))} />
+
+        <Route path="/posterpresentation" element={requireHost('poster_presentation', (
+          <HostDashboard 
+            user={session!}
+            events={events}
+            attendees={attendees}
+            batches={batches}
+            onUpdateEvents={updateEventsState}
+            onUpdateAttendees={updateAttendeesState}
+            onSaveBatch={handleSaveBatch}
+            onDeleteBatch={handleDeleteBatch}
+            onLogout={handleLogout}
+          />
+        ))} />
+
+        <Route path="/vibecoding" element={requireHost('vibe_coding', (
+          <HostDashboard 
+            user={session!}
+            events={events}
+            attendees={attendees}
+            batches={batches}
+            onUpdateEvents={updateEventsState}
+            onUpdateAttendees={updateAttendeesState}
+            onSaveBatch={handleSaveBatch}
+            onDeleteBatch={handleDeleteBatch}
+            onLogout={handleLogout}
+          />
+        ))} />
+
+        <Route path="/projectexpo" element={requireHost('project_expo', (
+          <HostDashboard 
+            user={session!}
+            events={events}
+            attendees={attendees}
+            batches={batches}
+            onUpdateEvents={updateEventsState}
+            onUpdateAttendees={updateAttendeesState}
+            onSaveBatch={handleSaveBatch}
+            onDeleteBatch={handleDeleteBatch}
+            onLogout={handleLogout}
+          />
+        ))} />
+
+        <Route path="/photography" element={requireHost('photography', (
+          <HostDashboard 
+            user={session!}
+            events={events}
+            attendees={attendees}
+            batches={batches}
+            onUpdateEvents={updateEventsState}
+            onUpdateAttendees={updateAttendeesState}
+            onSaveBatch={handleSaveBatch}
+            onDeleteBatch={handleDeleteBatch}
+            onLogout={handleLogout}
+          />
+        ))} />
+
+        <Route path="/treasurehunt" element={requireHost('treasure_hunt', (
+          <HostDashboard 
+            user={session!}
+            events={events}
+            attendees={attendees}
+            batches={batches}
+            onUpdateEvents={updateEventsState}
+            onUpdateAttendees={updateAttendeesState}
+            onSaveBatch={handleSaveBatch}
+            onDeleteBatch={handleDeleteBatch}
+            onLogout={handleLogout}
+          />
+        ))} />
+
+        <Route path="/freefire" element={requireHost('free_fire', (
+          <HostDashboard 
+            user={session!}
+            events={events}
+            attendees={attendees}
+            batches={batches}
+            onUpdateEvents={updateEventsState}
+            onUpdateAttendees={updateAttendeesState}
+            onSaveBatch={handleSaveBatch}
+            onDeleteBatch={handleDeleteBatch}
+            onLogout={handleLogout}
+          />
+        ))} />
+
+        <Route path="/dumbcharades" element={requireHost('dumb_charades', (
+          <HostDashboard 
+            user={session!}
+            events={events}
+            attendees={attendees}
+            batches={batches}
+            onUpdateEvents={updateEventsState}
+            onUpdateAttendees={updateAttendeesState}
+            onSaveBatch={handleSaveBatch}
+            onDeleteBatch={handleDeleteBatch}
+            onLogout={handleLogout}
+          />
+        ))} />
+
+        {/* Fallback route `/` redirects based on session */}
+        <Route path="/" element={
+          session ? (
+            session.role === 'superadmin' ? <Navigate to="/admin" replace /> :
+            session.role === 'registration' ? <Navigate to="/registration" replace /> :
+            <Navigate to={Object.keys(ROUTE_TO_EVENT_ID).find(k => ROUTE_TO_EVENT_ID[k] === session.assignedEventId) || "/login"} replace />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        } />
+
+        {/* Catch-all redirects to `/` */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </div>
   );
 }
+
+
