@@ -36,7 +36,7 @@ export default function AdminDashboard({
   onLogout
 }: AdminDashboardProps) {
   
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'symposia' | 'attendees' | 'settings' | 'spot-registration' | 'new-registration'>(
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'symposia' | 'attendees' | 'settings' | 'spot-registration' | 'new-registration' | 'results-batches'>(
     'dashboard'
   );
   const [searchQuery, setSearchQuery] = useState('');
@@ -415,6 +415,22 @@ export default function AdminDashboard({
                 >
                   <Plus className="w-4 h-4 shrink-0" />
                   <span>Spot Registration</span>
+                </button>
+
+                <button 
+                  onClick={() => {
+                    setSelectedAttendeeForProfile(null);
+                    setSpotAttendeeSuccess(null);
+                    setActiveTab('results-batches');
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all ${
+                    activeTab === 'results-batches' 
+                      ? 'bg-secondary-container text-on-secondary-container' 
+                      : 'text-on-surface-variant hover:bg-surface-container'
+                  }`}
+                >
+                  <Award className="w-4 h-4 shrink-0" />
+                  <span>Results &amp; Batches</span>
                 </button>
 
                 <button 
@@ -1098,6 +1114,181 @@ export default function AdminDashboard({
                   />
                 </div>
               )}
+            </motion.div>
+          )}
+
+
+
+          {/* Results & Batches Tab Workspace */}
+          {activeTab === 'results-batches' && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+              <div>
+                <h1 className="text-3xl font-bold text-on-surface tracking-tight">Results &amp; Batches Monitor</h1>
+                <p className="text-sm text-on-surface-variant mt-1">
+                  Track real-time batch progression, evaluate batch standings, and verify completed event winners.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6">
+                {events.map(ev => {
+                  const evBatches = batches.filter(b => b.eventId === ev.id);
+                  const evAttendees = attendees.filter(a => a.registeredEventId === ev.id || a.eventId === ev.id);
+                  
+                  return (
+                    <div key={ev.id} className="bg-surface rounded-2xl border border-outline-variant p-6 shadow-xs space-y-4">
+                      
+                      {/* Event Header Card Row */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-outline-variant/30">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-primary/5 text-primary flex items-center justify-center font-bold">
+                            {renderEventIcon(ev.icon)}
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-on-surface flex items-center gap-2">
+                              {ev.title}
+                              <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">
+                                {ev.track}
+                              </span>
+                            </h3>
+                            <p className="text-xs text-on-surface-variant leading-none mt-1">
+                              Coordinator: {ev.hostName} ({ev.hostEmail}) • Venue: {ev.location || ev.venue}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                            ev.status === 'Live' 
+                              ? 'bg-error-container text-on-error-container animate-pulse' 
+                              : ev.status === 'Completed'
+                                ? 'bg-emerald-100 text-emerald-800' 
+                                : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {ev.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Batches Table and Dynamic Winners */}
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        
+                        {/* Batches List Block */}
+                        <div className="lg:col-span-2 space-y-3">
+                          <h4 className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1">
+                            <Layers className="w-4 h-4" /> Batches Configuration ({evBatches.length})
+                          </h4>
+                          
+                          {evBatches.length === 0 ? (
+                            <p className="text-xs text-on-surface-variant italic py-4 bg-surface-container-low border rounded-xl text-center">
+                              No batches have been created by the event host yet.
+                            </p>
+                          ) : (
+                            <div className="overflow-x-auto border border-outline-variant/40 rounded-xl">
+                              <table className="w-full text-left text-xs border-collapse">
+                                <thead>
+                                  <tr className="bg-surface-container border-b">
+                                    <th className="p-3 font-bold text-on-surface uppercase">Batch Name</th>
+                                    <th className="p-3 font-bold text-on-surface uppercase">Status</th>
+                                    <th className="p-3 font-bold text-on-surface uppercase">Participants</th>
+                                    <th className="p-3 font-bold text-on-surface uppercase">Batch Winner (Live)</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {evBatches.map(b => {
+                                    const bAttendees = evAttendees.filter(a => a.batchId === b.id);
+                                    const presentAttendees = bAttendees.filter(a => a.attendanceStatus === 'Present');
+                                    
+                                    // Calculate winner dynamically
+                                    const scored = presentAttendees
+                                      .filter(a => a.judgingStatus === 'Completed')
+                                      .sort((x, y) => (y.score || 0) - (x.score || 0));
+                                    const winner = scored[0];
+                                    
+                                    return (
+                                      <tr key={b.id} className="border-b border-outline-variant/20 hover:bg-surface-container-low transition-colors">
+                                        <td className="p-3 font-bold text-on-surface">{b.name}</td>
+                                        <td className="p-3">
+                                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                                            b.status === 'Live' 
+                                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                                              : b.status === 'Completed'
+                                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                          }`}>
+                                            {b.status || 'Waiting'}
+                                          </span>
+                                        </td>
+                                        <td className="p-3 font-medium text-on-surface-variant">
+                                          {bAttendees.length} assigned ({presentAttendees.length} present)
+                                        </td>
+                                        <td className="p-3 font-bold text-primary">
+                                          {winner ? (
+                                            <span className="flex items-center gap-1">
+                                              🏆 {winner.name} <span className="text-[10px] text-on-surface-variant font-mono">({winner.score} pts)</span>
+                                            </span>
+                                          ) : (
+                                            <span className="text-on-surface-variant/60 italic font-normal">
+                                              {presentAttendees.length === 0 ? 'No present attendees' : 'Evaluation pending'}
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Official Results / Standings Panel */}
+                        <div className="bg-surface-container-low border border-outline-variant/60 p-4 rounded-2xl flex flex-col justify-between">
+                          <div>
+                            <h4 className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5 mb-3 border-b pb-2">
+                              <Award className="w-4 h-4" /> Official Event Podium
+                            </h4>
+                            
+                            {ev.resultsSubmitted ? (
+                              <div className="space-y-2">
+                                {ev.results?.map(res => {
+                                  const medal = res.rank === 1 ? '🥇' : res.rank === 2 ? '🥈' : '🥉';
+                                  return (
+                                    <div key={res.rank} className="flex justify-between items-center bg-white border p-2.5 rounded-xl text-xs">
+                                      <div className="flex items-center gap-1.5 font-bold">
+                                        <span>{medal}</span>
+                                        <div>
+                                          <span className="block text-on-surface">{res.participantName}</span>
+                                          <span className="block text-[8px] text-on-surface-variant uppercase">{res.college}</span>
+                                        </div>
+                                      </div>
+                                      <span className="font-mono font-bold text-primary">{res.score} pts</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center py-8 text-center text-on-surface-variant/60 italic text-xs space-y-2">
+                                <AlertCircle className="w-8 h-8 text-outline-variant" />
+                                <div>
+                                  <span className="font-bold block text-on-surface-variant">Results Not Submitted</span>
+                                  <span className="text-[10px] block opacity-80 mt-0.5">Event coordinator has not compiled and published official standings yet.</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Event Summary stats */}
+                          <div className="mt-4 pt-3 border-t border-outline-variant/30 text-[10px] text-on-surface-variant font-medium flex justify-between">
+                            <span>Registered: {evAttendees.length}</span>
+                            <span>Scored: {evAttendees.filter(a => a.judgingStatus === 'Completed').length}</span>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </motion.div>
           )}
 

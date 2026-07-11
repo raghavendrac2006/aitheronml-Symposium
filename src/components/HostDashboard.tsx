@@ -97,9 +97,11 @@ export default function HostDashboard({
   // Batch states
   const [selectedBatchId, setSelectedBatchId] = useState<string>('');
   const [newBatchName, setNewBatchName] = useState('');
-  const [batchCount, setBatchCount] = useState<number>(3);
+  const [batchCount, setBatchCount] = useState<number | ''>(3);
   const [dynamicBatchNames, setDynamicBatchNames] = useState<string[]>(['Batch 1', 'Batch 2', 'Batch 3']);
   const [isCreatingBatch, setIsCreatingBatch] = useState(false);
+  const [showStartBatchModal, setShowStartBatchModal] = useState(false);
+  const [selectedStartBatchId, setSelectedStartBatchId] = useState<string>('');
   const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
   const [editingBatchName, setEditingBatchName] = useState('');
   const [selectedJudgingBatchId, setSelectedJudgingBatchId] = useState<string>('all');
@@ -128,7 +130,7 @@ export default function HostDashboard({
             const evenDist = Math.min(crit.maxScore, Math.round(selectedAttendeeForJudging.score / evaluationCriteria.length));
             loadedScores[crit.id] = String(evenDist);
           } else {
-            loadedScores[crit.id] = '0';
+            loadedScores[crit.id] = '';
           }
         }
       });
@@ -331,15 +333,75 @@ export default function HostDashboard({
 
   // Operational transition handlers
   const handleStartEvent = () => {
-    const updated = events.map(e => {
+    if (eventBatches.length === 0) {
+      if (confirm('No batches have been created for this event yet. Would you like to automatically create "Batch 1" with all registered participants and start judging?')) {
+        const nowStr = new Date().toISOString();
+        const defaultB: Batch = {
+          id: `batch-${myAssignedEvent.id}-${Date.now()}-0`,
+          eventId: myAssignedEvent.id,
+          name: 'Batch 1',
+          status: 'Live',
+          createdAt: nowStr
+        };
+        
+        if (onSaveBatch) {
+          onSaveBatch(defaultB);
+        }
+        
+        const updatedAttendees = attendees.map(a => {
+          if (a.registeredEventId === myAssignedEvent.id || a.eventId === myAssignedEvent.id) {
+            return { ...a, batchId: defaultB.id, batchName: defaultB.name };
+          }
+          return a;
+        });
+        onUpdateAttendees(updatedAttendees);
+        
+        const updatedEvents = events.map(e => {
+          if (e.id === myAssignedEvent.id) {
+            return { ...e, status: 'Live' as const };
+          }
+          return e;
+        });
+        onUpdateEvents(updatedEvents);
+        
+        setSelectedJudgingBatchId(defaultB.id);
+        setActiveTab('judging');
+        setConfirmationMessage('Batch 1 created and event started!');
+        setTimeout(() => setConfirmationMessage(null), 4000);
+      } else {
+        const updatedEvents = events.map(e => {
+          if (e.id === myAssignedEvent.id) {
+            return { ...e, status: 'Live' as const };
+          }
+          return e;
+        });
+        onUpdateEvents(updatedEvents);
+        setActiveTab('batches');
+      }
+    } else {
+      setShowStartBatchModal(true);
+      setSelectedStartBatchId(eventBatches[0].id);
+    }
+  };
+
+  const handleConfirmStartWithBatch = () => {
+    if (!selectedStartBatchId) return;
+    
+    const updatedEvents = events.map(e => {
       if (e.id === myAssignedEvent.id) {
         return { ...e, status: 'Live' as const };
       }
       return e;
     });
-    onUpdateEvents(updated);
-    setShowGateCheckIn(true);
-    setConfirmationMessage('Event Started & Gate Check-In Desk Opened!');
+    onUpdateEvents(updatedEvents);
+    
+    handleUpdateBatchStatus(selectedStartBatchId, 'Live');
+    
+    setSelectedJudgingBatchId(selectedStartBatchId);
+    setActiveTab('judging');
+    setShowStartBatchModal(false);
+    
+    setConfirmationMessage(`Event started & ${eventBatches.find(b => b.id === selectedStartBatchId)?.name || 'selected batch'} is now Live!`);
     setTimeout(() => setConfirmationMessage(null), 4000);
   };
 
@@ -401,11 +463,10 @@ export default function HostDashboard({
   const handleSaveEvaluation = (status: 'Completed' | 'In Progress') => {
     if (!selectedAttendeeForJudging) return;
 
-    // Validate inputs
     let total = 0;
     for (const crit of evaluationCriteria) {
-      const valStr = criteriaScores[crit.id] || '0';
-      const val = parseFloat(valStr);
+      const valStr = criteriaScores[crit.id];
+      const val = (valStr === undefined || valStr === '') ? 0 : parseFloat(valStr);
       if (isNaN(val) || val < 0 || val > crit.maxScore) {
         setCriterionError(`Invalid entry for ${crit.name}. Score must be between 0 and ${crit.maxScore}`);
         return;
@@ -432,6 +493,23 @@ export default function HostDashboard({
     // Refresh selection profile
     const refetched = updatedAttendees.find(a => a.id === selectedAttendeeForJudging.id) || null;
     setSelectedAttendeeForJudging(refetched);
+
+    // Auto-end batch if all present participants are evaluated
+    if (status === 'Completed' && selectedAttendeeForJudging.batchId) {
+      const batchAttendees = updatedAttendees.filter(a => 
+        (a.registeredEventId === myAssignedEvent.id || a.eventId === myAssignedEvent.id) && 
+        a.batchId === selectedAttendeeForJudging.batchId
+      );
+      const presentAttendees = batchAttendees.filter(a => a.attendanceStatus === 'Present');
+      const allScored = presentAttendees.length > 0 && presentAttendees.every(a => a.judgingStatus === 'Completed');
+      
+      if (allScored) {
+        handleUpdateBatchStatus(selectedAttendeeForJudging.batchId, 'Completed');
+        setConfirmationMessage(`Evaluation Submitted. All participants in "${selectedAttendeeForJudging.batchName || 'this batch'}" evaluated! Batch auto-ended successfully.`);
+        setTimeout(() => setConfirmationMessage(null), 5000);
+        return;
+      }
+    }
 
     setConfirmationMessage(`Evaluation ${status === 'Completed' ? 'Submitted' : 'Saved as Draft'}`);
     setTimeout(() => setConfirmationMessage(null), 3000);
@@ -1379,19 +1457,24 @@ export default function HostDashboard({
                         max={20}
                         value={batchCount}
                         onChange={(e) => {
-                          const count = Math.max(1, parseInt(e.target.value) || 1);
-                          setBatchCount(count);
-                          setDynamicBatchNames(prev => {
-                            const next = [...prev];
-                            if (next.length < count) {
-                              for (let i = next.length; i < count; i++) {
-                                next.push(`Batch ${i + 1}`);
+                          const val = e.target.value;
+                          if (val === '') {
+                            setBatchCount('');
+                          } else {
+                            const count = Math.max(1, parseInt(val) || 1);
+                            setBatchCount(count);
+                            setDynamicBatchNames(prev => {
+                              const next = [...prev];
+                              if (next.length < count) {
+                                for (let i = next.length; i < count; i++) {
+                                  next.push(`Batch ${i + 1}`);
+                                }
+                              } else {
+                                next.splice(count);
                               }
-                            } else {
-                              next.splice(count);
-                            }
-                            return next;
-                          });
+                              return next;
+                            });
+                          }
                         }}
                         className="w-full h-10 px-3 bg-surface border border-outline rounded-lg text-xs font-semibold text-on-surface"
                         required
@@ -2068,9 +2151,9 @@ export default function HostDashboard({
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           {evaluationCriteria.map(crit => {
-                            const currentVal = criteriaScores[crit.id] || '0';
+                            const currentVal = criteriaScores[crit.id] ?? '';
                             const parsedVal = parseFloat(currentVal);
-                            const isErr = isNaN(parsedVal) || parsedVal < 0 || parsedVal > crit.maxScore;
+                            const isErr = currentVal !== '' && (isNaN(parsedVal) || parsedVal < 0 || parsedVal > crit.maxScore);
 
                             return (
                               <div key={crit.id} className="bg-surface-container-low border border-outline-variant/35 p-3 rounded-xl space-y-1.5">
@@ -2121,7 +2204,10 @@ export default function HostDashboard({
                           <span className="text-[10px] font-bold text-on-surface-variant uppercase block leading-none">Calculated Score</span>
                           <span className="text-xl font-black text-primary">
                             {/* Compute dynamic sum */}
-                            {evaluationCriteria.reduce((acc, c) => acc + parseFloat(criteriaScores[c.id] || '0'), 0)}
+                            {evaluationCriteria.reduce((acc, c) => {
+                              const v = criteriaScores[c.id];
+                              return acc + (v ? parseFloat(v) || 0 : 0);
+                            }, 0)}
                             <span className="text-xs text-on-surface-variant font-medium"> / {evaluationCriteria.reduce((acc, c) => acc + c.maxScore, 0)}</span>
                           </span>
                         </div>
@@ -2522,6 +2608,56 @@ export default function HostDashboard({
                   </div>
                 </>
               )}
+
+          {/* Start Event with Batch Selection Modal */}
+          {showStartBatchModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+              <motion.div 
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-white rounded-2xl shadow-2xl border border-[#c7c5d2] p-6 max-w-md w-full text-gray-800 text-left space-y-4"
+              >
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <Play className="w-5 h-5 text-[#080c5f]" /> Start Batch Evaluation
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Select which batch you would like to start judging right now. This will make the event live and activate the chosen batch.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-gray-700">Choose Batch</label>
+                  <select
+                    value={selectedStartBatchId}
+                    onChange={(e) => setSelectedStartBatchId(e.target.value)}
+                    className="w-full h-10 px-3 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 outline-none focus:border-[#080c5f] focus:ring-1 focus:ring-[#080c5f]"
+                  >
+                    {eventBatches.map(b => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.status || 'Waiting'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setShowStartBatchModal(false)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmStartWithBatch}
+                    className="px-4 py-2 bg-[#080c5f] text-white rounded-lg text-xs font-semibold hover:bg-[#080c5f]/95 shadow-sm"
+                  >
+                    Start Judging
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
 
         </main>
       </div>
