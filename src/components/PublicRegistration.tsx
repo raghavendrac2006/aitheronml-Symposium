@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { SymposiumEvent, Attendee } from '../types';
 import { saveAttendeeToFirestore } from '../firebaseSync';
+import { 
+  FileText, Layers, Brain, Award, Camera, Map, Gamepad2, Users, Check, AlertCircle, HelpCircle, Info, Clock, MapPin
+} from 'lucide-react';
 
 interface PublicRegistrationProps {
   events: SymposiumEvent[];
@@ -33,14 +36,114 @@ export default function PublicRegistration({
   const [teamName, setTeamName] = useState('');
   const [teamMembersInput, setTeamMembersInput] = useState<Array<{ name: string; phone: string; email: string }>>([]);
 
-  const morningEvents = events.filter(e => e.session === 'Morning Session' || e.session === 'Full-Day Session');
-  const afternoonEvents = events.filter(e => e.session === 'Afternoon Session' || e.session === 'Full-Day Session');
+  // Dynamic session classification helpers (future-proof, case-insensitive)
+  const isMorningSession = (ev: SymposiumEvent) => {
+    const s = (ev.session || '').toLowerCase();
+    return s.includes('morning') || s.includes('full-day') || s.includes('full day');
+  };
+
+  const isAfternoonSession = (ev: SymposiumEvent) => {
+    const s = (ev.session || '').toLowerCase();
+    return s.includes('afternoon') || s.includes('full-day') || s.includes('full day');
+  };
+
+  const morningEvents = events.filter(isMorningSession);
+  const afternoonEvents = events.filter(isAfternoonSession);
 
   const morningSelected = events.find(e => e.id === morningEventId);
   const afternoonSelected = events.find(e => e.id === afternoonEventId);
-  const selectedEvents = [morningSelected, afternoonSelected].filter(Boolean);
-  const supportsTeam = selectedEvents.some(ev => ev.maximumTeamSize > 1);
-  const requiresTeam = selectedEvents.some(ev => ev.minimumTeamSize > 1);
+  const selectedEvents = [morningSelected, afternoonSelected].filter(Boolean) as SymposiumEvent[];
+  const supportsTeam = selectedEvents.some(ev => (ev.maximumTeamSize || 0) > 1);
+  const requiresTeam = selectedEvents.some(ev => (ev.minimumTeamSize || 0) > 1);
+
+  // Time-range getter based on schedule session
+  const getEventTime = (ev: SymposiumEvent) => {
+    const s = (ev.session || '').toLowerCase();
+    if (s.includes('morning')) return '9:00 AM – 12:00 PM';
+    if (s.includes('afternoon')) return '1:30 PM – 4:30 PM';
+    return '9:00 AM – 4:30 PM'; // Full-Day Session
+  };
+
+  // Safe Lucide icon selector
+  const getIcon = (iconName: string) => {
+    switch (iconName) {
+      case 'FileText': return <FileText className="w-5 h-5 text-primary" />;
+      case 'Layers': return <Layers className="w-5 h-5 text-primary" />;
+      case 'Brain': return <Brain className="w-5 h-5 text-primary" />;
+      case 'Award': return <Award className="w-5 h-5 text-primary" />;
+      case 'Camera': return <Camera className="w-5 h-5 text-primary" />;
+      case 'Map': return <Map className="w-5 h-5 text-primary" />;
+      case 'Gamepad2': return <Gamepad2 className="w-5 h-5 text-primary" />;
+      case 'Users': return <Users className="w-5 h-5 text-primary" />;
+      default: return <HelpCircle className="w-5 h-5 text-primary" />;
+    }
+  };
+
+  // Selection toggle handler supporting Full-Day session overriding
+  const handleSelectEvent = (ev: SymposiumEvent, slot: 'morning' | 'afternoon') => {
+    const isFullDay = (ev.session || '').toLowerCase().includes('full-day') || (ev.session || '').toLowerCase().includes('full day');
+
+    if (slot === 'morning') {
+      if (morningEventId === ev.id) {
+        // Deselect
+        if (isFullDay) {
+          setMorningEventId('');
+          setAfternoonEventId('');
+        } else {
+          setMorningEventId('');
+        }
+      } else {
+        // Select
+        if (isFullDay) {
+          setMorningEventId(ev.id);
+          setAfternoonEventId(ev.id);
+        } else {
+          setMorningEventId(ev.id);
+        }
+      }
+    } else {
+      if (afternoonEventId === ev.id) {
+        // Deselect
+        if (isFullDay) {
+          setMorningEventId('');
+          setAfternoonEventId('');
+        } else {
+          setAfternoonEventId('');
+        }
+      } else {
+        // Select
+        if (isFullDay) {
+          setMorningEventId(ev.id);
+          setAfternoonEventId(ev.id);
+        } else {
+          setAfternoonEventId(ev.id);
+        }
+      }
+    }
+  };
+
+  // Disabled states check for card slots
+  const isMorningDisabled = (ev: SymposiumEvent) => {
+    if (morningEventId === ev.id) return false;
+    if (morningEventId !== '') return true;
+    if (afternoonEventId !== '') {
+      const afternoonSelected = events.find(e => e.id === afternoonEventId);
+      const isFullDay = afternoonSelected?.session.toLowerCase().includes('full-day') || afternoonSelected?.session.toLowerCase().includes('full day');
+      if (isFullDay) return true;
+    }
+    return false;
+  };
+
+  const isAfternoonDisabled = (ev: SymposiumEvent) => {
+    if (afternoonEventId === ev.id) return false;
+    if (afternoonEventId !== '') return true;
+    if (morningEventId !== '') {
+      const morningSelected = events.find(e => e.id === morningEventId);
+      const isFullDay = morningSelected?.session.toLowerCase().includes('full-day') || morningSelected?.session.toLowerCase().includes('full day');
+      if (isFullDay) return true;
+    }
+    return false;
+  };
 
   React.useEffect(() => {
     if (requiresTeam) {
@@ -362,38 +465,179 @@ export default function PublicRegistration({
                 />
               </div>
 
-              {/* Event Session Selectors */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-primary uppercase ml-1">Morning Event Selection</label>
-                  <select 
-                    value={morningEventId}
-                    onChange={(e) => setMorningEventId(e.target.value)}
-                    className="w-full h-12 px-4 rounded-lg border border-outline bg-transparent text-on-surface focus:border-primary focus:ring-1 focus:ring-primary transition-all text-sm appearance-none"
-                  >
-                    <option value="">None (Select Morning Event)</option>
-                    {morningEvents.map(ev => (
-                      <option key={ev.id} value={ev.id}>
-                        {ev.title} ({ev.track})
-                      </option>
-                    ))}
-                  </select>
+              {/* Choose Your Events (Card-Based) */}
+              <div className="space-y-6 pt-4 border-t border-outline-variant/30">
+                <div>
+                  <h3 className="text-sm font-bold text-primary uppercase ml-1">Choose Your Events</h3>
+                  <p className="text-xs text-on-surface-variant font-semibold mt-1 ml-1 leading-relaxed">
+                    You may participate in:<br />
+                    <span className="text-primary font-bold">✓</span> One Morning Session event<br />
+                    <span className="text-primary font-bold">✓</span> One Afternoon Session event (Optional)<br />
+                    <span className="text-on-surface-variant font-semibold">OR</span><br />
+                    <span className="text-primary font-bold">✓</span> Only one event from either session
+                  </p>
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-primary uppercase ml-1">Afternoon Event Selection</label>
-                  <select 
-                    value={afternoonEventId}
-                    onChange={(e) => setAfternoonEventId(e.target.value)}
-                    className="w-full h-12 px-4 rounded-lg border border-outline bg-transparent text-on-surface focus:border-primary focus:ring-1 focus:ring-primary transition-all text-sm appearance-none"
-                  >
-                    <option value="">None (Select Afternoon Event)</option>
-                    {afternoonEvents.map(ev => (
-                      <option key={ev.id} value={ev.id}>
-                        {ev.title} ({ev.track})
-                      </option>
-                    ))}
-                  </select>
+                {/* Morning Session Section */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center px-1">
+                    <h4 className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Morning Session</h4>
+                    {morningEventId && (
+                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-500/10 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" /> You have already selected a Morning Session event.
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {morningEvents.map(ev => {
+                      const isSelected = morningEventId === ev.id;
+                      const isDisabled = isMorningDisabled(ev);
+                      return (
+                        <motion.div
+                          key={ev.id}
+                          whileHover={!isDisabled ? { y: -4, scale: 1.01 } : {}}
+                          whileTap={!isDisabled ? { scale: 0.99 } : {}}
+                          onClick={() => !isDisabled && handleSelectEvent(ev, 'morning')}
+                          onKeyDown={(e) => {
+                            if (e.key === ' ' || e.key === 'Enter') {
+                              e.preventDefault();
+                              if (!isDisabled) handleSelectEvent(ev, 'morning');
+                            }
+                          }}
+                          tabIndex={isDisabled ? -1 : 0}
+                          className={`relative p-5 rounded-2xl border transition-all cursor-pointer text-left focus:outline-none focus:ring-2 focus:ring-primary ${
+                            isSelected 
+                              ? 'border-primary bg-primary/5 shadow-md scale-[1.01]' 
+                              : isDisabled 
+                                ? 'border-outline-variant bg-surface-container-low opacity-50 cursor-not-allowed' 
+                                : 'border-outline hover:border-primary/55 bg-surface shadow-xs'
+                          }`}
+                        >
+                          <div className="flex justify-between items-start mb-3">
+                            <div className="p-2 rounded-xl bg-primary/10 flex items-center justify-center">
+                              {getIcon(ev.icon)}
+                            </div>
+                            <div className="flex flex-col gap-1 items-end">
+                              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                                ev.track === 'Technical' 
+                                  ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400' 
+                                  : 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                              }`}>
+                                {ev.track}
+                              </span>
+                              <span className="text-[10px] font-semibold text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full">
+                                {ev.session}
+                              </span>
+                            </div>
+                          </div>
+
+                          <h5 className="font-bold text-on-surface text-base mb-2">{ev.title}</h5>
+                          {ev.subtitle && (
+                            <p className="text-xs text-on-surface-variant mb-4 font-medium line-clamp-2">{ev.subtitle}</p>
+                          )}
+
+                          <div className="space-y-1.5 text-xs text-on-surface-variant font-semibold border-t border-outline-variant/20 pt-3">
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-primary" />
+                              <span>{getEventTime(ev)}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-primary" />
+                              <span className="truncate">{ev.location}</span>
+                            </div>
+                          </div>
+
+                          {/* Selected badge overlay */}
+                          {isSelected && (
+                            <div className="absolute top-3 left-3 bg-primary text-white p-1 rounded-full shadow-xs flex items-center justify-center">
+                              <Check className="w-3 h-3 stroke-[3]" />
+                            </div>
+                          )}
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Afternoon Session Section */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center px-1">
+                    <h4 className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Afternoon Session</h4>
+                    {afternoonEventId && (
+                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-500/10 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" /> You have already selected an Afternoon Session event.
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {afternoonEvents.map(ev => {
+                      const isSelected = afternoonEventId === ev.id;
+                      const isDisabled = isAfternoonDisabled(ev);
+                      return (
+                        <motion.div
+                          key={ev.id}
+                          whileHover={!isDisabled ? { y: -4, scale: 1.01 } : {}}
+                          whileTap={!isDisabled ? { scale: 0.99 } : {}}
+                          onClick={() => !isDisabled && handleSelectEvent(ev, 'afternoon')}
+                          onKeyDown={(e) => {
+                            if (e.key === ' ' || e.key === 'Enter') {
+                              e.preventDefault();
+                              if (!isDisabled) handleSelectEvent(ev, 'afternoon');
+                            }
+                          }}
+                          tabIndex={isDisabled ? -1 : 0}
+                          className={`relative p-5 rounded-2xl border transition-all cursor-pointer text-left focus:outline-none focus:ring-2 focus:ring-primary ${
+                            isSelected 
+                              ? 'border-primary bg-primary/5 shadow-md scale-[1.01]' 
+                              : isDisabled 
+                                ? 'border-outline-variant bg-surface-container-low opacity-50 cursor-not-allowed' 
+                                : 'border-outline hover:border-primary/55 bg-surface shadow-xs'
+                          }`}
+                        >
+                          <div className="flex justify-between items-start mb-3">
+                            <div className="p-2 rounded-xl bg-primary/10 flex items-center justify-center">
+                              {getIcon(ev.icon)}
+                            </div>
+                            <div className="flex flex-col gap-1 items-end">
+                              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                                ev.track === 'Technical' 
+                                  ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400' 
+                                  : 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                              }`}>
+                                {ev.track}
+                              </span>
+                              <span className="text-[10px] font-semibold text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full">
+                                {ev.session}
+                              </span>
+                            </div>
+                          </div>
+
+                          <h5 className="font-bold text-on-surface text-base mb-2">{ev.title}</h5>
+                          {ev.subtitle && (
+                            <p className="text-xs text-on-surface-variant mb-4 font-medium line-clamp-2">{ev.subtitle}</p>
+                          )}
+
+                          <div className="space-y-1.5 text-xs text-on-surface-variant font-semibold border-t border-outline-variant/20 pt-3">
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-primary" />
+                              <span>{getEventTime(ev)}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-primary" />
+                              <span className="truncate">{ev.location}</span>
+                            </div>
+                          </div>
+
+                          {/* Selected badge overlay */}
+                          {isSelected && (
+                            <div className="absolute top-3 left-3 bg-primary text-white p-1 rounded-full shadow-xs flex items-center justify-center">
+                              <Check className="w-3 h-3 stroke-[3]" />
+                            </div>
+                          )}
+                        </motion.div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
@@ -452,16 +696,15 @@ export default function PublicRegistration({
                           Maximum Team Size: 4 Members (1 Team Leader + 3 Members)
                         </p>
                       </div>
-                      {teamMembersInput.length < 3 && (
-                        <button
-                          type="button"
-                          onClick={handleAddMember}
-                          className="px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-xs font-bold hover:bg-primary/20 transition-all flex items-center gap-1 cursor-pointer self-start sm:self-auto"
-                        >
-                          <span className="material-symbols-outlined !text-sm">add</span>
-                          Add Member
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={handleAddMember}
+                        disabled={teamMembersInput.length >= 3}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer self-start sm:self-auto bg-primary/10 text-primary hover:bg-primary/20 disabled:bg-surface-container-high disabled:text-on-surface-variant/40 disabled:cursor-not-allowed"
+                      >
+                        <span className="material-symbols-outlined !text-sm">add</span>
+                        Add Member
+                      </button>
                     </div>
 
                     {teamMembersInput.map((member, index) => (
