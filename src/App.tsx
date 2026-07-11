@@ -45,6 +45,10 @@ function migrateAttendee(a: Attendee): Attendee {
   return a;
 }
 
+function filterTeamMembers(list: Attendee[]): Attendee[] {
+  return list.filter(a => a.regType !== 'team' || a.teamMembers !== undefined || a.accessLevel === 'Team Leader Pass');
+}
+
 export const ROUTE_TO_EVENT_ID: Record<string, string> = {
   '/paperpresentation': 'paper_presentation',
   '/posterpresentation': 'poster_presentation',
@@ -224,11 +228,10 @@ function AppContent() {
           }
 
           const migrated = finalAttendees.map(migrateAttendee);
-
-
-          setAttendees(migrated);
-          localStorage.setItem('ai_symposium_attendees', JSON.stringify(migrated));
-          localStorage.setItem('ai_symposium_attendees_last_saved', JSON.stringify(migrated));
+          const filtered = filterTeamMembers(migrated);
+          setAttendees(filtered);
+          localStorage.setItem('ai_symposium_attendees', JSON.stringify(filtered));
+          localStorage.setItem('ai_symposium_attendees_last_saved', JSON.stringify(filtered));
           setIsLoading(false);
         }, (error) => {
           console.error("Firestore onSnapshot error for participants, falling back to cache:", error);
@@ -240,7 +243,7 @@ function AppContent() {
             finalStoredAttendees = [...finalStoredAttendees, ...missingInitialAttendees];
           }
           const migrated = finalStoredAttendees.map(migrateAttendee);
-          setAttendees(migrated);
+          setAttendees(filterTeamMembers(migrated));
           setIsLoading(false);
         });
 
@@ -278,7 +281,7 @@ function AppContent() {
           finalStoredAttendees = [...finalStoredAttendees, ...missingInitialAttendees];
         }
         const migrated = finalStoredAttendees.map(migrateAttendee);
-        setAttendees(migrated);
+        setAttendees(filterTeamMembers(migrated));
 
         const storedBatches = localStorage.getItem('ai_symposium_batches');
         setBatches(storedBatches ? JSON.parse(storedBatches) : []);
@@ -319,8 +322,9 @@ function AppContent() {
   };
 
   const updateAttendeesState = async (updated: Attendee[]) => {
-    setAttendees(updated);
-    localStorage.setItem('ai_symposium_attendees', JSON.stringify(updated));
+    const filtered = filterTeamMembers(updated);
+    setAttendees(filtered);
+    localStorage.setItem('ai_symposium_attendees', JSON.stringify(filtered));
 
     try {
       // Robust offline-safe dirty checking using a persistent cached state to avoid stale React closures

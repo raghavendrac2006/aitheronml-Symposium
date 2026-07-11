@@ -250,10 +250,6 @@ export default function AdminDashboard({
         </div>
 
         <div className="flex items-center gap-3">
-          <button className="p-2 rounded-full text-on-surface-variant hover:bg-surface-container-high transition-colors relative">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-error rounded-full animate-pulse" />
-          </button>
           
           <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-full bg-surface-container border border-outline-variant/35">
             <div className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-bold text-xs">
@@ -888,15 +884,24 @@ export default function AdminDashboard({
                         <tbody>
                           {attendees
                             .filter(a => {
-                              const sLower = attendeeSearch.toLowerCase().trim();
+                              // Hide team members, only show individual and team leader documents
+                              const isLeaderOrIndividual = a.regType !== 'team' || a.teamMembers !== undefined || a.accessLevel === 'Team Leader Pass';
+                              if (!isLeaderOrIndividual) return false;
+
+                              const sLower = (attendeeSearch || searchQuery || '').toLowerCase().trim();
                               const matchesSearch = !sLower ? true : (
                                 (a.participantId || '').toLowerCase().includes(sLower) ||
-                                a.id.toLowerCase().includes(sLower) ||
-                                a.name.toLowerCase().includes(sLower) ||
+                                (a.id || '').toLowerCase().includes(sLower) ||
+                                (a.name || '').toLowerCase().includes(sLower) ||
                                 (a.teamName || '').toLowerCase().includes(sLower) ||
                                 (a.phone || '').includes(sLower) ||
-                                a.college.toLowerCase().includes(sLower) ||
-                                a.email.toLowerCase().includes(sLower)
+                                (a.college || '').toLowerCase().includes(sLower) ||
+                                (a.email || '').toLowerCase().includes(sLower) ||
+                                (a.teamMembers?.some(m => 
+                                  (m.name || '').toLowerCase().includes(sLower) ||
+                                  (m.phone || '').includes(sLower) ||
+                                  (m.email || '').toLowerCase().includes(sLower)
+                                ) ?? false)
                               );
                               const matchesEvent = selectedAttendeeFilter === 'all' || a.registeredEventId === selectedAttendeeFilter;
                               const matchesCollege = collegeFilter === 'all' || a.college === collegeFilter;
@@ -908,22 +913,29 @@ export default function AdminDashboard({
                               return (
                                 <tr key={att.id} className="border-b border-outline-variant/30 hover:bg-surface-container/30 transition-colors">
                                   <td className="p-4 font-semibold text-primary">{att.id}</td>
-                                <td className="p-4">
-                                  <div className="font-semibold text-on-surface text-sm">{att.name}</div>
-                                  {att.teamName && (
-                                    <div className="text-[10px] text-primary font-bold">Team: {att.teamName}</div>
-                                  )}
-                                  <div className="text-[10px] text-on-surface-variant">{att.email} • {att.phone}</div>
-                                </td>
-                                <td className="p-4 text-on-surface-variant font-medium">{att.college}</td>
-                                <td className="p-4 text-primary font-semibold">{att.registeredEventTitle}</td>
-                                <td className="p-4">
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold capitalize ${
-                                    att.regType === 'team' ? 'bg-tertiary-fixed text-on-tertiary-fixed' : 'bg-primary-fixed text-on-primary-fixed'
-                                  }`}>
-                                    {att.regType || 'individual'}
-                                  </span>
-                                </td>
+                                  <td className="p-4">
+                                    {att.teamName ? (
+                                      <div className="font-bold text-on-surface text-sm">Team: {att.teamName}</div>
+                                    ) : (
+                                      <div className="font-semibold text-on-surface text-sm">{att.name}</div>
+                                    )}
+                                    {att.teamName && (
+                                      <div className="text-[11px] text-on-surface-variant font-medium">Leader: {att.name}</div>
+                                    )}
+                                    <div className="text-[10px] text-on-surface-variant">{att.email} • {att.phone}</div>
+                                    {att.regType === 'team' && (
+                                      <div className="text-[10px] text-primary font-bold mt-0.5">Members: {att.memberCount || 1}</div>
+                                    )}
+                                  </td>
+                                  <td className="p-4 text-on-surface-variant font-medium">{att.college}</td>
+                                  <td className="p-4 text-primary font-semibold">{att.registeredEventTitle}</td>
+                                  <td className="p-4">
+                                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold capitalize ${
+                                      att.regType === 'team' ? 'bg-tertiary-fixed text-on-tertiary-fixed' : 'bg-primary-fixed text-on-primary-fixed'
+                                    }`}>
+                                      {att.regType || 'individual'}
+                                    </span>
+                                  </td>
                                 <td className="p-4">
                                    <button
                                      onClick={() => {

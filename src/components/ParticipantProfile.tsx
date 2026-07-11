@@ -375,7 +375,6 @@ export default function ParticipantProfile({
                             <span className="text-primary">{member.name}</span>
                             <span className="text-on-surface-variant text-[10px]">Member #{i + 1}</span>
                           </div>
-                          <div className="text-on-surface-variant text-[10px] font-mono">{member.participantId}</div>
                           <div className="text-[11px]"><span className="text-on-surface-variant font-medium">Email:</span> {member.email}</div>
                           <div className="text-[11px]"><span className="text-on-surface-variant font-medium">Phone:</span> {member.phone}</div>
                         </div>

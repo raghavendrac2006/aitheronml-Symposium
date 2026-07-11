@@ -552,9 +552,24 @@ export default function HostDashboard({
     const rank3 = presentEvaluated[2];
 
     const resultsList: ParticipantResult[] = [
-      { rank: 1, participantName: rank1?.name || 'Unassigned', college: rank1?.college || 'N/A', score: String(rank1?.score || 0) },
-      { rank: 2, participantName: rank2?.name || 'Unassigned', college: rank2?.college || 'N/A', score: String(rank2?.score || 0) },
-      { rank: 3, participantName: rank3?.name || 'Unassigned', college: rank3?.college || 'N/A', score: String(rank3?.score || 0) },
+      { 
+        rank: 1, 
+        participantName: rank1?.teamName ? rank1.teamName : (rank1?.name || 'Unassigned'), 
+        college: rank1?.college || 'N/A', 
+        score: String(rank1?.score || 0) 
+      },
+      { 
+        rank: 2, 
+        participantName: rank2?.teamName ? rank2.teamName : (rank2?.name || 'Unassigned'), 
+        college: rank2?.college || 'N/A', 
+        score: String(rank2?.score || 0) 
+      },
+      { 
+        rank: 3, 
+        participantName: rank3?.teamName ? rank3.teamName : (rank3?.name || 'Unassigned'), 
+        college: rank3?.college || 'N/A', 
+        score: String(rank3?.score || 0) 
+      },
     ];
 
     // 1. Update event in state
@@ -576,9 +591,9 @@ export default function HostDashboard({
     const resultDoc = {
       resultId: `RES-${myAssignedEvent.id}`,
       eventId: myAssignedEvent.id,
-      rank1: rank1 ? `${rank1.name} [ID: ${rank1.id}] (${rank1.college})` : 'Unassigned',
-      rank2: rank2 ? `${rank2.name} [ID: ${rank2.id}] (${rank2.college})` : 'Unassigned',
-      rank3: rank3 ? `${rank3.name} [ID: ${rank3.id}] (${rank3.college})` : 'Unassigned',
+      rank1: rank1 ? (rank1.teamName ? `${rank1.teamName} (Leader: ${rank1.name}) [ID: ${rank1.id}] (${rank1.college})` : `${rank1.name} [ID: ${rank1.id}] (${rank1.college})`) : 'Unassigned',
+      rank2: rank2 ? (rank2.teamName ? `${rank2.teamName} (Leader: ${rank2.name}) [ID: ${rank2.id}] (${rank2.college})` : `${rank2.name} [ID: ${rank2.id}] (${rank2.college})`) : 'Unassigned',
+      rank3: rank3 ? (rank3.teamName ? `${rank3.teamName} (Leader: ${rank3.name}) [ID: ${rank3.id}] (${rank3.college})` : `${rank3.name} [ID: ${rank3.id}] (${rank3.college})`) : 'Unassigned',
       judgeRemarks: `Ranks automatically compiled and certified by Host for ${myAssignedEvent.title} on ${new Date().toLocaleDateString()}`,
       published: true,
       publishedAt: new Date().toISOString(),
@@ -1253,6 +1268,12 @@ export default function HostDashboard({
                           <AlertCircle className="w-4 h-4 mx-auto mb-1 text-amber-700" />
                           Event is completed. Attendance/Judging edits are deactivated. Proceed to compiling and publishing the Results tab!
                         </div>
+                        <button
+                          onClick={handlePublishResults}
+                          className="w-full h-11 bg-primary text-on-primary hover:opacity-95 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                        >
+                          <Award className="w-4.5 h-4.5" /> Compile & Publish Results
+                        </button>
                         <div className="grid grid-cols-2 gap-2">
                           <button
                             onClick={() => handleResetEvent('Upcoming')}
@@ -1337,12 +1358,44 @@ export default function HostDashboard({
                           </tr>
                         </thead>
                         <tbody>
-                          {myAttendees.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()) || a.college.toLowerCase().includes(searchQuery.toLowerCase()) || a.id.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
+                          {myAttendees.filter(a => {
+                            const s = searchQuery.toLowerCase().trim();
+                            if (!s) return true;
+                            return (
+                              a.name.toLowerCase().includes(s) ||
+                              a.college.toLowerCase().includes(s) ||
+                              a.id.toLowerCase().includes(s) ||
+                              (a.teamName || '').toLowerCase().includes(s) ||
+                              (a.phone || '').includes(s) ||
+                              (a.email || '').toLowerCase().includes(s) ||
+                              (a.teamMembers?.some(m => 
+                                m.name.toLowerCase().includes(s) ||
+                                (m.phone || '').includes(s) ||
+                                m.email.toLowerCase().includes(s)
+                              ) ?? false)
+                            );
+                          }).length === 0 ? (
                             <tr>
                               <td colSpan={6} className="p-8 text-center text-on-surface-variant italic">No matched participants found.</td>
                             </tr>
                           ) : (
-                            myAttendees.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()) || a.college.toLowerCase().includes(searchQuery.toLowerCase()) || a.id.toLowerCase().includes(searchQuery.toLowerCase())).map(att => (
+                            myAttendees.filter(a => {
+                              const s = searchQuery.toLowerCase().trim();
+                              if (!s) return true;
+                              return (
+                                a.name.toLowerCase().includes(s) ||
+                                a.college.toLowerCase().includes(s) ||
+                                a.id.toLowerCase().includes(s) ||
+                                (a.teamName || '').toLowerCase().includes(s) ||
+                                (a.phone || '').includes(s) ||
+                                (a.email || '').toLowerCase().includes(s) ||
+                                (a.teamMembers?.some(m => 
+                                  m.name.toLowerCase().includes(s) ||
+                                  (m.phone || '').includes(s) ||
+                                  m.email.toLowerCase().includes(s)
+                                ) ?? false)
+                              );
+                            }).map(att => (
                               <tr 
                                 key={att.id} 
                                 className="border-b border-outline-variant/30 hover:bg-surface-container/30 transition-colors"
@@ -1803,22 +1856,61 @@ export default function HostDashboard({
               </div>
 
               <div className="bg-surface rounded-2xl border border-outline-variant p-4 space-y-2 max-h-[500px] overflow-y-auto">
-                {myAttendees.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()) || a.college.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
+                {myAttendees.filter(a => {
+                  const s = searchQuery.toLowerCase().trim();
+                  if (!s) return true;
+                  return (
+                    a.name.toLowerCase().includes(s) ||
+                    a.college.toLowerCase().includes(s) ||
+                    a.id.toLowerCase().includes(s) ||
+                    (a.teamName || '').toLowerCase().includes(s) ||
+                    (a.phone || '').includes(s) ||
+                    (a.email || '').toLowerCase().includes(s) ||
+                    (a.teamMembers?.some(m => 
+                      m.name.toLowerCase().includes(s) ||
+                      (m.phone || '').includes(s) ||
+                      m.email.toLowerCase().includes(s)
+                    ) ?? false)
+                  );
+                }).length === 0 ? (
                   <p className="p-8 text-center text-xs text-on-surface-variant italic">No matched participants found.</p>
                 ) : (
-                  myAttendees.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()) || a.college.toLowerCase().includes(searchQuery.toLowerCase())).map(att => (
+                  myAttendees.filter(a => {
+                    const s = searchQuery.toLowerCase().trim();
+                    if (!s) return true;
+                    return (
+                      a.name.toLowerCase().includes(s) ||
+                      a.college.toLowerCase().includes(s) ||
+                      a.id.toLowerCase().includes(s) ||
+                      (a.teamName || '').toLowerCase().includes(s) ||
+                      (a.phone || '').includes(s) ||
+                      (a.email || '').toLowerCase().includes(s) ||
+                      (a.teamMembers?.some(m => 
+                        m.name.toLowerCase().includes(s) ||
+                        (m.phone || '').includes(s) ||
+                        m.email.toLowerCase().includes(s)
+                      ) ?? false)
+                    );
+                  }).map(att => (
                     <div 
                       key={att.id} 
                       className="flex flex-col sm:flex-row sm:items-center justify-between bg-surface-container-lowest p-3 border border-outline-variant/35 rounded-xl gap-3 hover:border-outline-variant transition-all"
                     >
                       <div>
                         <h3 className="font-extrabold text-sm text-on-surface flex items-center gap-2">
-                          {att.name}
+                          {att.teamName ? `Team: ${att.teamName}` : att.name}
                           <span className="font-mono text-[10px] text-primary bg-primary/5 px-1.5 py-0.5 rounded border border-primary/10">
                             {att.participantId || att.id}
                           </span>
                         </h3>
-                        <p className="text-xs text-on-surface-variant font-medium mt-0.5">{att.college} • {att.teamName ? `Team: ${att.teamName}` : 'Individual'}</p>
+                        <p className="text-xs text-on-surface-variant font-medium mt-0.5">
+                          {att.college} • {att.teamName ? `Leader: ${att.name}` : 'Individual'}
+                          {att.teamName && att.teamMembers && att.teamMembers.length > 0 && (
+                            <span className="block text-[10px] italic mt-0.5 text-on-surface-variant">
+                              Members: {att.teamMembers.map(m => m.name).join(', ')}
+                            </span>
+                          )}
+                        </p>
                       </div>
 
                       <div className="flex gap-2">
@@ -2044,7 +2136,9 @@ export default function HostDashboard({
                               <div className="flex items-center gap-1.5 min-w-0">
                                 <span className="text-xs font-bold">{medal}</span>
                                 <div className="min-w-0">
-                                  <span className="text-[11px] font-black block truncate leading-none">{student.name}</span>
+                                  <span className="text-[11px] font-black block truncate leading-none">
+                                    {student.teamName ? `Team: ${student.teamName}` : student.name}
+                                  </span>
                                   <span className="text-[8px] font-medium opacity-85 block truncate font-mono uppercase">{student.participantId || student.id}</span>
                                 </div>
                               </div>
@@ -2085,8 +2179,12 @@ export default function HostDashboard({
                             }`}
                           >
                             <div className="flex-1 min-w-0">
-                              <span className="text-xs font-black text-on-surface block truncate">{att.name}</span>
-                              <span className="text-[9px] font-bold text-on-surface-variant uppercase truncate block">{att.college}</span>
+                              <span className="text-xs font-black text-on-surface block truncate">
+                                {att.teamName ? `Team: ${att.teamName}` : att.name}
+                              </span>
+                              <span className="text-[9px] font-bold text-on-surface-variant uppercase truncate block">
+                                {att.teamName ? `Leader: ${att.name} • ${att.college}` : att.college}
+                              </span>
                               
                               <div className="flex items-center gap-2 mt-1">
                                 <span className="font-mono text-[9px] text-primary">{att.participantId || att.id}</span>
@@ -2240,6 +2338,32 @@ export default function HostDashboard({
             </motion.div>
           )}
 
+          {/* TAB: RESULTS */}
+          {activeTab === 'results' && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+              
+              <div className="pb-3 border-b border-outline-variant/40 flex justify-between items-center flex-wrap gap-4">
+                <div>
+                  <h1 className="text-2xl font-extrabold text-on-surface tracking-tight">Official Standings & Certification</h1>
+                  <p className="text-xs text-on-surface-variant">Compile, lock, and publish final podium results to the Super Admin overview.</p>
+                </div>
+                
+                {myAssignedEvent.status === 'Completed' && !isResultsPublished && (
+                  <button
+                    onClick={handlePublishResults}
+                    className="h-10 px-4 bg-primary text-on-primary hover:opacity-95 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Award className="w-4.5 h-4.5" /> Compile & Publish Results
+                  </button>
+                )}
+
+                {isResultsPublished && (
+                  <div className="bg-emerald-50 dark:bg-emerald-950/15 border border-emerald-200 text-emerald-700 dark:text-emerald-300 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5">
+                    <CheckCircle className="w-4.5 h-4.5" /> Standings Certified & Published
+                  </div>
+                )}
+              </div>
+
               {/* Ranks compilation Podium / Batch-wise Standings */}
               {eventBatches.length > 0 ? (
                 <div className="space-y-8">
@@ -2274,10 +2398,15 @@ export default function HostDashboard({
                             <div>
                               <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">🥇 First Place</span>
                               <h4 className="text-lg font-black text-on-surface mt-2 truncate">
-                                {batchAttendees[0]?.name || 'Unassigned'}
+                                {batchAttendees[0]?.teamName ? batchAttendees[0].teamName : (batchAttendees[0]?.name || 'Unassigned')}
                               </h4>
                               <p className="text-xs text-on-surface-variant font-medium truncate">
                                 {batchAttendees[0]?.college || 'N/A'}
+                                {batchAttendees[0]?.teamName && (
+                                  <span className="block text-[9px] text-on-surface-variant/80 truncate font-semibold mt-0.5">
+                                    Leader: {batchAttendees[0].name} ({batchAttendees[0].teamMembers?.map(m => m.name).join(', ')})
+                                  </span>
+                                )}
                               </p>
                             </div>
                             <div className="text-xs font-bold mt-4">
@@ -2294,10 +2423,15 @@ export default function HostDashboard({
                             <div>
                               <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">🥈 Second Place</span>
                               <h4 className="text-lg font-black text-on-surface mt-2 truncate">
-                                {batchAttendees[1]?.name || 'Unassigned'}
+                                {batchAttendees[1]?.teamName ? batchAttendees[1].teamName : (batchAttendees[1]?.name || 'Unassigned')}
                               </h4>
                               <p className="text-xs text-on-surface-variant font-medium truncate">
                                 {batchAttendees[1]?.college || 'N/A'}
+                                {batchAttendees[1]?.teamName && (
+                                  <span className="block text-[9px] text-on-surface-variant/80 truncate font-semibold mt-0.5">
+                                    Leader: {batchAttendees[1].name} ({batchAttendees[1].teamMembers?.map(m => m.name).join(', ')})
+                                  </span>
+                                )}
                               </p>
                             </div>
                             <div className="text-xs font-bold mt-4">
@@ -2314,10 +2448,15 @@ export default function HostDashboard({
                             <div>
                               <span className="text-[10px] font-bold text-amber-900/85 dark:text-amber-400 uppercase tracking-wider block">🥉 Third Place</span>
                               <h4 className="text-lg font-black text-on-surface mt-2 truncate">
-                                {batchAttendees[2]?.name || 'Unassigned'}
+                                {batchAttendees[2]?.teamName ? batchAttendees[2].teamName : (batchAttendees[2]?.name || 'Unassigned')}
                               </h4>
                               <p className="text-xs text-on-surface-variant font-medium truncate">
                                 {batchAttendees[2]?.college || 'N/A'}
+                                {batchAttendees[2]?.teamName && (
+                                  <span className="block text-[9px] text-amber-900/80 dark:text-amber-400/80 truncate font-semibold mt-0.5">
+                                    Leader: {batchAttendees[2].name} ({batchAttendees[2].teamMembers?.map(m => m.name).join(', ')})
+                                  </span>
+                                )}
                               </p>
                             </div>
                             <div className="text-xs font-bold mt-4">
@@ -2356,7 +2495,19 @@ export default function HostDashboard({
                                         {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
                                       </td>
                                       <td className="p-2.5 font-mono font-bold text-primary">{att.participantId || att.id}</td>
-                                      <td className="p-2.5 font-extrabold text-on-surface">{att.name}</td>
+                                      <td className="p-2.5">
+                                        {att.teamName ? (
+                                          <div>
+                                            <div className="font-extrabold text-on-surface text-sm">Team: {att.teamName}</div>
+                                            <div className="text-[10px] text-on-surface-variant font-medium">Leader: {att.name}</div>
+                                            {att.teamMembers && att.teamMembers.length > 0 && (
+                                              <div className="text-[9px] text-on-surface-variant italic">Members: {att.teamMembers.map(m => m.name).join(', ')}</div>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <div className="font-extrabold text-on-surface">{att.name}</div>
+                                        )}
+                                      </td>
                                       <td className="p-2.5 text-on-surface-variant font-medium">{att.college}</td>
                                       <td className="p-2.5 font-black text-primary">{att.score || 0}</td>
                                       <td className="p-2.5 text-on-surface-variant italic truncate max-w-xs">{att.remarks || 'No remarks.'}</td>
@@ -2398,10 +2549,15 @@ export default function HostDashboard({
                             <div>
                               <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">🥇 First Place</span>
                               <h4 className="text-lg font-black text-on-surface mt-2 truncate">
-                                {unassignedAttendees[0]?.name || 'Unassigned'}
+                                {unassignedAttendees[0]?.teamName ? unassignedAttendees[0].teamName : (unassignedAttendees[0]?.name || 'Unassigned')}
                               </h4>
                               <p className="text-xs text-on-surface-variant font-medium truncate">
                                 {unassignedAttendees[0]?.college || 'N/A'}
+                                {unassignedAttendees[0]?.teamName && (
+                                  <span className="block text-[9px] text-on-surface-variant/80 truncate font-semibold mt-0.5">
+                                    Leader: {unassignedAttendees[0].name} ({unassignedAttendees[0].teamMembers?.map(m => m.name).join(', ')})
+                                  </span>
+                                )}
                               </p>
                             </div>
                             <div className="text-xs font-bold mt-4">
@@ -2418,10 +2574,15 @@ export default function HostDashboard({
                             <div>
                               <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">🥈 Second Place</span>
                               <h4 className="text-lg font-black text-on-surface mt-2 truncate">
-                                {unassignedAttendees[1]?.name || 'Unassigned'}
+                                {unassignedAttendees[1]?.teamName ? unassignedAttendees[1].teamName : (unassignedAttendees[1]?.name || 'Unassigned')}
                               </h4>
                               <p className="text-xs text-on-surface-variant font-medium truncate">
                                 {unassignedAttendees[1]?.college || 'N/A'}
+                                {unassignedAttendees[1]?.teamName && (
+                                  <span className="block text-[9px] text-on-surface-variant/80 truncate font-semibold mt-0.5">
+                                    Leader: {unassignedAttendees[1].name} ({unassignedAttendees[1].teamMembers?.map(m => m.name).join(', ')})
+                                  </span>
+                                )}
                               </p>
                             </div>
                             <div className="text-xs font-bold mt-4">
@@ -2438,10 +2599,15 @@ export default function HostDashboard({
                             <div>
                               <span className="text-[10px] font-bold text-amber-900/85 dark:text-amber-400 uppercase tracking-wider block">🥉 Third Place</span>
                               <h4 className="text-lg font-black text-on-surface mt-2 truncate">
-                                {unassignedAttendees[2]?.name || 'Unassigned'}
+                                {unassignedAttendees[2]?.teamName ? unassignedAttendees[2].teamName : (unassignedAttendees[2]?.name || 'Unassigned')}
                               </h4>
                               <p className="text-xs text-on-surface-variant font-medium truncate">
                                 {unassignedAttendees[2]?.college || 'N/A'}
+                                {unassignedAttendees[2]?.teamName && (
+                                  <span className="block text-[9px] text-amber-900/80 dark:text-amber-400/80 truncate font-semibold mt-0.5">
+                                    Leader: {unassignedAttendees[2].name} ({unassignedAttendees[2].teamMembers?.map(m => m.name).join(', ')})
+                                  </span>
+                                )}
                               </p>
                             </div>
                             <div className="text-xs font-bold mt-4">
@@ -2475,7 +2641,19 @@ export default function HostDashboard({
                                       {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
                                     </td>
                                     <td className="p-2.5 font-mono font-bold text-primary">{att.participantId || att.id}</td>
-                                    <td className="p-2.5 font-extrabold text-on-surface">{att.name}</td>
+                                    <td className="p-2.5">
+                                      {att.teamName ? (
+                                        <div>
+                                          <div className="font-extrabold text-on-surface text-sm">Team: {att.teamName}</div>
+                                          <div className="text-[10px] text-on-surface-variant font-medium">Leader: {att.name}</div>
+                                          {att.teamMembers && att.teamMembers.length > 0 && (
+                                            <div className="text-[9px] text-on-surface-variant italic">Members: {att.teamMembers.map(m => m.name).join(', ')}</div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <div className="font-extrabold text-on-surface">{att.name}</div>
+                                      )}
+                                    </td>
                                     <td className="p-2.5 text-on-surface-variant font-medium">{att.college}</td>
                                     <td className="p-2.5 font-black text-primary">{att.score || 0}</td>
                                     <td className="p-2.5 text-on-surface-variant italic truncate max-w-xs">{att.remarks || 'No remarks.'}</td>
@@ -2492,19 +2670,30 @@ export default function HostDashboard({
               ) : (
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    
                     {/* FIRST PLACE */}
                     <div className="bg-amber-50 dark:bg-amber-950/10 border-2 border-amber-400 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-48 shadow-sm">
                       <div className="absolute -right-4 -bottom-4 text-amber-300/30 font-black text-8xl pointer-events-none select-none">1</div>
                       
                       <div>
                         <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">🥇 Grand Winner (Rank 1)</span>
-                        <h3 className="text-xl font-black text-on-surface mt-2">
-                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[0]?.name || 'Unassigned'}
-                        </h3>
-                        <p className="text-xs text-on-surface-variant font-medium truncate">
-                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[0]?.college || 'N/A'}
-                        </p>
+                        {(() => {
+                          const winnerObj = myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[0];
+                          return (
+                            <>
+                              <h3 className="text-xl font-black text-on-surface mt-2 truncate">
+                                {winnerObj?.teamName ? winnerObj.teamName : (winnerObj?.name || 'Unassigned')}
+                              </h3>
+                              <p className="text-xs text-on-surface-variant font-medium truncate">
+                                {winnerObj?.college || 'N/A'}
+                                {winnerObj?.teamName && (
+                                  <span className="block text-[9px] text-on-surface-variant/80 truncate font-semibold mt-0.5">
+                                    Leader: {winnerObj.name} ({winnerObj.teamMembers?.map(m => m.name).join(', ')})
+                                  </span>
+                                )}
+                              </p>
+                            </>
+                          );
+                        })()}
                       </div>
 
                       <div className="text-xs font-bold mt-4">
@@ -2521,12 +2710,24 @@ export default function HostDashboard({
                       
                       <div>
                         <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">🥈 Runner Up (Rank 2)</span>
-                        <h3 className="text-xl font-black text-on-surface mt-2">
-                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[1]?.name || 'Unassigned'}
-                        </h3>
-                        <p className="text-xs text-on-surface-variant font-medium truncate">
-                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[1]?.college || 'N/A'}
-                        </p>
+                        {(() => {
+                          const runnerObj = myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[1];
+                          return (
+                            <>
+                              <h3 className="text-xl font-black text-on-surface mt-2 truncate">
+                                {runnerObj?.teamName ? runnerObj.teamName : (runnerObj?.name || 'Unassigned')}
+                              </h3>
+                              <p className="text-xs text-on-surface-variant font-medium truncate">
+                                {runnerObj?.college || 'N/A'}
+                                {runnerObj?.teamName && (
+                                  <span className="block text-[9px] text-on-surface-variant/80 truncate font-semibold mt-0.5">
+                                    Leader: {runnerObj.name} ({runnerObj.teamMembers?.map(m => m.name).join(', ')})
+                                  </span>
+                                )}
+                              </p>
+                            </>
+                          );
+                        })()}
                       </div>
 
                       <div className="text-xs font-bold mt-4">
@@ -2543,12 +2744,24 @@ export default function HostDashboard({
                       
                       <div>
                         <span className="text-[10px] font-bold text-amber-900/85 dark:text-amber-400 uppercase tracking-wider block">🥉 Second Runner Up (Rank 3)</span>
-                        <h3 className="text-xl font-black text-on-surface mt-2">
-                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[2]?.name || 'Unassigned'}
-                        </h3>
-                        <p className="text-xs text-on-surface-variant font-medium truncate">
-                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[2]?.college || 'N/A'}
-                        </p>
+                        {(() => {
+                          const thirdObj = myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[2];
+                          return (
+                            <>
+                              <h3 className="text-xl font-black text-on-surface mt-2 truncate">
+                                {thirdObj?.teamName ? thirdObj.teamName : (thirdObj?.name || 'Unassigned')}
+                              </h3>
+                              <p className="text-xs text-on-surface-variant font-medium truncate">
+                                {thirdObj?.college || 'N/A'}
+                                {thirdObj?.teamName && (
+                                  <span className="block text-[9px] text-amber-900/85 dark:text-amber-400/80 truncate font-semibold mt-0.5">
+                                    Leader: {thirdObj.name} ({thirdObj.teamMembers?.map(m => m.name).join(', ')})
+                                  </span>
+                                )}
+                              </p>
+                            </>
+                          );
+                        })()}
                       </div>
 
                       <div className="text-xs font-bold mt-4">
@@ -2558,7 +2771,6 @@ export default function HostDashboard({
                         </span>
                       </div>
                     </div>
-
                   </div>
 
                   {/* Comprehensive Leaderboard Score list */}
@@ -2595,7 +2807,19 @@ export default function HostDashboard({
                                     {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
                                   </td>
                                   <td className="p-3 font-mono font-bold text-primary">{att.participantId || att.id}</td>
-                                  <td className="p-3 font-extrabold text-on-surface text-sm">{att.name}</td>
+                                   <td className="p-3 text-sm">
+                                     {att.teamName ? (
+                                       <div>
+                                         <div className="font-extrabold text-on-surface text-sm">Team: {att.teamName}</div>
+                                         <div className="text-[10px] text-on-surface-variant font-medium">Leader: {att.name}</div>
+                                         {att.teamMembers && att.teamMembers.length > 0 && (
+                                           <div className="text-[9px] text-on-surface-variant italic">Members: {att.teamMembers.map(m => m.name).join(', ')}</div>
+                                         )}
+                                       </div>
+                                     ) : (
+                                       <div className="font-extrabold text-on-surface">{att.name}</div>
+                                     )}
+                                   </td>
                                   <td className="p-3 text-on-surface-variant font-medium">{att.college}</td>
                                   <td className="p-3 font-black text-primary text-sm">{att.score || 0}</td>
                                   <td className="p-3 text-on-surface-variant italic truncate max-w-xs">{att.remarks || 'No assessor feedback remarks recorded.'}</td>
@@ -2608,6 +2832,8 @@ export default function HostDashboard({
                   </div>
                 </>
               )}
+            </motion.div>
+          )}
 
           {/* Start Event with Batch Selection Modal */}
           {showStartBatchModal && (

@@ -64,11 +64,11 @@ export default function RegistrationSuccess({
     // Participant Name
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 22px system-ui, sans-serif';
-    ctx.fillText(attendee.name, canvas.width / 2, 185);
+    ctx.fillText(attendee.teamName ? `Team: ${attendee.teamName}` : attendee.name, canvas.width / 2, 185);
 
     ctx.fillStyle = '#94a3b8';
     ctx.font = '11px system-ui, sans-serif';
-    ctx.fillText('PARTICIPANT NAME', canvas.width / 2, 210);
+    ctx.fillText(attendee.teamName ? `Leader: ${attendee.name}` : 'PARTICIPANT NAME', canvas.width / 2, 210);
 
     // Participant ID (Primary reference)
     ctx.fillStyle = '#3b82f6';
@@ -141,6 +141,31 @@ export default function RegistrationSuccess({
             )}
 
             <div className="space-y-4 text-xs">
+              <div>
+                <span className="block text-[10px] uppercase font-bold text-on-surface-variant mb-0.5">
+                  {attendee.teamName ? 'Team Name' : 'Participant Name'}
+                </span>
+                <span className="text-sm font-semibold text-on-surface">
+                  {attendee.teamName ? attendee.teamName : attendee.name}
+                </span>
+              </div>
+
+              {attendee.teamName && (
+                <div>
+                  <span className="block text-[10px] uppercase font-bold text-on-surface-variant mb-0.5">Team Leader</span>
+                  <span className="text-sm font-semibold text-on-surface">{attendee.name}</span>
+                </div>
+              )}
+
+              {attendee.teamName && attendee.teamMembers && attendee.teamMembers.length > 0 && (
+                <div>
+                  <span className="block text-[10px] uppercase font-bold text-on-surface-variant mb-0.5">Team Members</span>
+                  <span className="text-sm font-semibold text-on-surface">
+                    {attendee.teamMembers.map(m => m.name).join(', ')}
+                  </span>
+                </div>
+              )}
+
               <div>
                 <span className="block text-[10px] uppercase font-bold text-on-surface-variant mb-0.5">Participant ID</span>
                 <span className="text-sm font-mono font-bold text-primary">{attendee.participantId || attendee.id}</span>
