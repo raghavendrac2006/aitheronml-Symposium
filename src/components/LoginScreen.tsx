@@ -243,226 +243,192 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
   };
 
   return (
-    <div id="login-container" className="min-h-screen bg-black text-on-surface flex flex-col items-center justify-center relative font-sans overflow-y-auto px-4 py-12">
-      
-      {/* Background Section with Kuppam College Main Building Hero spanning the entire viewport */}
-      <div className="absolute inset-0 z-0">
-        <div 
-          className="w-full h-full bg-cover bg-center transition-all duration-700" 
-          style={{ 
-            backgroundImage: 'url("https://lh3.googleusercontent.com/aida/AP1WRLtYMsBrLjnHA4PXsD56kBusXwugqcAYGO5DRkkSh0sO16WbB_72wtbIlxOWdtt2GxoJ0zgXr-7iXw09u3DknMAFLtIm66lFxxeZR4X6grYrR7t3DQEnF6DaF_JXwBCuiWygIk2XGX5iiFbk3ihn1egOyFYfh4htaPr3K39kt6MJMiMeEwnZj0-CtJ2MrN3Vcade0nOy81NUUMT4cRc2juiCzjVJ41Qx8egVmtNPaVtUjtXHkqW4Z1iaw8_3")' 
-          }}
-        />
-        {/* Subtle dark overlay so the login form remains readable */}
-        <div className="absolute inset-0 bg-black/75" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/70" />
-      </div>
-
-      {/* Header with Kuppam Engineering College Logo at top-left corner */}
-      <header className="absolute top-0 left-0 w-full z-20 flex px-6 md:px-8 py-6 justify-between items-center">
+    <div 
+      id="login-container" 
+      className="min-h-screen text-white flex flex-col justify-between items-center relative font-sans px-4 py-6 md:px-8"
+      style={{ background: 'radial-gradient(circle, #5b589c 0%, #2f2b60 100%)' }}
+    >
+      {/* Top Header */}
+      <header className="w-full flex justify-between items-center z-10 py-2">
+        {/* Left Side: Logo and College Name */}
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 md:w-14 md:h-14 rounded bg-white shadow-md flex items-center justify-center p-1 overflow-hidden border-2 border-white">
-            <img 
-              alt="Kuppam Engineering College Logo" 
-              className="w-full h-full object-contain" 
-              src="https://lh3.googleusercontent.com/aida/AP1WRLtgnUPvtqegkk_J3i7PChobpIKH9MRx0UKcGNvB8DzjiCTygldxeqENFAPbA96vDMK7WPjj2JVby1YtdG5Y30h3QMHtUqh1_LklimkPlmOmo0Sr54ItyiU1nXbcWzQJGsb5YIYgAPd014zTnW-uxE5bnwOMfqsIq-mOZkGmKEpkKbukQNtFIAcO8fj57fzbwHwd4aXlXPqMysCPqDBUzQYM_bw_6KBmsXWB2KxH2kn7t0O0DLhV_n6K59xt"
-              referrerPolicy="no-referrer"
-            />
-          </div>
+          <img 
+            alt="Kuppam Engineering College Logo" 
+            className="w-10 h-10 md:w-14 md:h-14 object-contain" 
+            src="https://lh3.googleusercontent.com/aida/AP1WRLtgnUPvtqegkk_J3i7PChobpIKH9MRx0UKcGNvB8DzjiCTygldxeqENFAPbA96vDMK7WPjj2JVby1YtdG5Y30h3QMHtUqh1_LklimkPlmOmo0Sr54ItyiU1nXbcWzQJGsb5YIYgAPd014zTnW-uxE5bnwOMfqsIq-mOZkGmKEpkKbukQNtFIAcO8fj57fzbwHwd4aXlXPqMysCPqDBUzQYM_bw_6KBmsXWB2KxH2kn7t0O0DLhV_n6K59xt"
+            referrerPolicy="no-referrer"
+          />
           <div className="flex flex-col">
-            <span className="font-extrabold text-white text-base md:text-lg tracking-tight drop-shadow-md leading-none mb-0.5">
+            <span className="font-bold text-white text-base md:text-xl tracking-wider uppercase leading-none">
               Kuppam Engineering College
             </span>
-            <span className="text-[9px] md:text-xs font-semibold text-gray-300 uppercase tracking-widest opacity-90 leading-none">
-              Autonomous
+            <span className="text-[10px] md:text-xs text-white/80 mt-1 font-medium leading-none">
+              (Autonomous)
             </span>
           </div>
         </div>
-        
-        {/* Right Side: Department and Symposium logos (hidden on mobile to prevent clutter) */}
-        <div className="hidden sm:flex items-center gap-2">
-          <div className="w-10 h-10 rounded bg-black/40 backdrop-blur shadow-md flex items-center justify-center p-1 overflow-hidden border border-white/20">
-            <img 
-              alt="Department Logo" 
-              className="w-full h-full object-contain" 
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuBt28uq_wm7gJZMv8HipcL93mqUC84oZw6TudoX5AwnON6PlaApJaLQ9O6idymZom791HTPJvDkv23WFptz-CLeMAqVl77oKXaxM0YxrjK8CFKILiXfDvhJw8aBkuCqeOwLIm4rw4XglcnJebMDPWPnWa1WwFqNOS8X7_lnHfGrP9gWL2DGscxbZnbEegTgkwxvDE_HWHcdgToc-ikUxWMQt1NRSo3GpBWjXboWfrOnECQnwMXYzIdCb87KvGXwcC6xMbWbEL9gH_IS"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-          <div className="w-10 h-10 rounded bg-black/40 backdrop-blur shadow-md flex items-center justify-center p-1 overflow-hidden border border-white/20">
-            <img 
-              alt="Symposium Logo" 
-              className="w-full h-full object-contain" 
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuCNp7wPZZt0kyC0HnoRobbyP7YNijLj2AgCWj2CIBtUiyM2wZtHai4BCSoy5EPpKIjpXJVLoVJYbyvN-X1eXJm2Jm41oYFQl2a7F9ucujLCb70JSfK6htpklUrKbWQLfa19D5mAcdVjGm0h0b1iCpzn2MosuBRyAqhBBJGdgz0pd8gMrz_1PwhJ2UyXWukg6PeRcw6QUNXOXrOe0OTr7IIzuThhZ53zow2Ytv0QQWHNJEzHQMRB7_GNYZJbEN4h4zc65YDlZq6UGKsG"
-              referrerPolicy="no-referrer"
-            />
-          </div>
+
+        {/* Right Side: Symposium and Department Logos */}
+        <div className="flex items-center gap-2">
+          <img 
+            alt="Symposium Logo" 
+            className="w-10 h-10 md:w-12 md:h-12 object-contain" 
+            src="https://lh3.googleusercontent.com/aida-public/AB6AXuCNp7wPZZt0kyC0HnoRobbyP7YNijLj2AgCWj2CIBtUiyM2wZtHai4BCSoy5EPpKIjpXJVLoVJYbyvN-X1eXJm2Jm41oYFQl2a7F9ucujLCb70JSfK6htpklUrKbWQLfa19D5mAcdVjGm0h0b1iCpzn2MosuBRyAqhBBJGdgz0pd8gMrz_1PwhJ2UyXWukg6PeRcw6QUNXOXrOe0OTr7IIzuThhZ53zow2Ytv0QQWHNJEzHQMRB7_GNYZJbEN4h4zc65YDlZq6UGKsG"
+            referrerPolicy="no-referrer"
+          />
+          <img 
+            alt="Department Logo" 
+            className="w-10 h-10 md:w-12 md:h-12 object-contain rounded" 
+            src="https://lh3.googleusercontent.com/aida-public/AB6AXuBt28uq_wm7gJZMv8HipcL93mqUC84oZw6TudoX5AwnON6PlaApJaLQ9O6idymZom791HTPJvDkv23WFptz-CLeMAqVl77oKXaxM0YxrjK8CFKILiXfDvhJw8aBkuCqeOwLIm4rw4XglcnJebMDPWPnWa1WwFqNOS8X7_lnHfGrP9gWL2DGscxbZnbEegTgkwxvDE_HWHcdgToc-ikUxWMQt1NRSo3GpBWjXboWfrOnECQnwMXYzIdCb87KvGXwcC6xMbWbEL9gH_IS"
+            referrerPolicy="no-referrer"
+          />
         </div>
       </header>
 
-      {/* Main Content Column with Centered Branding and Login Card */}
-      <div className="relative z-10 w-full max-w-md flex flex-col items-center gap-6 mt-20">
-        
-        {/* Centered AItheronML branding */}
-        <div className="text-center text-white px-2">
-          <span className="block font-bold text-[10px] md:text-xs uppercase tracking-widest text-gray-300 drop-shadow-sm leading-relaxed">
-            Computer Science and Engineering (AI &amp; ML)
-          </span>
-          <motion.h1 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5 }}
-            className="text-4xl md:text-5xl font-black tracking-tight drop-shadow-lg text-white mt-1 leading-tight"
-          >
-            AItheronML
-          </motion.h1>
-          <p className="text-gray-400 text-xs mt-1 max-w-xs mx-auto drop-shadow leading-relaxed">
-            State-of-the-Art Symposium OS
-          </p>
-        </div>
-
-        {/* Login Portal Card */}
-        <motion.div 
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-          className="w-full bg-surface-container-lowest/90 backdrop-blur-md rounded-2xl shadow-2xl border border-outline-variant/30 p-6 md:p-8 relative"
-        >
-          {/* Lock Icon and welcome label */}
-          <div className="text-center mb-6">
-            <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3 shadow-inner">
-              <Lock className="w-6 h-6" />
-            </div>
-            <h2 className="text-xl font-extrabold text-on-surface tracking-tight">Sign In</h2>
-            <p className="text-xs text-on-surface-variant mt-1">
-              Enter your credentials to access the symposium dashboard.
-            </p>
-          </div>
-
-          {error && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="mb-4 p-3 bg-error-container text-on-error-container rounded-lg text-xs flex items-start gap-2 border border-error/20"
-            >
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </motion.div>
-          )}
-
-          <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
+      {/* Main Centered Section */}
+      <main className="w-full flex-grow flex flex-col justify-center items-center z-10 py-6">
+        <div className="w-full max-w-xl flex flex-col items-center gap-6">
+          
+          {/* Centered branding with increased department font sizes */}
+          <div className="text-center px-4 flex flex-col items-center">
+            <h3 className="font-extrabold text-sm md:text-lg tracking-widest text-white/95 uppercase mb-1 drop-shadow-sm">
+              Department of Computer Science and Engineering
+            </h3>
+            <h4 className="font-bold text-xs md:text-sm tracking-wider text-white/80 uppercase mb-4 drop-shadow-sm">
+              (Artificial Intelligence &amp; Machine Learning)
+            </h4>
             
-            {/* Email address entry input with floating-style focus behavior */}
-            <div className="relative group">
-              <input
-                id="login-email"
-                type="email"
-                className="w-full h-12 px-4 pt-4 pb-1 bg-surface-container border border-outline rounded-xl text-on-surface text-sm focus:border-primary focus:border-2 focus:ring-0 outline-none transition-all peer placeholder-transparent"
-                placeholder="Email address"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-              <label 
-                htmlFor="login-email"
-                className="absolute left-4 top-3 text-xs text-on-surface-variant transition-all pointer-events-none origin-left 
-                  peer-placeholder-shown:text-sm peer-placeholder-shown:top-3.5 
-                  peer-focus:top-1 peer-focus:text-xs peer-focus:text-primary 
-                  peer-[:not(:placeholder-shown)]:top-1 peer-[:not(:placeholder-shown)]:text-xs"
-              >
-                Email address
-              </label>
-            </div>
-
-            {/* Password entry input with floating-style focus behavior */}
-            <div className="relative group">
-              <input
-                id="login-password"
-                type="password"
-                className="w-full h-12 px-4 pt-4 pb-1 bg-surface-container border border-outline rounded-xl text-on-surface text-sm focus:border-primary focus:border-2 focus:ring-0 outline-none transition-all peer placeholder-transparent"
-                placeholder="Password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <label 
-                htmlFor="login-password"
-                className="absolute left-4 top-3 text-xs text-on-surface-variant transition-all pointer-events-none origin-left 
-                  peer-placeholder-shown:text-sm peer-placeholder-shown:top-3.5 
-                  peer-focus:top-1 peer-focus:text-xs peer-focus:text-primary 
-                  peer-[:not(:placeholder-shown)]:top-1 peer-[:not(:placeholder-shown)]:text-xs"
-              >
-                Password
-              </label>
-            </div>
-
-            {/* Remember me & Forgot Password Row */}
-            <div className="flex justify-between items-center px-1">
-              <label className="flex items-center gap-2 cursor-pointer group">
-                <input 
-                  type="checkbox" 
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="rounded border-outline text-primary focus:ring-primary focus:ring-offset-0 w-4 h-4 bg-transparent cursor-pointer"
-                />
-                <span className="text-xs font-medium text-on-surface-variant group-hover:text-on-surface transition-colors select-none">
-                  Remember me
-                </span>
-              </label>
-              <button 
-                type="button" 
-                onClick={() => {
-                  alert('Demo Credentials:\n\nSuper Admin:\nEmail: superadmin@gmail.com\nPassword: 12345678\n\nEvent Hosts:\nUse any official host email, e.g. paperpresentation@aitheronml.in\nPassword: 12345678');
-                }} 
-                className="text-xs font-semibold text-primary hover:underline hover:text-primary-container"
-              >
-                Forgot Password?
-              </button>
-            </div>
-
-            {/* Sign In Button */}
-            <button 
-              id="sign-in-btn"
-              disabled={isSubmitting}
-              className={`w-full h-12 mt-2 bg-primary text-on-primary rounded-xl font-semibold shadow-md hover:bg-primary/95 hover:shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer ${
-                isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
-              }`}
-              type="submit"
+            <motion.h1 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5 }}
+              className="font-bold tracking-tight text-white mt-1 leading-none drop-shadow"
+              style={{ fontSize: 'clamp(2.5rem, 6.5vw, 4.5rem)' }}
             >
-              {isSubmitting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Signing In...</span>
-                </>
-              ) : (
-                <>
-                  <span>Sign In</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-
-            {/* Register link */}
-            <div className="text-center mt-2">
-              <button 
-                type="button"
-                onClick={() => setIsRegisterOpen(true)}
-                className="text-xs font-semibold text-primary hover:underline"
-              >
-                Don't have an account? Register for the symposium
-              </button>
-            </div>
-          </form>
-
-          {/* Institutional footer disclaimer */}
-          <div className="mt-6 pt-5 border-t border-outline-variant/30 text-center">
-            <p className="text-xs text-on-surface-variant flex items-center justify-center gap-1.5 font-medium">
-              <ShieldCheck className="w-4 h-4 text-primary shrink-0" />
-              Authorized University Personnel Only
+              AitheronML 2K25
+            </motion.h1>
+            
+            <p className="text-white/90 font-medium text-xs md:text-sm tracking-wide mt-4">
+              National Level Technical Symposium
+            </p>
+            <p className="text-white/70 text-[10px] md:text-xs italic tracking-wider mt-1">
+              Unleashing the Future of Intelligence
             </p>
           </div>
-        </motion.div>
-      </div>
+
+          {/* Login Card */}
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.5 }}
+            className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 md:p-8 relative text-gray-800 text-left"
+          >
+            <h2 className="text-lg font-bold text-gray-900 tracking-tight mb-4">Login</h2>
+
+            {error && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-xs flex items-start gap-2 border border-red-100"
+              >
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </motion.div>
+            )}
+
+            <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+              
+              {/* Email Address */}
+              <div className="flex flex-col">
+                <label 
+                  htmlFor="login-email"
+                  className="text-gray-700 text-xs font-semibold"
+                >
+                  Email Address
+                </label>
+                <input
+                  id="login-email"
+                  type="email"
+                  className="w-full h-11 px-3 mt-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none transition-all"
+                  placeholder="name@example.com"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+
+              {/* Password */}
+              <div className="flex flex-col">
+                <div className="flex justify-between items-center">
+                  <label 
+                    htmlFor="login-password"
+                    className="text-gray-700 text-xs font-semibold"
+                  >
+                    Password
+                  </label>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      alert('Demo Credentials:\n\nSuper Admin:\nEmail: superadmin@gmail.com\nPassword: 12345678\n\nEvent Hosts:\nUse any official host email, e.g. paperpresentation@aitheronml.in\nPassword: 12345678');
+                    }} 
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                  >
+                    Forgot?
+                  </button>
+                </div>
+                <input
+                  id="login-password"
+                  type="password"
+                  className="w-full h-11 px-3 mt-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none transition-all"
+                  placeholder="••••••••"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+
+              {/* Submit Button */}
+              <button 
+                id="sign-in-btn"
+                disabled={isSubmitting}
+                className="w-full h-11 mt-2 bg-[#030852] hover:bg-[#020536] text-white rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                type="submit"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Logging in...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Login</span>
+                    <span className="text-xs">➜</span>
+                  </>
+                )}
+              </button>
+
+              {/* Register link */}
+              <div className="text-center mt-2">
+                <button 
+                  type="button"
+                  onClick={() => setIsRegisterOpen(true)}
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
+                >
+                  Don't have an account? Register for the symposium
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="w-full text-center z-10 py-2 border-t border-white/10">
+        <p className="text-[10px] md:text-xs text-white/50 flex items-center justify-center gap-1.5 font-medium">
+          <ShieldCheck className="w-4 h-4 text-white/60 shrink-0" />
+          Authorized University Personnel Only
+        </p>
+      </footer>
 
       {/* Account Pre-fill floating bubble helper */}
       <div className="fixed bottom-4 right-4 z-40 bg-surface border border-outline-variant p-3 rounded-xl shadow-lg max-w-xs transition-all hover:scale-105">
