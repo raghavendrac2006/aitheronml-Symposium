@@ -5,19 +5,23 @@ import { Clipboard, Check, Download, Home } from 'lucide-react';
 
 interface RegistrationSuccessProps {
   attendee: Attendee;
+  secondAttendee?: Attendee;
   onReturnHome: () => void;
   isSpotSuccess?: boolean;
 }
 
 export default function RegistrationSuccess({ 
   attendee, 
+  secondAttendee,
   onReturnHome, 
   isSpotSuccess = false 
 }: RegistrationSuccessProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopyId = () => {
-    const pId = attendee.participantId || attendee.id;
+    const pId = secondAttendee 
+      ? `${attendee.participantId || attendee.id}, ${secondAttendee.participantId || secondAttendee.id}`
+      : (attendee.participantId || attendee.id);
     navigator.clipboard.writeText(pId);
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
@@ -26,7 +30,7 @@ export default function RegistrationSuccess({
   const handleDownloadPass = () => {
     const canvas = document.createElement('canvas');
     canvas.width = 600;
-    canvas.height = 400;
+    canvas.height = secondAttendee ? 500 : 400;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
@@ -47,58 +51,100 @@ export default function RegistrationSuccess({
     ctx.fillStyle = '#3b82f6';
     ctx.font = 'bold 24px system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('AItheronML Symposium 2026', canvas.width / 2, 75);
+    ctx.fillText('AItheronML Symposium 2026', canvas.width / 2, 65);
 
     ctx.fillStyle = '#94a3b8';
-    ctx.font = '14px system-ui, sans-serif';
-    ctx.fillText('OFFICIAL PARTICIPANT PASS', canvas.width / 2, 110);
+    ctx.font = '13px system-ui, sans-serif';
+    ctx.fillText('OFFICIAL PARTICIPANT PASS', canvas.width / 2, 95);
 
     // Divider line
     ctx.strokeStyle = '#334155';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(50, 135);
-    ctx.lineTo(canvas.width - 50, 135);
+    ctx.moveTo(50, 115);
+    ctx.lineTo(canvas.width - 50, 115);
     ctx.stroke();
 
     // Participant Name
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px system-ui, sans-serif';
-    ctx.fillText(attendee.teamName ? `Team: ${attendee.teamName}` : attendee.name, canvas.width / 2, 185);
+    ctx.font = 'bold 20px system-ui, sans-serif';
+    ctx.fillText(attendee.teamName ? `Team: ${attendee.teamName}` : attendee.name, canvas.width / 2, 150);
 
     ctx.fillStyle = '#94a3b8';
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.fillText(attendee.teamName ? `Leader: ${attendee.name}` : 'PARTICIPANT NAME', canvas.width / 2, 210);
+    ctx.font = '10px system-ui, sans-serif';
+    ctx.fillText(attendee.teamName ? `Leader: ${attendee.name}` : 'PARTICIPANT NAME', canvas.width / 2, 172);
 
-    // Participant ID (Primary reference)
-    ctx.fillStyle = '#3b82f6';
-    ctx.font = 'bold 28px monospace';
-    ctx.fillText(attendee.participantId || attendee.id, canvas.width / 2, 260);
+    if (secondAttendee) {
+      // Event 1 details (Morning)
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 15px system-ui, sans-serif';
+      ctx.fillText(attendee.registeredEventTitle, canvas.width / 2, 220);
 
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.fillText('PARTICIPANT ID', canvas.width / 2, 285);
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.fillText('MORNING EVENT', canvas.width / 2, 240);
 
-    // Registered Event
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '600 16px system-ui, sans-serif';
-    ctx.fillText(attendee.registeredEventTitle, canvas.width / 2, 325);
+      ctx.fillStyle = '#3b82f6';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText(attendee.participantId || attendee.id, canvas.width / 2, 275);
 
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.fillText('REGISTERED EVENT', canvas.width / 2, 345);
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.fillText('MORNING PASS ID', canvas.width / 2, 295);
 
-    // Registration Date
-    const dateStr = attendee.registrationDate ? new Date(attendee.registrationDate).toLocaleString() : new Date().toLocaleString();
-    ctx.fillStyle = '#64748b';
-    ctx.font = '11px monospace';
-    ctx.fillText(`Issued: ${dateStr}`, canvas.width / 2, 375);
+      // Event 2 details (Afternoon)
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 15px system-ui, sans-serif';
+      ctx.fillText(secondAttendee.registeredEventTitle, canvas.width / 2, 340);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.fillText('AFTERNOON EVENT', canvas.width / 2, 360);
+
+      ctx.fillStyle = '#3b82f6';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText(secondAttendee.participantId || secondAttendee.id, canvas.width / 2, 395);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.fillText('AFTERNOON PASS ID', canvas.width / 2, 415);
+
+      // Registration Date
+      const dateStr = attendee.registrationDate ? new Date(attendee.registrationDate).toLocaleString() : new Date().toLocaleString();
+      ctx.fillStyle = '#64748b';
+      ctx.font = '10px monospace';
+      ctx.fillText(`Issued: ${dateStr}`, canvas.width / 2, 465);
+
+    } else {
+      // Single event details (Original Layout)
+      ctx.fillStyle = '#3b82f6';
+      ctx.font = 'bold 28px monospace';
+      ctx.fillText(attendee.participantId || attendee.id, canvas.width / 2, 240);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.fillText('PARTICIPANT ID', canvas.width / 2, 265);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '600 16px system-ui, sans-serif';
+      ctx.fillText(attendee.registeredEventTitle, canvas.width / 2, 310);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.fillText('REGISTERED EVENT', canvas.width / 2, 330);
+
+      // Registration Date
+      const dateStr = attendee.registrationDate ? new Date(attendee.registrationDate).toLocaleString() : new Date().toLocaleString();
+      ctx.fillStyle = '#64748b';
+      ctx.font = '11px monospace';
+      ctx.fillText(`Issued: ${dateStr}`, canvas.width / 2, 365);
+    }
 
     try {
       const dataUrl = canvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.href = dataUrl;
-      link.download = `Pass_${attendee.id}.png`;
+      link.download = secondAttendee ? `Pass_${attendee.id}_${secondAttendee.id}.png` : `Pass_${attendee.id}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -136,7 +182,7 @@ export default function RegistrationSuccess({
             {copied && (
               <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-700 text-xs font-semibold rounded-lg flex items-center gap-2">
                 <Check className="w-4 h-4 text-green-600" />
-                <span>Participant ID Copied Successfully</span>
+                <span>Participant ID(s) Copied Successfully</span>
               </div>
             )}
 
@@ -166,17 +212,47 @@ export default function RegistrationSuccess({
                 </div>
               )}
 
-              <div>
-                <span className="block text-[10px] uppercase font-bold text-on-surface-variant mb-0.5">Participant ID</span>
-                <span className="text-sm font-mono font-bold text-primary">{attendee.participantId || attendee.id}</span>
-              </div>
+              {secondAttendee ? (
+                <>
+                  <div className="py-2 border-t border-outline-variant/30 space-y-3">
+                    <h3 className="text-xs font-bold text-primary uppercase">Event 1 (Morning)</h3>
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-on-surface-variant mb-0.5">Morning Participant ID</span>
+                      <span className="text-sm font-mono font-bold text-primary">{attendee.participantId || attendee.id}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-on-surface-variant mb-0.5">Registered Morning Event</span>
+                      <span className="text-sm font-semibold text-on-surface">{attendee.registeredEventTitle}</span>
+                    </div>
+                  </div>
 
-              <div>
-                <span className="block text-[10px] uppercase font-bold text-on-surface-variant mb-0.5">Registered Event</span>
-                <span className="text-sm font-semibold text-on-surface">{attendee.registeredEventTitle}</span>
-              </div>
+                  <div className="py-2 border-t border-outline-variant/30 space-y-3">
+                    <h3 className="text-xs font-bold text-primary uppercase">Event 2 (Afternoon)</h3>
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-on-surface-variant mb-0.5">Afternoon Participant ID</span>
+                      <span className="text-sm font-mono font-bold text-primary">{secondAttendee.participantId || secondAttendee.id}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-on-surface-variant mb-0.5">Registered Afternoon Event</span>
+                      <span className="text-sm font-semibold text-on-surface">{secondAttendee.registeredEventTitle}</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <span className="block text-[10px] uppercase font-bold text-on-surface-variant mb-0.5">Participant ID</span>
+                    <span className="text-sm font-mono font-bold text-primary">{attendee.participantId || attendee.id}</span>
+                  </div>
 
-              <div>
+                  <div>
+                    <span className="block text-[10px] uppercase font-bold text-on-surface-variant mb-0.5">Registered Event</span>
+                    <span className="text-sm font-semibold text-on-surface">{attendee.registeredEventTitle}</span>
+                  </div>
+                </>
+              )}
+
+              <div className="pt-2 border-t border-outline-variant/30">
                 <span className="block text-[10px] uppercase font-bold text-on-surface-variant mb-0.5">Registration Date</span>
                 <span className="text-sm font-semibold text-on-surface">{formattedDate}</span>
               </div>
@@ -198,7 +274,7 @@ export default function RegistrationSuccess({
               className="bg-secondary-container text-on-secondary-container h-12 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:opacity-95 transition-all w-full cursor-pointer border border-outline-variant/50"
             >
               <Clipboard className="w-4 h-4" />
-              Copy Participant ID
+              {secondAttendee ? 'Copy Participant IDs' : 'Copy Participant ID'}
             </button>
 
             <button 

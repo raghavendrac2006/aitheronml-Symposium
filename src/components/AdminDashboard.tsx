@@ -61,6 +61,7 @@ export default function AdminDashboard({
   // Selected Profile State
   const [selectedAttendeeForProfile, setSelectedAttendeeForProfile] = useState<Attendee | null>(null);
   const [spotAttendeeSuccess, setSpotAttendeeSuccess] = useState<Attendee | null>(null);
+  const [spotAttendeeSecondSuccess, setSpotAttendeeSecondSuccess] = useState<Attendee | null>(null);
 
   // New Filters for Registration Management
   const [collegeFilter, setCollegeFilter] = useState<string>('all');
@@ -1071,8 +1072,10 @@ export default function AdminDashboard({
               {spotAttendeeSuccess ? (
                 <RegistrationSuccess 
                   attendee={spotAttendeeSuccess}
+                  secondAttendee={spotAttendeeSecondSuccess || undefined}
                   onReturnHome={() => {
                     setSpotAttendeeSuccess(null);
+                    setSpotAttendeeSecondSuccess(null);
                     setActiveTab('attendees');
                   }}
                   isSpotSuccess={false}
@@ -1086,8 +1089,19 @@ export default function AdminDashboard({
                     onRegistrationSuccess={(newAtt, extra) => {
                       const allNew = [newAtt, ...(extra || [])];
                       onUpdateAttendees([...attendees, ...allNew]);
-                      onUpdateEvents(events.map(ev => ev.id === newAtt.registeredEventId ? { ...ev, registeredCount: ev.registeredCount + allNew.length } : ev));
+                      
+                      let updatedEvents = [...events];
+                      allNew.forEach(att => {
+                        updatedEvents = updatedEvents.map(ev => ev.id === att.registeredEventId ? { ...ev, registeredCount: ev.registeredCount + 1 } : ev);
+                      });
+                      onUpdateEvents(updatedEvents);
+
                       setSpotAttendeeSuccess(newAtt);
+                      if (extra && extra.length > 0) {
+                        setSpotAttendeeSecondSuccess(extra[0]);
+                      } else {
+                        setSpotAttendeeSecondSuccess(null);
+                      }
                     }}
                     onBackToLogin={() => {}}
                   />
@@ -1102,8 +1116,10 @@ export default function AdminDashboard({
               {spotAttendeeSuccess ? (
                 <RegistrationSuccess 
                   attendee={spotAttendeeSuccess}
+                  secondAttendee={spotAttendeeSecondSuccess || undefined}
                   onReturnHome={() => {
                     setSpotAttendeeSuccess(null);
+                    setSpotAttendeeSecondSuccess(null);
                     setActiveTab('attendees');
                   }}
                   isSpotSuccess={true}
@@ -1115,12 +1131,32 @@ export default function AdminDashboard({
                     attendees={attendees}
                     isSpotRegistration={true}
                     onRegistrationSuccess={(newAtt, extra) => {
-                      newAtt.id = `${newAtt.id}-SPOT`;
-                      const mappedExtra = (extra || []).map(m => ({ ...m, id: `${m.id}-SPOT` }));
-                      const allNew = [newAtt, ...mappedExtra];
+                      const mappedNewAtt = { ...newAtt };
+                      if (!mappedNewAtt.id.endsWith('-SPOT')) {
+                        mappedNewAtt.id = `${mappedNewAtt.id}-SPOT`;
+                      }
+                      const mappedExtra = (extra || []).map(m => {
+                        const copy = { ...m };
+                        if (!copy.id.endsWith('-SPOT')) {
+                          copy.id = `${copy.id}-SPOT`;
+                        }
+                        return copy;
+                      });
+                      const allNew = [mappedNewAtt, ...mappedExtra];
                       onUpdateAttendees([...attendees, ...allNew]);
-                      onUpdateEvents(events.map(ev => ev.id === newAtt.registeredEventId ? { ...ev, registeredCount: ev.registeredCount + allNew.length } : ev));
-                      setSpotAttendeeSuccess(newAtt);
+
+                      let updatedEvents = [...events];
+                      allNew.forEach(att => {
+                        updatedEvents = updatedEvents.map(ev => ev.id === att.registeredEventId ? { ...ev, registeredCount: ev.registeredCount + 1 } : ev);
+                      });
+                      onUpdateEvents(updatedEvents);
+
+                      setSpotAttendeeSuccess(mappedNewAtt);
+                      if (mappedExtra && mappedExtra.length > 0) {
+                        setSpotAttendeeSecondSuccess(mappedExtra[0]);
+                      } else {
+                        setSpotAttendeeSecondSuccess(null);
+                      }
                     }}
                     onBackToLogin={() => {}}
                   />

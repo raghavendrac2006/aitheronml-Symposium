@@ -78,6 +78,7 @@ function AppContent() {
   const [session, setSession] = useState<UserSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [publicRegSuccessAttendee, setPublicRegSuccessAttendee] = useState<Attendee | null>(null);
+  const [publicRegSuccessSecondAttendee, setPublicRegSuccessSecondAttendee] = useState<Attendee | null>(null);
 
   // Core Data States
   const [events, setEvents] = useState<SymposiumEvent[]>([]);
@@ -443,8 +444,10 @@ function AppContent() {
           {publicRegSuccessAttendee ? (
             <RegistrationSuccess
               attendee={publicRegSuccessAttendee}
+              secondAttendee={publicRegSuccessSecondAttendee || undefined}
               onReturnHome={() => {
                 setPublicRegSuccessAttendee(null);
+                setPublicRegSuccessSecondAttendee(null);
               }}
               isSpotSuccess={false}
             />
@@ -457,8 +460,19 @@ function AppContent() {
               onRegistrationSuccess={(newAtt, extra) => {
                 const allNew = [newAtt, ...(extra || [])];
                 updateAttendeesState([...attendees, ...allNew]);
-                updateEventsState(events.map(ev => ev.id === newAtt.registeredEventId ? { ...ev, registeredCount: ev.registeredCount + allNew.length } : ev));
+                
+                let updatedEvents = [...events];
+                allNew.forEach(att => {
+                  updatedEvents = updatedEvents.map(ev => ev.id === att.registeredEventId ? { ...ev, registeredCount: ev.registeredCount + 1 } : ev);
+                });
+                updateEventsState(updatedEvents);
+
                 setPublicRegSuccessAttendee(newAtt);
+                if (extra && extra.length > 0) {
+                  setPublicRegSuccessSecondAttendee(extra[0]);
+                } else {
+                  setPublicRegSuccessSecondAttendee(null);
+                }
               }}
               onBackToLogin={() => {}}
             />

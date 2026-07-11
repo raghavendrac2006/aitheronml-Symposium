@@ -27,10 +27,28 @@ export default function PublicRegistration({
   const [year, setYear] = useState('');
   const [mobile, setMobile] = useState('');
   const [email, setEmail] = useState('');
-  const [eventId, setEventId] = useState('');
+  const [morningEventId, setMorningEventId] = useState('');
+  const [afternoonEventId, setAfternoonEventId] = useState('');
   const [regType, setRegType] = useState<'individual' | 'team'>('individual');
   const [teamName, setTeamName] = useState('');
   const [teamMembersInput, setTeamMembersInput] = useState<Array<{ name: string; phone: string; email: string }>>([]);
+
+  const morningEvents = events.filter(e => e.session === 'Morning Session' || e.session === 'Full-Day Session');
+  const afternoonEvents = events.filter(e => e.session === 'Afternoon Session' || e.session === 'Full-Day Session');
+
+  const morningSelected = events.find(e => e.id === morningEventId);
+  const afternoonSelected = events.find(e => e.id === afternoonEventId);
+  const selectedEvents = [morningSelected, afternoonSelected].filter(Boolean);
+  const supportsTeam = selectedEvents.some(ev => ev.maximumTeamSize > 1);
+  const requiresTeam = selectedEvents.some(ev => ev.minimumTeamSize > 1);
+
+  React.useEffect(() => {
+    if (requiresTeam) {
+      setRegType('team');
+    } else if (!supportsTeam) {
+      setRegType('individual');
+    }
+  }, [supportsTeam, requiresTeam]);
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -59,18 +77,19 @@ export default function PublicRegistration({
     setError(null);
     setLoading(true);
 
-    if (!fullName || !collegeName || !branch || !year || !mobile || !email || !eventId) {
+    if (!fullName || !collegeName || !branch || !year || !mobile || !email) {
       setError('Please fill out all required fields.');
       setLoading(false);
       return;
     }
 
+    if (!morningEventId && !afternoonEventId) {
+      setError('Please select at least one event (Morning, Afternoon, or both) to register.');
+      setLoading(false);
+      return;
+    }
+
     if (regType === 'team') {
-      if (!teamName) {
-        setError('Please provide a team name for Team Entry.');
-        setLoading(false);
-        return;
-      }
       for (let i = 0; i < teamMembersInput.length; i++) {
         const m = teamMembersInput[i];
         if (!m.name.trim() || !m.phone.trim() || !m.email.trim()) {
@@ -82,9 +101,14 @@ export default function PublicRegistration({
     }
 
     try {
-      // Find event details
-      const selectedEvent = events.find(ev => ev.id === eventId);
-      const eventTitle = selectedEvent ? selectedEvent.title : 'AItheronML Symposium';
+      // Find selected events to create
+      const selectedEventsToCreate: SymposiumEvent[] = [];
+      if (morningSelected) {
+        selectedEventsToCreate.push(morningSelected);
+      }
+      if (afternoonSelected && afternoonEventId !== morningEventId) {
+        selectedEventsToCreate.push(afternoonSelected);
+      }
 
       // Generate sequential readable Participant ID (SYM-000001 format)
       let nextNum = 1;
@@ -114,67 +138,78 @@ export default function PublicRegistration({
         nextNum = 1;
       }
 
-      const leaderParticipantId = `SYM-${String(nextNum).padStart(6, '0')}`;
-      const finalLeaderId = isSpotRegistration ? `${leaderParticipantId}-SPOT` : leaderParticipantId;
-      const sharedTeamId = regType === 'team' ? finalLeaderId : '';
-      const teamMembersDataForLeader: Array<{
-        name: string;
-        phone: string;
-        email: string;
-        college: string;
-        branch: string;
-        year: string;
-        participantId: string;
-      }> = [];
+      const createdAttendees: Attendee[] = [];
 
-      if (regType === 'team') {
-        teamMembersInput.forEach((m) => {
-          teamMembersDataForLeader.push({
-            name: m.name.trim(),
-            phone: m.phone.trim(),
-            email: m.email.trim().toLowerCase(),
-            college: collegeName.trim(),
-            branch: branch.trim(),
-            year: year,
-            participantId: finalLeaderId
+      for (let i = 0; i < selectedEventsToCreate.length; i++) {
+        const ev = selectedEventsToCreate[i];
+        const currentNum = nextNum + i;
+        const leaderParticipantId = `SYM-${String(currentNum).padStart(6, '0')}`;
+        const finalLeaderId = isSpotRegistration ? `${leaderParticipantId}-SPOT` : leaderParticipantId;
+        const sharedTeamId = regType === 'team' ? finalLeaderId : '';
+        const teamMembersDataForLeader: Array<{
+          name: string;
+          phone: string;
+          email: string;
+          college: string;
+          branch: string;
+          year: string;
+          participantId: string;
+        }> = [];
+
+        if (regType === 'team') {
+          teamMembersInput.forEach((m) => {
+            teamMembersDataForLeader.push({
+              name: m.name.trim(),
+              phone: m.phone.trim(),
+              email: m.email.trim().toLowerCase(),
+              college: collegeName.trim(),
+              branch: branch.trim(),
+              year: year,
+              participantId: finalLeaderId
+            });
           });
-        });
+        }
+
+        // Create attendee object matching Section 11 schema perfectly
+        const attendeeObj: Attendee = {
+          id: finalLeaderId,
+          participantId: finalLeaderId,
+          name: fullName.trim(),
+          college: collegeName.trim(),
+          branch: branch.trim(),
+          year: year,
+          phone: mobile.trim(),
+          email: email.trim().toLowerCase(),
+          eventId: ev.id,
+          registeredEventId: ev.id,
+          registeredEventTitle: ev.title,
+          teamId: sharedTeamId,
+          registrationType: regType,
+          regType: regType,
+          attendanceStatus: isSpotRegistration ? 'Present' : 'Pending',
+          paymentStatus: isSpotRegistration ? 'Paid' : 'Pending',
+          checkedInAt: isSpotRegistration ? new Date().toISOString() : undefined,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          teamName: regType === 'team' ? (teamName.trim() || undefined) : undefined,
+          memberCount: regType === 'team' ? 1 + teamMembersInput.length : undefined,
+          teamMembers: regType === 'team' ? teamMembersDataForLeader : undefined,
+          registrationDate: new Date().toISOString(),
+          accessLevel: regType === 'team' ? 'Team Leader Pass' : 'Individual Pass',
+          secureToken: `${leaderParticipantId}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`
+        };
+
+        // Save attendee to Firestore
+        await saveAttendeeToFirestore(attendeeObj);
+        createdAttendees.push(attendeeObj);
       }
 
-      // Create attendee object matching Section 11 schema perfectly
-      const leaderAttendee: Attendee = {
-        id: finalLeaderId,
-        participantId: finalLeaderId,
-        name: fullName.trim(),
-        college: collegeName.trim(),
-        branch: branch.trim(),
-        year: year,
-        phone: mobile.trim(),
-        email: email.trim().toLowerCase(),
-        eventId: eventId,
-        registeredEventId: eventId,
-        registeredEventTitle: eventTitle,
-        teamId: sharedTeamId,
-        registrationType: regType,
-        regType: regType,
-        attendanceStatus: isSpotRegistration ? 'Present' : 'Pending',
-        paymentStatus: isSpotRegistration ? 'Paid' : 'Pending',
-        checkedInAt: isSpotRegistration ? new Date().toISOString() : undefined,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        teamName: regType === 'team' ? teamName.trim() : undefined,
-        memberCount: regType === 'team' ? 1 + teamMembersInput.length : undefined,
-        teamMembers: regType === 'team' ? teamMembersDataForLeader : undefined,
-        registrationDate: new Date().toISOString(),
-        accessLevel: regType === 'team' ? 'Team Leader Pass' : 'Individual Pass',
-        secureToken: `${leaderParticipantId}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`
-      };
-
-      // Save leader to Firestore
-      await saveAttendeeToFirestore(leaderAttendee);
-
-      // Trigger callback with success data
-      onRegistrationSuccess(leaderAttendee, []);
+      // Trigger callback with success data (pass first registration, and extra ones in second argument array)
+      if (createdAttendees.length === 1) {
+        onRegistrationSuccess(createdAttendees[0], []);
+      } else if (createdAttendees.length > 1) {
+        onRegistrationSuccess(createdAttendees[0], [createdAttendees[1]]);
+      }
 
     } catch (err: any) {
       console.error("Registration failed:", err);
@@ -327,50 +362,69 @@ export default function PublicRegistration({
                 />
               </div>
 
-              {/* Event Track Selection */}
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-primary uppercase ml-1">Event Track Selection</label>
-                <select 
-                  value={eventId}
-                  onChange={(e) => setEventId(e.target.value)}
-                  className="w-full h-12 px-4 rounded-lg border border-outline bg-transparent text-on-surface focus:border-primary focus:ring-1 focus:ring-primary transition-all text-sm appearance-none"
-                  required
-                >
-                  <option value="">Choose a Symposium Track Event</option>
-                  {events.map(ev => (
-                    <option key={ev.id} value={ev.id}>
-                      {ev.title} ({ev.track} Track)
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Event Session Selectors */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-primary uppercase ml-1">Morning Event Selection</label>
+                  <select 
+                    value={morningEventId}
+                    onChange={(e) => setMorningEventId(e.target.value)}
+                    className="w-full h-12 px-4 rounded-lg border border-outline bg-transparent text-on-surface focus:border-primary focus:ring-1 focus:ring-primary transition-all text-sm appearance-none"
+                  >
+                    <option value="">None (Select Morning Event)</option>
+                    {morningEvents.map(ev => (
+                      <option key={ev.id} value={ev.id}>
+                        {ev.title} ({ev.track})
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              {/* Registration Type Radio Group */}
-              <div className="py-2 border-t border-b border-outline-variant/30">
-                <label className="block text-xs font-semibold text-primary uppercase mb-3 ml-1">Registration Type</label>
-                <div className="flex gap-6">
-                  <label className="flex items-center gap-2 cursor-pointer group">
-                    <input 
-                      type="radio" 
-                      name="regType" 
-                      checked={regType === 'individual'} 
-                      onChange={() => setRegType('individual')}
-                      className="w-4 h-4 text-primary border-outline focus:ring-primary"
-                    />
-                    <span className="text-sm font-medium text-on-surface group-hover:text-primary transition-colors">Individual</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer group">
-                    <input 
-                      type="radio" 
-                      name="regType" 
-                      checked={regType === 'team'} 
-                      onChange={() => setRegType('team')}
-                      className="w-4 h-4 text-primary border-outline focus:ring-primary"
-                    />
-                    <span className="text-sm font-medium text-on-surface group-hover:text-primary transition-colors">Team Entry</span>
-                  </label>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-primary uppercase ml-1">Afternoon Event Selection</label>
+                  <select 
+                    value={afternoonEventId}
+                    onChange={(e) => setAfternoonEventId(e.target.value)}
+                    className="w-full h-12 px-4 rounded-lg border border-outline bg-transparent text-on-surface focus:border-primary focus:ring-1 focus:ring-primary transition-all text-sm appearance-none"
+                  >
+                    <option value="">None (Select Afternoon Event)</option>
+                    {afternoonEvents.map(ev => (
+                      <option key={ev.id} value={ev.id}>
+                        {ev.title} ({ev.track})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
+
+              {/* Registration Type Radio Group (Shown dynamically) */}
+              {supportsTeam && !requiresTeam && (
+                <div className="py-2 border-t border-b border-outline-variant/30">
+                  <label className="block text-xs font-semibold text-primary uppercase mb-3 ml-1">Registration Type</label>
+                  <div className="flex gap-6">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input 
+                        type="radio" 
+                        name="regType" 
+                        checked={regType === 'individual'} 
+                        onChange={() => setRegType('individual')}
+                        className="w-4 h-4 text-primary border-outline focus:ring-primary"
+                      />
+                      <span className="text-sm font-medium text-on-surface group-hover:text-primary transition-colors">Individual</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input 
+                        type="radio" 
+                        name="regType" 
+                        checked={regType === 'team'} 
+                        onChange={() => setRegType('team')}
+                        className="w-4 h-4 text-primary border-outline focus:ring-primary"
+                      />
+                      <span className="text-sm font-medium text-on-surface group-hover:text-primary transition-colors">Team Entry</span>
+                    </label>
+                  </div>
+                </div>
+              )}
 
               {/* Dynamic Team Fields */}
               {regType === 'team' && (
@@ -380,14 +434,13 @@ export default function PublicRegistration({
                   className="space-y-4 pt-2 border-l-2 border-primary/20 pl-4"
                 >
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-primary uppercase ml-1">Team Name</label>
+                    <label className="text-xs font-semibold text-primary uppercase ml-1">Team Name (Optional)</label>
                     <input 
                       type="text" 
                       value={teamName}
                       onChange={(e) => setTeamName(e.target.value)}
                       placeholder="e.g. Neural Frontiers Lab" 
                       className="w-full h-12 px-4 rounded-lg border border-outline bg-transparent text-on-surface focus:border-primary focus:ring-1 focus:ring-primary transition-all text-sm"
-                      required
                     />
                   </div>
 
