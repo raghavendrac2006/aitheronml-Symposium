@@ -243,155 +243,132 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
   };
 
   return (
-    <div 
-      id="login-container" 
-      className="min-h-screen text-white flex flex-col justify-between items-center relative font-sans px-4 py-4 md:px-8 overflow-y-auto"
-      style={{ background: 'radial-gradient(circle, #5b589c 0%, #2f2b60 100%)' }}
-    >
-      {/* Top Header */}
-      <header className="w-full flex justify-between items-center z-10 py-1">
-        {/* Left Side: Logo and College Name */}
-        <div className="flex items-center gap-3">
+    <div id="login-container" className="min-h-screen bg-background text-on-background relative flex flex-col justify-start overflow-hidden font-sans">
+      
+      {/* Background Asset */}
+      <div className="absolute inset-0 z-0">
+        <div 
+          className="w-full h-full bg-cover bg-center scale-105 transform transition-transform duration-1000" 
+          style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuAB0Hxaj9oYZv_qbhc9t18pj1PENvA_KjugxxKpSn7vg72lWN-y2MZ9pIHyi66c-jn61ubusNdOp1X07CvNSJbBoSmswk7CgJeGaasAVWucCi9a2FJlJuCs50JTOx9tny-Ui-8-hgUOVJivkW8Hg4TsanJOXcbLM4cqEI5B2xmoo9YBKdwg9XGaOOoAR6Ww5f76NhcWQokrJuXLHOiU5ekh6w0PwTXp_SGtlSfIR6CszYoMJ7F3GgUcUKhptbERYR0O540eiuoMIFsV")' }}
+        />
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(rgba(8, 12, 95, 0.7), rgba(8, 12, 95, 0.9))' }} />
+      </div>
+
+      {/* Top Navigation Area */}
+      <header className="relative z-20 flex justify-between items-start p-8 md:px-8 md:py-6 w-full">
+        {/* Left Side: KEC Logo & College Name */}
+        <div className="flex items-center gap-4 text-left">
           <img 
-            alt="Kuppam Engineering College Logo" 
-            className="w-10 h-10 md:w-12 md:h-12 object-contain" 
-            src="https://upload.wikimedia.org/wikipedia/commons/4/4e/Kuppam_Engineering_College%2C_Kuppam.png"
+            alt="KEC Logo" 
+            className="w-16 h-16 md:w-20 md:h-20 object-contain" 
+            src="https://lh3.googleusercontent.com/aida-public/AB6AXuBhzQx8AAY4b-Os88jwlrrvra9Y-cdmGf-QQn92y-m8gHRNcUqT3rgjmhnjW6xT7CvAaFmTEy2W8uLfUdCL76UUFD5MLFDo3EbiVOHDz3jKth0BYuRQ5fzngsvQ1iYgILoLbVCMF7xBjMOGComKOn-pJg_5VOezELkR5Yj_R-gla9SqdK7ZRhfdlgV9hT4jM9C4BLh5Nxcu4LRLHkMBElDVXguyx8L7Y--bkS8HJIVvx987ET7BITOKbK-dT7DFBO1xNUpNQKgCwiHu"
             referrerPolicy="no-referrer"
           />
-          <div className="flex flex-col">
-            <span className="font-bold text-white text-base md:text-xl tracking-wider uppercase leading-none">
-              Kuppam Engineering College
-            </span>
-            <span className="text-[10px] md:text-xs text-white/80 mt-1 font-medium leading-none">
-              (Autonomous)
-            </span>
+          <div className="hidden md:block">
+            <h1 className="text-2xl text-white uppercase font-bold tracking-tight">
+              Kuppam ENGINEERING COLLEGE
+            </h1>
+            <p className="text-[11px] font-medium tracking-[0.5px] text-white opacity-90">(Autonomous)</p>
           </div>
         </div>
-
-        {/* Right Side: Symposium and Department Logos */}
-        <div className="flex items-center gap-2">
-          <img 
-            alt="Symposium Logo" 
-            className="w-10 h-10 md:w-11 md:h-11 object-contain" 
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuCNp7wPZZt0kyC0HnoRobbyP7YNijLj2AgCWj2CIBtUiyM2wZtHai4BCSoy5EPpKIjpXJVLoVJYbyvN-X1eXJm2Jm41oYFQl2a7F9ucujLCb70JSfK6htpklUrKbWQLfa19D5mAcdVjGm0h0b1iCpzn2MosuBRyAqhBBJGdgz0pd8gMrz_1PwhJ2UyXWukg6PeRcw6QUNXOXrOe0OTr7IIzuThhZ53zow2Ytv0QQWHNJEzHQMRB7_GNYZJbEN4h4zc65YDlZq6UGKsG"
-            referrerPolicy="no-referrer"
-          />
-          <img 
-            alt="Department Logo" 
-            className="w-10 h-10 md:w-11 md:h-11 object-contain rounded" 
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuBt28uq_wm7gJZMv8HipcL93mqUC84oZw6TudoX5AwnON6PlaApJaLQ9O6idymZom791HTPJvDkv23WFptz-CLeMAqVl77oKXaxM0YxrjK8CFKILiXfDvhJw8aBkuCqeOwLIm4rw4XglcnJebMDPWPnWa1WwFqNOS8X7_lnHfGrP9gWL2DGscxbZnbEegTgkwxvDE_HWHcdgToc-ikUxWMQt1NRSo3GpBWjXboWfrOnECQnwMXYzIdCb87KvGXwcC6xMbWbEL9gH_IS"
-            referrerPolicy="no-referrer"
-          />
+        
+        {/* Right Side: Dept & Symposium Logos */}
+        <div className="flex items-center gap-4">
+          <div className="flex gap-2">
+            <img 
+              alt="CSE AI&amp;ML Logo" 
+              className="w-12 h-12 md:w-16 md:h-16 object-contain" 
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuBfVNxhI4hlz74i8jpOEScujvU8Yj9wJ6mUXpB8uAeHUOzaxYxSbq7MC6tyY_zKaIOndyYVHspX5gnWTlROzl3rm0dqo-rRD9GAfaY6UHQBwwjEwlPeIYdb6Agc9N23gluV80xX7L2ZKdtg6hAEQOdg69tuuM4uV9pssYenJgWtvUN5XmIWQJBnp8TfG_WssjluhF85hTqzBvluE5uIXRz_J4FgQnseW7Q84a-F4_Fu5UoWnkPmDWDorBVfLb7hcwDvdB6vPUTkTi-f"
+              referrerPolicy="no-referrer"
+            />
+            <img 
+              alt="AItheronML Logo" 
+              className="w-12 h-12 md:w-16 md:h-16 object-contain" 
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuDNjUSMqxvbevuodKNEqJikkk1HG5iAnbV5M_ZK1ye5LuKVBMFEQAe48GUcLuhmjVS9PokHQ8o42Ho6Z0PDbgBWKZQyyYUNS4HooEvT9BTI52ltQERzPx--1PfNdDhbBZpjM9xjFXS7ThLlbr7STe8LqkYZtzdxNbZPLBZeIbJnGZVMTLggA-pOmTjFqMiK_Jx7ZrPX1muEmyTKquhXWKolRCZRwqcIqeTfAaj2nm2qQ1Z1WYitbvwj9NUADU4XS-GVkTc9AKdd9Xs"
+              referrerPolicy="no-referrer"
+            />
+          </div>
         </div>
       </header>
 
-      {/* Main Centered Section */}
-      <main className="w-full flex-grow flex flex-col justify-center items-center z-10 py-2">
-        <div className="w-full max-w-xl flex flex-col items-center gap-4">
+      {/* Main Hero Content */}
+      <main className="relative z-20 flex flex-col items-center justify-center flex-grow text-center px-4 -mt-12 w-full">
+        <div className="max-w-4xl space-y-4">
+          <div className="mb-6 space-y-2">
+            <p className="text-white font-bold uppercase tracking-widest text-lg opacity-100">Department of Computer Science and Engineering</p>
+            <p className="text-white font-bold text-lg opacity-100">(Artificial Intelligence &amp; Machine Learning)</p>
+          </div>
           
-          {/* Centered branding with increased department font sizes */}
-          <div className="text-center px-4 flex flex-col items-center">
-            <h3 className="font-extrabold text-sm md:text-lg tracking-widest text-white/95 uppercase mb-0.5 drop-shadow-sm">
-              Department of Computer Science and Engineering
-            </h3>
-            <h4 className="font-bold text-xs md:text-sm tracking-wider text-white/80 uppercase mb-2 drop-shadow-sm">
-              (Artificial Intelligence &amp; Machine Learning)
-            </h4>
-            
-            <motion.h1 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5 }}
-              className="font-bold tracking-tight text-white mt-0.5 leading-none drop-shadow"
-              style={{ fontSize: 'clamp(2.25rem, 6vw, 4.25rem)' }}
-            >
-              AitheronML 2K25
-            </motion.h1>
-            
-            <p className="text-white/90 font-medium text-xs md:text-sm tracking-wide mt-2">
+          <h1 className="text-white text-5xl md:text-[84px] leading-tight mb-1" style={{ textShadow: 'rgba(0, 0, 0, 0.3) 0px 2px 4px', fontWeight: 700 }}>
+            AItheronML 2K25
+          </h1>
+          
+          <div className="space-y-1 pb-8">
+            <h2 className="text-[28px] leading-[36px] text-white font-semibold">
               National Level Technical Symposium
-            </p>
-            <p className="text-white/70 text-[10px] md:text-xs italic tracking-wider mt-0.5">
+            </h2>
+            <p className="text-[22px] leading-[28px] text-white tracking-wide font-medium">
               Unleashing the Future of Intelligence
             </p>
           </div>
 
-          {/* Login Card */}
-          <motion.div 
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.5 }}
-            className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-5 md:p-6 relative text-gray-800 text-left"
-          >
-            <h2 className="text-lg font-bold text-gray-900 tracking-tight mb-3">Login</h2>
+          {/* Modern Corporate Login Box */}
+          <div className="login-box w-full max-w-md mx-auto p-8 rounded-lg border text-left bg-white border-[#c7c5d2]">
+            <h3 className="text-2xl font-semibold text-[#080c5f] mb-6">Login</h3>
 
             {error && (
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-xs flex items-start gap-2 border border-red-100"
+                className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-xs flex items-start gap-2 border border-red-100"
               >
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{error}</span>
               </motion.div>
             )}
 
-            <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
-              
-              {/* Email Address */}
-              <div className="flex flex-col">
-                <label 
-                  htmlFor="login-email"
-                  className="text-gray-700 text-xs font-semibold"
-                >
-                  Email Address
-                </label>
-                <input
-                  id="login-email"
+            <form className="space-y-6" onSubmit={handleSubmit}>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-[#464651]" htmlFor="email">Email Address</label>
+                <input 
+                  className="w-full px-4 py-2 rounded-lg border border-[#c7c5d2] focus:border-[#080c5f] focus:ring-1 focus:ring-[#080c5f] text-gray-900 outline-none transition-all" 
+                  id="email" 
+                  placeholder="name@example.com" 
                   type="email"
-                  className="w-full h-10 px-3 mt-1 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none transition-all"
-                  placeholder="name@example.com"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
-
-              {/* Password */}
-              <div className="flex flex-col">
+              <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <label 
-                    htmlFor="login-password"
-                    className="text-gray-700 text-xs font-semibold"
-                  >
-                    Password
-                  </label>
+                  <label className="block text-sm font-medium text-[#464651]" htmlFor="password">Password</label>
                   <button 
-                    type="button" 
+                    type="button"
                     onClick={() => {
                       alert('Demo Credentials:\n\nSuper Admin:\nEmail: superadmin@gmail.com\nPassword: 12345678\n\nEvent Hosts:\nUse any official host email, e.g. paperpresentation@aitheronml.in\nPassword: 12345678');
-                    }} 
-                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                    }}
+                    className="text-xs text-[#080c5f] hover:underline font-medium"
                   >
                     Forgot?
                   </button>
                 </div>
-                <input
-                  id="login-password"
+                <input 
+                  className="w-full px-4 py-2 rounded-lg border border-[#c7c5d2] focus:border-[#080c5f] focus:ring-1 focus:ring-[#080c5f] text-gray-900 outline-none transition-all" 
+                  id="password" 
+                  placeholder="••••••••" 
                   type="password"
-                  className="w-full h-10 px-3 mt-1 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none transition-all"
-                  placeholder="••••••••"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
-
-              {/* Submit Button */}
+              
               <button 
                 id="sign-in-btn"
                 disabled={isSubmitting}
-                className="w-full h-10 mt-1 bg-[#030852] hover:bg-[#020536] text-white rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full text-white font-medium py-3 rounded-lg shadow-sm transition-all active:scale-[0.98] flex justify-center items-center gap-2 cursor-pointer" 
+                style={{ backgroundColor: 'rgb(33, 39, 115)' }}
                 type="submit"
               >
                 {isSubmitting ? (
@@ -402,7 +379,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
                 ) : (
                   <>
                     <span>Login</span>
-                    <span className="text-xs">➜</span>
+                    <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </button>
@@ -412,22 +389,19 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
                 <button 
                   type="button"
                   onClick={() => setIsRegisterOpen(true)}
-                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
+                  className="text-xs font-semibold text-[#080c5f] hover:underline"
                 >
                   Don't have an account? Register for the symposium
                 </button>
               </div>
             </form>
-          </motion.div>
+          </div>
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="w-full text-center z-10 py-2 border-t border-white/10">
-        <p className="text-[10px] md:text-xs text-white/50 flex items-center justify-center gap-1.5 font-medium">
-          <ShieldCheck className="w-4 h-4 text-white/60 shrink-0" />
-          Authorized University Personnel Only
-        </p>
+      <footer className="w-full text-center z-20 pb-4">
+        <p className="text-[11px] text-white/60 font-medium">Authorized University Personnel Only</p>
       </footer>
 
       {/* Account Pre-fill floating bubble helper */}
