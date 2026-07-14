@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Calendar, Mic, Users, Settings, HelpCircle, 
   Search, Bell, User, Plus, FileText, Layers, HelpCircle as QuizIcon, 
@@ -85,6 +85,34 @@ export default function AdminDashboard({
   // Modals
   const [isNewEventOpen, setIsNewEventOpen] = useState(false);
   const [selectedEventForManage, setSelectedEventForManage] = useState<SymposiumEvent | null>(null);
+
+  // Event Editing States
+  const [isEditingEvent, setIsEditingEvent] = useState(false);
+  const [editEventLocation, setEditEventLocation] = useState('');
+  const [editEventHostName, setEditEventHostName] = useState('');
+  const [editEventHostEmail, setEditEventHostEmail] = useState('');
+  const [editEventSession, setEditEventSession] = useState<'Morning' | 'Afternoon'>('Morning');
+
+  // Sidebar and Help modal states
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+
+  // Registration Custom URL Origin State
+  const [registrationBaseUrl, setRegistrationBaseUrl] = useState(() => {
+    const saved = localStorage.getItem('symposium_registration_base_url');
+    return saved || window.location.origin;
+  });
+
+  // Attendee Editing States
+  const [isEditingAttendee, setIsEditingAttendee] = useState(false);
+  const [editAttName, setEditAttName] = useState('');
+  const [editAttCollege, setEditAttCollege] = useState('');
+  const [editAttYear, setEditAttYear] = useState('');
+  const [editAttBranch, setEditAttBranch] = useState('');
+  const [editAttPhone, setEditAttPhone] = useState('');
+  const [editAttEmail, setEditAttEmail] = useState('');
+  const [editAttTeamName, setEditAttTeamName] = useState('');
+  const [editAttTeamMembers, setEditAttTeamMembers] = useState<Array<{ name: string; phone: string; email: string; participantId: string }>>([]);
 
   // New Event Form State
   const [newEventTitle, setNewEventTitle] = useState('');
@@ -555,6 +583,183 @@ export default function AdminDashboard({
   const todayPrefix = new Date().toISOString().split('T')[0];
   const todaysRegistrations = attendees.filter(a => a.createdAt && a.createdAt.startsWith(todayPrefix)).length;
 
+  const handleDownloadAllData = () => {
+    // Generate CSV contents
+    const headers = [
+      'Student Name',
+      'Registration Type',
+      'Team Name',
+      'Participant ID',
+      'Email ID',
+      'Mobile Number',
+      'Registered Event'
+    ];
+
+    const rows: string[][] = [];
+
+    attendees.forEach(a => {
+      // Leader row
+      rows.push([
+        a.name,
+        a.regType || 'individual',
+        a.teamName || 'N/A',
+        a.participantId || a.id,
+        a.email,
+        a.phone,
+        a.registeredEventTitle
+      ]);
+
+      // Team members rows
+      if (a.regType === 'team' && a.teamMembers) {
+        a.teamMembers.forEach(m => {
+          rows.push([
+            m.name,
+            'team',
+            a.teamName || 'N/A',
+            a.participantId || a.id, // shares identical participant ID
+            m.email,
+            m.phone,
+            a.registeredEventTitle
+          ]);
+        });
+      }
+    });
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(val => `"${(val || '').replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `symposium_all_students_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setToast({ message: 'Symposium data exported successfully to CSV!', type: 'success' });
+  };
+
+  const handleSaveEventEdits = async () => {
+    if (!selectedEventForManage) return;
+
+    const updatedEvent = {
+      ...selectedEventForManage,
+      location: editEventLocation,
+      venue: editEventLocation,
+      hostName: editEventHostName,
+      hostEmail: editEventHostEmail,
+      session: editEventSession
+    } as SymposiumEvent;
+
+    const updatedEventsList = events.map(e => e.id === selectedEventForManage.id ? updatedEvent : e);
+    onUpdateEvents(updatedEventsList);
+
+    setSelectedEventForManage(updatedEvent);
+    setIsEditingEvent(false);
+
+    const { saveEventToFirestore } = await import('../firebaseSync');
+    await saveEventToFirestore(updatedEvent);
+
+    setToast({ message: 'Event details updated successfully', type: 'success' });
+  };
+
+  const handleDownloadQrHd = async (urlToEncode: string) => {
+    try {
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(urlToEncode)}`;
+      const response = await fetch(qrUrl);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = 'symposium_registration_qr_hd.png';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setToast({ message: 'HD QR Code downloaded successfully!', type: 'success' });
+    } catch (err) {
+      console.error(err);
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(urlToEncode)}`;
+      window.open(qrUrl, '_blank');
+      setToast({ message: 'Opened HD QR Code in new window', type: 'info' });
+    }
+  };
+
+  const handleCopyLink = (text: string) => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        setToast({ message: 'Registration link copied to clipboard!', type: 'success' });
+      }).catch((err) => {
+        console.warn('Clipboard write failed, using fallback copy strategy', err);
+        fallbackCopy(text);
+      });
+    } else {
+      fallbackCopy(text);
+    }
+  };
+
+  const fallbackCopy = (text: string) => {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.top = '0';
+    textArea.style.left = '0';
+    textArea.style.position = 'fixed';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand('copy');
+      setToast({ message: 'Registration link copied to clipboard!', type: 'success' });
+    } catch (err) {
+      console.error('Fallback copy failed', err);
+      setToast({ message: 'Failed to copy link. Please manually copy the URL.', type: 'error' });
+    }
+    document.body.removeChild(textArea);
+  };
+
+  const handleSaveAttendeeEdits = async () => {
+    if (!currentActiveAttendee) return;
+
+    const updatedAttendee = {
+      ...currentActiveAttendee,
+      name: editAttName,
+      college: editAttCollege,
+      year: editAttYear,
+      branch: editAttBranch,
+      phone: editAttPhone,
+      email: editAttEmail,
+      teamName: editAttTeamName || undefined,
+      teamMembers: editAttTeamMembers.length > 0 ? editAttTeamMembers : undefined
+    } as Attendee;
+
+    const updatedList = attendees.map(a => a.id === currentActiveAttendee.id ? updatedAttendee : a);
+    onUpdateAttendees(updatedList);
+
+    setSelectedAttendeeForProfile(updatedAttendee);
+    setIsEditingAttendee(false);
+
+    const { saveAttendeeToFirestore } = await import('../firebaseSync');
+    await saveAttendeeToFirestore(updatedAttendee);
+
+    setToast({ message: 'Participant details updated successfully!', type: 'success' });
+  };
+
+  useEffect(() => {
+    if (currentActiveAttendee) {
+      setEditAttName(currentActiveAttendee.name || '');
+      setEditAttCollege(currentActiveAttendee.college || '');
+      setEditAttYear(currentActiveAttendee.year || '');
+      setEditAttBranch(currentActiveAttendee.branch || '');
+      setEditAttPhone(currentActiveAttendee.phone || '');
+      setEditAttEmail(currentActiveAttendee.email || '');
+      setEditAttTeamName(currentActiveAttendee.teamName || '');
+      setEditAttTeamMembers(currentActiveAttendee.teamMembers || []);
+      setIsEditingAttendee(false);
+    }
+  }, [currentActiveAttendee?.id]);
+
   // Filter lists based on search
   const filteredEvents = events.filter(e => 
     e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -567,6 +772,16 @@ export default function AdminDashboard({
       {/* Top App Header bar */}
       <header className="fixed top-0 w-full z-40 flex justify-between items-center px-4 md:px-8 h-16 bg-surface border-b border-outline-variant">
         <div className="flex items-center gap-2">
+          {/* Collapse sidebar button */}
+          <button
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            className="hidden lg:flex items-center justify-center p-2 rounded-full text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer mr-1"
+          >
+            <span className="material-symbols-outlined !text-xl">
+              {isSidebarCollapsed ? "menu" : "menu_open"}
+            </span>
+          </button>
           <Building className="w-6 h-6 text-primary" />
           <span className="font-bold text-lg md:text-xl text-primary tracking-tight">
             AItheronML Symposium OS
@@ -615,8 +830,8 @@ export default function AdminDashboard({
       <div className="flex pt-16 flex-1">
         
         {/* Dynamic Nav Sidebar for Desktop */}
-        <nav className="hidden lg:flex flex-col w-[280px] bg-surface border-r border-outline-variant fixed left-0 top-16 bottom-0 z-30 py-6">
-          <div className="px-6 pb-4 mb-4 border-b border-outline-variant/50">
+        <nav className={`${isSidebarCollapsed ? 'hidden' : 'hidden lg:flex'} flex-col w-[220px] bg-surface border-r border-outline-variant fixed left-0 top-16 bottom-0 z-30 py-6`}>
+          <div className="px-4 pb-4 mb-4 border-b border-outline-variant/50">
             <div className="flex items-center gap-3 mb-1">
               <div className="w-10 h-10 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-base shadow-sm">
                 A
@@ -788,7 +1003,7 @@ export default function AdminDashboard({
           {/* Sidebar Footer Help Section */}
           <div className="mt-auto px-3 pt-4 border-t border-outline-variant/40 space-y-1">
             <button 
-              onClick={() => alert('AItheronML Help Center:\n\nIf you have questions about scheduling, assigning hosts, or managing submissions, contact technical support in Block A.')}
+              onClick={() => setIsHelpModalOpen(true)}
               className="w-full flex items-center gap-3 px-4 py-2 text-[11px] font-semibold text-on-surface-variant rounded-full hover:bg-surface-container"
             >
               <HelpCircle className="w-3.5 h-3.5 shrink-0" />
@@ -805,16 +1020,27 @@ export default function AdminDashboard({
         </nav>
 
         {/* Dynamic Main Workspace Container Canvas */}
-        <main className="flex-1 lg:ml-[280px] p-4 md:p-8 bg-surface-bright min-h-[calc(100vh-4rem)]">
+        <main className={`flex-1 ${isSidebarCollapsed ? 'lg:ml-0' : 'lg:ml-[220px]'} p-4 md:p-8 bg-surface-bright min-h-[calc(100vh-4rem)] transition-all duration-300`}>
           
           {/* Dashboard Tab Workspace */}
           {activeTab === 'dashboard' && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
               
               {/* Screen title heading bar */}
-              <div>
-                <h1 className="text-3xl font-bold text-on-surface tracking-tight">Symposium Overview</h1>
-                <p className="text-sm text-on-surface-variant mt-1">High-level metrics and active event management.</p>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-outline-variant/30 pb-4">
+                <div>
+                  <h1 className="text-3xl font-bold text-on-surface tracking-tight">Symposium Overview</h1>
+                  <p className="text-sm text-on-surface-variant mt-1">High-level metrics and active event management.</p>
+                </div>
+                {user.role === 'superadmin' && (
+                  <button
+                    onClick={handleDownloadAllData}
+                    className="h-10 px-4 bg-primary text-on-primary font-bold rounded-xl text-xs flex items-center gap-1.5 hover:bg-primary/95 transition-all shadow-xs cursor-pointer shrink-0"
+                  >
+                    <span className="material-symbols-outlined !text-sm">download</span>
+                    <span>Export All Students (CSV)</span>
+                  </button>
+                )}
               </div>
 
               {/* Grid block of 4 primary stat cards */}
@@ -887,23 +1113,81 @@ export default function AdminDashboard({
               </div>
 
               {/* Wall pasted Self-Registration QR Code Card */}
-              <div className="bg-surface rounded-2xl p-6 border border-surface-variant shadow-xs flex flex-col md:flex-row items-center justify-between gap-6">
-                <div className="space-y-2 text-center md:text-left">
-                  <h3 className="text-lg font-bold text-on-surface">Wall Self-Registration QR Code</h3>
-                  <p className="text-xs text-on-surface-variant max-w-lg leading-relaxed">
-                    Project or print this QR code. Participants can scan it with their mobile devices to open the self-registration form directly, bypassing the admin login screen.
+              <div className="bg-surface rounded-2xl p-6 border border-surface-variant shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+                <div className="space-y-3 text-left w-full lg:max-w-xl">
+                  <h3 className="text-lg font-bold text-on-surface">Self-Registration QR Code & URL Link</h3>
+                  <p className="text-xs text-on-surface-variant leading-relaxed">
+                    Project or print this QR code. Participants can scan it with their mobile devices or click the registration link to open the self-registration form directly, bypassing the admin login screen.
                   </p>
-                  <div className="pt-2 text-xs font-semibold text-primary">
-                    Registration Link: <a href={`${window.location.origin}/?mode=register&hideAdminSignIn=true`} target="_blank" rel="noopener noreferrer" className="underline hover:text-primary/80">{window.location.origin}/?mode=register&hideAdminSignIn=true</a>
+                  
+                  {/* Custom Domain Settings Field */}
+                  <div className="space-y-1 bg-surface-container-low p-3 rounded-xl border border-outline-variant/30">
+                    <label className="block text-[10px] font-bold text-primary uppercase">Custom Registration Domain</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={registrationBaseUrl}
+                        onChange={(e) => {
+                          setRegistrationBaseUrl(e.target.value);
+                          localStorage.setItem('symposium_registration_base_url', e.target.value);
+                        }}
+                        placeholder="e.g. https://symposium-kec.vercel.app"
+                        className="flex-1 h-8 px-2.5 bg-surface border border-outline-variant rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                      />
+                      <button
+                        onClick={() => {
+                          setRegistrationBaseUrl(window.location.origin);
+                          localStorage.removeItem('symposium_registration_base_url');
+                          setToast({ message: 'Reset to local connection origin', type: 'info' });
+                        }}
+                        className="h-8 px-2.5 bg-surface border border-outline text-on-surface rounded-lg text-[10px] font-bold uppercase hover:bg-surface-container transition-all cursor-pointer"
+                      >
+                        Reset Origin
+                      </button>
+                    </div>
+                    <span className="text-[9px] text-on-surface-variant block mt-1">
+                      ℹ️ Edit this URL if your symposium registration is hosted on a custom Vercel domain.
+                    </span>
+                  </div>
+
+                  <div className="pt-2 text-xs font-semibold text-primary flex items-center gap-2 flex-wrap">
+                    <span>Registration Link:</span>
+                    <a 
+                      href={`${registrationBaseUrl}/?mode=register&hideAdminSignIn=true`} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="underline hover:text-primary/80 font-mono break-all"
+                    >
+                      {registrationBaseUrl}/?mode=register&hideAdminSignIn=true
+                    </a>
                   </div>
                 </div>
-                <div className="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-outline-variant shrink-0">
-                  <img 
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(window.location.origin + '/?mode=register&hideAdminSignIn=true')}`}
-                    alt="Registration QR Code" 
-                    className="w-36 h-36"
-                  />
-                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1.5">Scan to Register</span>
+                <div className="flex flex-col items-center gap-3 bg-surface-container-low p-4 rounded-xl border border-outline-variant/30 shrink-0 w-full sm:w-auto">
+                  <div className="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-outline-variant shadow-xs">
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(registrationBaseUrl + '/?mode=register&hideAdminSignIn=true')}`}
+                      alt="Registration QR Code" 
+                      className="w-36 h-36"
+                    />
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1.5">Scan to Register</span>
+                  </div>
+                  <div className="flex items-center gap-2 w-full">
+                    <button
+                      onClick={() => handleDownloadQrHd(`${registrationBaseUrl}/?mode=register&hideAdminSignIn=true`)}
+                      title="Download high-definition 1000x1000px QR code"
+                      className="flex-1 h-9 px-3 bg-primary text-on-primary font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 hover:bg-primary/95 transition-all cursor-pointer shadow-xs"
+                    >
+                      <span className="material-symbols-outlined !text-sm">download</span>
+                      <span>Download HD</span>
+                    </button>
+                    <button
+                      onClick={() => handleCopyLink(`${registrationBaseUrl}/?mode=register&hideAdminSignIn=true`)}
+                      title="Copy registration link"
+                      className="h-9 w-9 bg-surface border border-outline text-on-surface hover:bg-surface-container rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-xs"
+                    >
+                      <span className="material-symbols-outlined !text-sm">content_copy</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1066,9 +1350,9 @@ export default function AdminDashboard({
                   </p>
                 </div>
                 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
                   {/* Status Stats Summary Pill */}
-                  <div className="hidden lg:flex items-center gap-4 bg-surface-container-low px-4 py-1.5 rounded-full border border-outline-variant/30 text-[11px] font-bold">
+                  <div className="hidden lg:flex items-center gap-4 bg-surface-container-low px-4 py-1.5 rounded-full border border-outline-variant/30 text-[11px] font-bold shrink-0">
                     <span className="text-on-surface-variant">
                       Total: <strong className="text-primary">{attendees.length}</strong>
                     </span>
@@ -1084,12 +1368,13 @@ export default function AdminDashboard({
 
                   <button 
                     onClick={() => setIsRightPanelCollapsed(!isRightPanelCollapsed)}
-                    className="flex items-center gap-2 h-10 px-4 bg-surface border border-outline rounded-xl text-xs font-semibold hover:bg-surface-container transition-all cursor-pointer shadow-xs"
+                    className="flex items-center gap-2 h-10 px-3 md:px-4 bg-surface border border-outline rounded-xl text-xs font-semibold hover:bg-surface-container transition-all cursor-pointer shadow-xs shrink-0"
                   >
                     <span className="material-symbols-outlined !text-sm">
                       {isRightPanelCollapsed ? 'dock_to_left' : 'dock_to_right'}
                     </span>
-                    <span>{isRightPanelCollapsed ? 'Show Quick Actions' : 'Hide Quick Actions'}</span>
+                    <span className="hidden sm:inline">{isRightPanelCollapsed ? 'Show Quick Actions' : 'Hide Quick Actions'}</span>
+                    <span className="sm:hidden">{isRightPanelCollapsed ? 'Show Actions' : 'Hide Actions'}</span>
                   </button>
 
                   <button 
@@ -1311,11 +1596,6 @@ export default function AdminDashboard({
                                       }`}>
                                         {att.regType || 'individual'}
                                       </span>
-                                      {att.batchName && (
-                                        <span className="text-[9px] font-bold bg-secondary-fixed text-on-secondary-fixed px-1.5 py-0.25 rounded">
-                                          {att.batchName}
-                                        </span>
-                                      )}
                                     </div>
                                   </td>
                                   <td className="p-3">
@@ -1338,7 +1618,7 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
-                 {/* RIGHT PANEL: Quick Action Panel (col-span-5) */}
+{/* RIGHT PANEL: Quick Action Panel (col-span-5) */}
                  {!isRightPanelCollapsed && (
                    <div className="lg:col-span-5">
                      {currentActiveAttendee ? (
@@ -1362,118 +1642,269 @@ export default function AdminDashboard({
                            </span>
                          </div>
 
-                         {/* Participant Fields Grid */}
-                         <div className="grid grid-cols-2 gap-4 text-xs font-semibold text-on-surface-variant">
-                           <div>
-                             <span className="text-[10px] font-bold text-primary uppercase block">Leader / Name</span>
-                             <span className="text-on-surface block mt-0.5 truncate">{currentActiveAttendee.name}</span>
-                           </div>
-                           <div>
-                             <span className="text-[10px] font-bold text-primary uppercase block">College</span>
-                             <span className="text-on-surface block mt-0.5 truncate" title={currentActiveAttendee.college}>
-                               {currentActiveAttendee.college || 'N/A'}
-                             </span>
-                           </div>
-                           <div>
-                             <span className="text-[10px] font-bold text-primary uppercase block">Academic Info</span>
-                             <span className="text-on-surface block mt-0.5 truncate">
-                               {currentActiveAttendee.year || 'N/A'} • {currentActiveAttendee.branch || 'N/A'}
-                             </span>
-                           </div>
-                           <div>
-                             <span className="text-[10px] font-bold text-primary uppercase block">Contact</span>
-                             <span className="text-on-surface block mt-0.5 truncate">
-                               {currentActiveAttendee.phone}
-                             </span>
-                           </div>
-                           <div className="col-span-2">
-                             <span className="text-[10px] font-bold text-primary uppercase block">Email Address</span>
-                             <span className="text-on-surface block mt-0.5 truncate">{currentActiveAttendee.email}</span>
-                           </div>
-                           <div className="col-span-2 border-t border-outline-variant/20 pt-3">
-                             <span className="text-[10px] font-bold text-primary uppercase block">Registered Event</span>
-                             <span className="text-on-surface block mt-0.5 font-bold text-sm">
-                               {currentActiveAttendee.registeredEventTitle}
-                             </span>
-                           </div>
-                         </div>
-
-                         {/* Quick Action Switches */}
-                         <div className="grid grid-cols-2 gap-4 border-t border-b border-outline-variant/35 py-4">
-                           <label className="flex items-center gap-3 p-3 rounded-xl border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer select-none">
-                             <input 
-                               type="checkbox"
-                               checked={currentActiveAttendee.paymentStatus === 'Paid'}
-                               onChange={() => handleTogglePayment(currentActiveAttendee)}
-                               className="w-5 h-5 text-primary border-outline rounded focus:ring-primary cursor-pointer"
-                             />
-                             <div className="flex flex-col">
-                               <span className="text-xs font-bold text-on-surface">Paid</span>
-                               <span className="text-[9px] text-on-surface-variant">Verify Payment</span>
-                             </div>
-                           </label>
-
-                           <label className="flex items-center gap-3 p-3 rounded-xl border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer select-none">
-                             <input 
-                               type="checkbox"
-                               checked={currentActiveAttendee.attendanceStatus === 'Present'}
-                               onChange={() => handleToggleAttendance(currentActiveAttendee)}
-                               className="w-5 h-5 text-primary border-outline rounded focus:ring-primary cursor-pointer"
-                             />
-                             <div className="flex flex-col">
-                               <span className="text-xs font-bold text-on-surface">Checked In</span>
-                               <span className="text-[9px] text-on-surface-variant">Mark Present</span>
-                             </div>
-                           </label>
-                         </div>
-
-                         {/* Team Members List (If applicable) */}
-                         {currentActiveAttendee.regType === 'team' && currentActiveAttendee.teamMembers && currentActiveAttendee.teamMembers.length > 0 && (
-                           <div className="space-y-2 border-b border-outline-variant/35 pb-4">
-                             <span className="text-[10px] font-bold text-primary uppercase block">Additional Team Members</span>
-                             <div className="space-y-2 max-h-36 overflow-y-auto">
-                               {currentActiveAttendee.teamMembers.map((m, idx) => (
-                                 <div key={idx} className="bg-surface-container-low border border-outline-variant/30 rounded-lg p-2.5 text-[11px] font-semibold text-on-surface">
-                                   <div className="flex justify-between">
-                                     <span>{m.name}</span>
-                                     <span className="text-[9px] text-on-surface-variant">Member {idx + 1}</span>
-                                   </div>
-                                   <div className="text-[10px] text-on-surface-variant font-medium mt-0.5">
-                                     {m.phone} • {m.email}
-                                   </div>
+                         {/* Participant Fields (Editable or Static) */}
+                         {isEditingAttendee ? (
+                           <div className="space-y-4 text-xs font-semibold text-on-surface-variant">
+                             <div className="grid grid-cols-2 gap-3">
+                               <div>
+                                 <label className="block text-[10px] font-bold text-primary uppercase mb-1">Leader / Name</label>
+                                 <input
+                                   type="text"
+                                   value={editAttName}
+                                   onChange={(e) => setEditAttName(e.target.value)}
+                                   className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                                 />
+                               </div>
+                               <div>
+                                 <label className="block text-[10px] font-bold text-primary uppercase mb-1">College</label>
+                                 <input
+                                   type="text"
+                                   value={editAttCollege}
+                                   onChange={(e) => setEditAttCollege(e.target.value)}
+                                   className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                                 />
+                               </div>
+                               <div>
+                                 <label className="block text-[10px] font-bold text-primary uppercase mb-1">Year</label>
+                                 <input
+                                   type="text"
+                                   value={editAttYear}
+                                   onChange={(e) => setEditAttYear(e.target.value)}
+                                   className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                                 />
+                               </div>
+                               <div>
+                                 <label className="block text-[10px] font-bold text-primary uppercase mb-1">Branch</label>
+                                 <input
+                                   type="text"
+                                   value={editAttBranch}
+                                   onChange={(e) => setEditAttBranch(e.target.value)}
+                                   className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                                 />
+                               </div>
+                               <div>
+                                 <label className="block text-[10px] font-bold text-primary uppercase mb-1">Phone</label>
+                                 <input
+                                   type="text"
+                                   value={editAttPhone}
+                                   onChange={(e) => setEditAttPhone(e.target.value)}
+                                   className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                                 />
+                               </div>
+                               <div>
+                                 <label className="block text-[10px] font-bold text-primary uppercase mb-1">Email</label>
+                                 <input
+                                   type="email"
+                                   value={editAttEmail}
+                                   onChange={(e) => setEditAttEmail(e.target.value)}
+                                   className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                                 />
+                               </div>
+                               {currentActiveAttendee.regType === 'team' && (
+                                 <div className="col-span-2">
+                                   <label className="block text-[10px] font-bold text-primary uppercase mb-1">Team Name</label>
+                                   <input
+                                     type="text"
+                                     value={editAttTeamName}
+                                     onChange={(e) => setEditAttTeamName(e.target.value)}
+                                     className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                                   />
                                  </div>
-                               ))}
+                               )}
+                             </div>
+
+                             {/* Editable Team Members */}
+                             {currentActiveAttendee.regType === 'team' && editAttTeamMembers.length > 0 && (
+                               <div className="space-y-3 pt-2 border-t border-outline-variant/20">
+                                 <span className="text-[10px] font-bold text-primary uppercase block">Team Members Details</span>
+                                 <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
+                                   {editAttTeamMembers.map((m, idx) => (
+                                     <div key={idx} className="bg-surface-container-low border border-outline-variant/30 rounded-lg p-2.5 space-y-2">
+                                       <span className="text-[9px] text-on-surface-variant font-bold uppercase block">Member {idx + 1}</span>
+                                       <input
+                                         type="text"
+                                         value={m.name}
+                                         onChange={(e) => {
+                                           const newMembers = [...editAttTeamMembers];
+                                           newMembers[idx].name = e.target.value;
+                                           setEditAttTeamMembers(newMembers);
+                                         }}
+                                         placeholder="Name"
+                                         className="w-full h-8 px-2 bg-surface border border-outline-variant rounded-md text-xs outline-none focus:border-primary text-on-surface"
+                                       />
+                                       <div className="grid grid-cols-2 gap-2">
+                                         <input
+                                           type="text"
+                                           value={m.phone}
+                                           onChange={(e) => {
+                                             const newMembers = [...editAttTeamMembers];
+                                             newMembers[idx].phone = e.target.value;
+                                             setEditAttTeamMembers(newMembers);
+                                           }}
+                                           placeholder="Phone"
+                                           className="w-full h-8 px-2 bg-surface border border-outline-variant rounded-md text-xs outline-none focus:border-primary text-on-surface"
+                                         />
+                                         <input
+                                           type="email"
+                                           value={m.email}
+                                           onChange={(e) => {
+                                             const newMembers = [...editAttTeamMembers];
+                                             newMembers[idx].email = e.target.value;
+                                             setEditAttTeamMembers(newMembers);
+                                           }}
+                                           placeholder="Email"
+                                           className="w-full h-8 px-2 bg-surface border border-outline-variant rounded-md text-xs outline-none focus:border-primary text-on-surface"
+                                         />
+                                       </div>
+                                     </div>
+                                   ))}
+                                 </div>
+                               </div>
+                             )}
+
+                             <div className="flex gap-2 pt-2">
+                               <button
+                                 onClick={handleSaveAttendeeEdits}
+                                 className="flex-1 h-10 bg-primary text-on-primary rounded-xl text-xs font-bold hover:bg-primary/95 transition-all cursor-pointer shadow-sm flex items-center justify-center gap-1"
+                               >
+                                 <span className="material-symbols-outlined !text-sm">save</span>
+                                 <span>Save Participant</span>
+                               </button>
+                               <button
+                                 onClick={() => setIsEditingAttendee(false)}
+                                 className="flex-1 h-10 bg-surface border border-outline text-on-surface-variant hover:bg-surface-container-low rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                               >
+                                 Cancel
+                               </button>
                              </div>
                            </div>
+                         ) : (
+                           <>
+                             {/* Participant Fields Grid */}
+                             <div className="grid grid-cols-2 gap-4 text-xs font-semibold text-on-surface-variant">
+                               <div>
+                                 <span className="text-[10px] font-bold text-primary uppercase block">Leader / Name</span>
+                                 <span className="text-on-surface block mt-0.5 truncate">{currentActiveAttendee.name}</span>
+                               </div>
+                               <div>
+                                 <span className="text-[10px] font-bold text-primary uppercase block">College</span>
+                                 <span className="text-on-surface block mt-0.5 truncate" title={currentActiveAttendee.college}>
+                                   {currentActiveAttendee.college || 'N/A'}
+                                 </span>
+                               </div>
+                               <div>
+                                 <span className="text-[10px] font-bold text-primary uppercase block">Academic Info</span>
+                                 <span className="text-on-surface block mt-0.5 truncate">
+                                   {currentActiveAttendee.year || 'N/A'} • {currentActiveAttendee.branch || 'N/A'}
+                                 </span>
+                               </div>
+                               <div>
+                                 <span className="text-[10px] font-bold text-primary uppercase block">Contact</span>
+                                 <span className="text-on-surface block mt-0.5 truncate">
+                                   {currentActiveAttendee.phone}
+                                 </span>
+                               </div>
+                               <div className="col-span-2">
+                                 <span className="text-[10px] font-bold text-primary uppercase block">Email Address</span>
+                                 <span className="text-on-surface block mt-0.5 truncate">{currentActiveAttendee.email}</span>
+                               </div>
+                               <div className="col-span-2 border-t border-outline-variant/20 pt-3">
+                                 <span className="text-[10px] font-bold text-primary uppercase block">Registered Event</span>
+                                 <span className="text-on-surface block mt-0.5 font-bold text-sm">
+                                   {currentActiveAttendee.registeredEventTitle}
+                                 </span>
+                               </div>
+                             </div>
+
+                             {/* Quick Action Switches */}
+                             <div className="grid grid-cols-2 gap-4 border-t border-b border-outline-variant/35 py-4">
+                               <label className="flex items-center gap-3 p-3 rounded-xl border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer select-none">
+                                 <input 
+                                   type="checkbox"
+                                   checked={currentActiveAttendee.paymentStatus === 'Paid'}
+                                   onChange={() => handleTogglePayment(currentActiveAttendee)}
+                                   className="w-5 h-5 text-primary border-outline rounded focus:ring-primary cursor-pointer"
+                                 />
+                                 <div className="flex flex-col">
+                                   <span className="text-xs font-bold text-on-surface">Paid</span>
+                                   <span className="text-[9px] text-on-surface-variant">Verify Payment</span>
+                                 </div>
+                               </label>
+
+                               <label className="flex items-center gap-3 p-3 rounded-xl border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer select-none">
+                                 <input 
+                                   type="checkbox"
+                                   checked={currentActiveAttendee.attendanceStatus === 'Present'}
+                                   onChange={() => handleToggleAttendance(currentActiveAttendee)}
+                                   className="w-5 h-5 text-primary border-outline rounded focus:ring-primary cursor-pointer"
+                                 />
+                                 <div className="flex flex-col">
+                                   <span className="text-xs font-bold text-on-surface">Checked In</span>
+                                   <span className="text-[9px] text-on-surface-variant">Mark Present</span>
+                                 </div>
+                               </label>
+                             </div>
+
+                             {/* Team Members List (If applicable) */}
+                             {currentActiveAttendee.regType === 'team' && currentActiveAttendee.teamMembers && currentActiveAttendee.teamMembers.length > 0 && (
+                               <div className="space-y-2 border-b border-outline-variant/35 pb-4">
+                                 <span className="text-[10px] font-bold text-primary uppercase block">Additional Team Members</span>
+                                 <div className="space-y-2 max-h-36 overflow-y-auto">
+                                   {currentActiveAttendee.teamMembers.map((m, idx) => (
+                                     <div key={idx} className="bg-surface-container-low border border-outline-variant/30 rounded-lg p-2.5 text-[11px] font-semibold text-on-surface">
+                                       <div className="flex justify-between">
+                                         <span>{m.name}</span>
+                                         <span className="text-[9px] text-on-surface-variant">Member {idx + 1}</span>
+                                       </div>
+                                       <div className="text-[10px] text-on-surface-variant font-medium mt-0.5">
+                                         {m.phone} • {m.email}
+                                       </div>
+                                     </div>
+                                   ))}
+                                 </div>
+                               </div>
+                             )}
+
+                             {/* Remarks TextArea (Auto-save) */}
+                             <div className="space-y-1">
+                               <span className="text-[10px] font-bold text-primary uppercase block">Remarks</span>
+                               <textarea
+                                 placeholder="Add operational notes or remarks (auto-saves)..."
+                                 value={currentActiveAttendee.remarks || ''}
+                                 onChange={(e) => handleRemarksChange(currentActiveAttendee, e.target.value)}
+                                 className="w-full h-20 p-3 bg-surface-container-low border border-outline rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all resize-none"
+                               />
+                             </div>
+
+                             {/* Control Panel Action Buttons */}
+                             <div className="flex items-center gap-3 pt-2">
+                               <button
+                                 onClick={() => {
+                                   setEditAttName(currentActiveAttendee.name || '');
+                                   setEditAttCollege(currentActiveAttendee.college || '');
+                                   setEditAttYear(currentActiveAttendee.year || '');
+                                   setEditAttBranch(currentActiveAttendee.branch || '');
+                                   setEditAttPhone(currentActiveAttendee.phone || '');
+                                   setEditAttEmail(currentActiveAttendee.email || '');
+                                   setEditAttTeamName(currentActiveAttendee.teamName || '');
+                                   setEditAttTeamMembers(currentActiveAttendee.teamMembers || []);
+                                   setIsEditingAttendee(true);
+                                 }}
+                                 className="flex-1 h-11 bg-surface border border-outline text-on-surface hover:bg-surface-container-low rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                               >
+                                 <span className="material-symbols-outlined !text-sm">edit</span>
+                                 <span>Edit Details</span>
+                               </button>
+                               <button
+                                 onClick={handleSaveAndNext}
+                                 className="flex-1 h-11 bg-primary text-on-primary hover:bg-primary/95 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+                               >
+                                 <span>Next Entry</span>
+                                 <span className="material-symbols-outlined !text-sm">arrow_forward</span>
+                               </button>
+                             </div>
+                           </>
                          )}
-
-                         {/* Remarks TextArea (Auto-save) */}
-                         <div className="space-y-1">
-                           <span className="text-[10px] font-bold text-primary uppercase block">Remarks</span>
-                           <textarea
-                             placeholder="Add operational notes or remarks (auto-saves)..."
-                             value={currentActiveAttendee.remarks || ''}
-                             onChange={(e) => handleRemarksChange(currentActiveAttendee, e.target.value)}
-                             className="w-full h-20 p-3 bg-surface-container-low border border-outline rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all resize-none"
-                           />
-                         </div>
-
-                         {/* Control Panel Action Buttons */}
-                         <div className="flex items-center gap-3 pt-2">
-                           <button
-                             onClick={() => handleSaveAttendee(currentActiveAttendee)}
-                             className="flex-1 h-11 bg-surface border border-outline text-on-surface hover:bg-surface-container-low rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
-                           >
-                             Save Changes
-                           </button>
-                           <button
-                             onClick={handleSaveAndNext}
-                             className="flex-1 h-11 bg-primary text-on-primary hover:bg-primary/95 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
-                           >
-                             <span>Save & Next</span>
-                             <span className="material-symbols-outlined !text-sm">arrow_forward</span>
-                           </button>
-                         </div>
 
                          {/* Revoke Registration Button */}
                          <button
@@ -2094,21 +2525,102 @@ export default function AdminDashboard({
                     </div>
                   </div>
 
-                  <div>
-                    <span className="text-on-surface-variant block">Physical Location:</span>
-                    <span className="font-bold text-on-surface">{selectedEventForManage.location}</span>
-                  </div>
+                  {isEditingEvent ? (
+                    <div className="space-y-2.5 pt-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-on-surface-variant uppercase mb-1">Physical Location</label>
+                        <input
+                          type="text"
+                          value={editEventLocation}
+                          onChange={(e) => setEditEventLocation(e.target.value)}
+                          className="w-full h-8 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-on-surface-variant uppercase mb-1">Assigned Host Name</label>
+                        <input
+                          type="text"
+                          value={editEventHostName}
+                          onChange={(e) => setEditEventHostName(e.target.value)}
+                          className="w-full h-8 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-on-surface-variant uppercase mb-1">Assigned Host Email</label>
+                        <input
+                          type="email"
+                          value={editEventHostEmail}
+                          onChange={(e) => setEditEventHostEmail(e.target.value)}
+                          className="w-full h-8 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-on-surface-variant uppercase mb-1">Event Timing Session</label>
+                        <select
+                          value={editEventSession}
+                          onChange={(e) => setEditEventSession(e.target.value as any)}
+                          className="w-full h-8 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                        >
+                          <option value="Morning">Morning Session (09:30 AM - 12:30 PM)</option>
+                          <option value="Afternoon">Afternoon Session (01:30 PM - 04:30 PM)</option>
+                        </select>
+                      </div>
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          onClick={handleSaveEventEdits}
+                          className="flex-1 py-1.5 bg-primary text-on-primary rounded-lg text-xs font-bold hover:bg-primary/95 transition-all cursor-pointer"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setIsEditingEvent(false)}
+                          className="flex-1 py-1.5 bg-surface-container border border-outline text-on-surface-variant rounded-lg text-xs font-semibold hover:bg-surface-container-high transition-all cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <span className="text-on-surface-variant block">Physical Location:</span>
+                        <span className="font-bold text-on-surface">{selectedEventForManage.location}</span>
+                      </div>
 
-                  <div>
-                    <span className="text-on-surface-variant block">Assigned Host:</span>
-                    <span className="font-bold text-on-surface block">{selectedEventForManage.hostName}</span>
-                    <span className="text-[10px] text-on-surface-variant font-mono">{selectedEventForManage.hostEmail}</span>
-                  </div>
+                      <div>
+                        <span className="text-on-surface-variant block">Assigned Host:</span>
+                        <span className="font-bold text-on-surface block">{selectedEventForManage.hostName}</span>
+                        <span className="text-[10px] text-on-surface-variant font-mono">{selectedEventForManage.hostEmail}</span>
+                      </div>
 
-                  <div>
-                    <span className="text-on-surface-variant block">Registrations Count:</span>
-                    <span className="font-bold text-on-surface">{selectedEventForManage.registeredCount} Attendees</span>
-                  </div>
+                      <div>
+                        <span className="text-on-surface-variant block">Event Session:</span>
+                        <span className="font-bold text-on-surface block">
+                          {selectedEventForManage.session} Session ({selectedEventForManage.session === 'Morning' ? '09:30 AM - 12:30 PM' : '01:30 PM - 04:30 PM'})
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-on-surface-variant block">Registrations Count:</span>
+                        <span className="font-bold text-on-surface">{selectedEventForManage.registeredCount} Attendees</span>
+                      </div>
+
+                      <div className="pt-2">
+                        <button
+                          onClick={() => {
+                            setEditEventLocation(selectedEventForManage.location || '');
+                            setEditEventHostName(selectedEventForManage.hostName || '');
+                            setEditEventHostEmail(selectedEventForManage.hostEmail || '');
+                            setEditEventSession((selectedEventForManage.session as any) || 'Morning');
+                            setIsEditingEvent(true);
+                          }}
+                          className="w-full h-8 border border-primary text-primary hover:bg-primary hover:text-on-primary rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" /> Edit Details
+                        </button>
+                      </div>
+                    </>
+                  )}
 
                   <div className="pt-4 border-t border-outline-variant/40">
                     <button 
@@ -2291,6 +2803,51 @@ export default function AdminDashboard({
                   Confirm and Issue Badge
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Support & Help Center Modal */}
+      <AnimatePresence>
+        {isHelpModalOpen && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-xs">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-surface border border-outline-variant/60 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-xl text-center"
+            >
+              <div className="w-14 h-14 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto">
+                <span className="material-symbols-outlined !text-3xl">support_agent</span>
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-bold text-on-surface">Symposium Help Desk</h3>
+                <p className="text-xs text-on-surface-variant leading-relaxed">
+                  Need any immediate operational or technical support? Contact the symposium coordinator directly.
+                </p>
+              </div>
+              
+              <div className="bg-surface-container-low border border-outline-variant/40 p-4 rounded-xl space-y-1">
+                <span className="text-[10px] font-black text-primary uppercase block">Coordinator Contact Number</span>
+                <span className="text-lg font-black text-on-surface tracking-wide block select-all">8121280857</span>
+              </div>
+
+              <div className="flex gap-2">
+                <a 
+                  href="tel:8121280857"
+                  className="flex-1 h-10 bg-primary text-on-primary font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-primary/95 transition-all shadow-xs"
+                >
+                  <span className="material-symbols-outlined !text-sm">call</span>
+                  <span>Call Coordinator</span>
+                </a>
+                <button
+                  onClick={() => setIsHelpModalOpen(false)}
+                  className="px-4 h-10 bg-surface border border-outline text-on-surface-variant hover:bg-surface-container rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

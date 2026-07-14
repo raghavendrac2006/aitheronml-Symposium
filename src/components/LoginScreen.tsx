@@ -300,7 +300,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
           </div>
           
           <h1 className="text-white text-5xl md:text-[84px] leading-tight mb-1" style={{ textShadow: 'rgba(0, 0, 0, 0.3) 0px 2px 4px', fontWeight: 700 }}>
-            AItheronML 2K25
+            AItheronML 2k26
           </h1>
           
           <div className="space-y-1 pb-8">
@@ -383,17 +383,6 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
                   </>
                 )}
               </button>
-
-              {/* Register link */}
-              <div className="text-center mt-2">
-                <button 
-                  type="button"
-                  onClick={() => setIsRegisterOpen(true)}
-                  className="text-xs font-semibold text-[#080c5f] hover:underline"
-                >
-                  Don't have an account? Register for the symposium
-                </button>
-              </div>
             </form>
           </div>
         </div>
@@ -443,118 +432,6 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         </div>
       </div>
 
-      {/* Registration Modal Dialog */}
-      {isRegisterOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <motion.div 
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 w-full max-w-md shadow-2xl"
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-on-surface">Symposium Self-Registration</h3>
-              <button 
-                onClick={() => setIsRegisterOpen(false)}
-                className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-variant/30"
-              >
-                ✕
-              </button>
-            </div>
-
-            {regSuccess ? (
-              <div className="p-4 bg-primary/10 text-primary border border-primary/20 rounded-xl text-center text-sm font-medium py-8">
-                🎉 {regSuccess}
-              </div>
-            ) : (
-              <form onSubmit={handleRegister} className="flex flex-col gap-4">
-                <p className="text-xs text-on-surface-variant">
-                  Register a customized account to explore the AItheronML Symposium OS as a Super Admin or Event Host.
-                </p>
-
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface mb-1">Full Name</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={regName}
-                    onChange={(e) => setRegName(e.target.value)}
-                    placeholder="e.g. Professor Raghavendra"
-                    className="w-full h-10 px-3 bg-surface-container border border-outline rounded-lg text-sm text-on-surface"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface mb-1">Email Address</label>
-                  <input 
-                    type="email" 
-                    required
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="e.g. raghavendra@gmail.com"
-                    className="w-full h-10 px-3 bg-surface-container border border-outline rounded-lg text-sm text-on-surface"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface mb-1">System Access Role</label>
-                  <div className="grid grid-cols-2 gap-2 mt-1">
-                    <button
-                      type="button"
-                      onClick={() => setRegRole('host')}
-                      className={`h-10 rounded-lg text-xs font-semibold border transition-all ${
-                        regRole === 'host' 
-                          ? 'border-primary bg-primary/5 text-primary' 
-                          : 'border-outline text-on-surface-variant hover:bg-surface-variant/20'
-                      }`}
-                    >
-                      Event Host
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRegRole('superadmin')}
-                      className={`h-10 rounded-lg text-xs font-semibold border transition-all ${
-                        regRole === 'superadmin' 
-                          ? 'border-primary bg-primary/5 text-primary' 
-                          : 'border-outline text-on-surface-variant hover:bg-surface-variant/20'
-                      }`}
-                    >
-                      Super Admin
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface mb-1">Password</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={regPassword}
-                    onChange={(e) => setRegPassword(e.target.value)}
-                    className="w-full h-10 px-3 bg-surface-container border border-outline rounded-lg text-sm text-on-surface font-mono"
-                  />
-                </div>
-
-                 <button 
-                  type="submit"
-                  disabled={isRegistering}
-                  className={`w-full h-11 mt-2 bg-primary text-on-primary rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity flex items-center justify-center gap-2 ${
-                    isRegistering ? 'opacity-70 cursor-not-allowed' : ''
-                  }`}
-                >
-                  {isRegistering ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Registering Account...</span>
-                    </>
-                  ) : (
-                    <span>Create Account</span>
-                  )}
-                </button>
-              </form>
-            )}
-          </motion.div>
-        </div>
-      )}
     </div>
   );
 }

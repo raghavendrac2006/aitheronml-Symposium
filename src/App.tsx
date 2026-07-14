@@ -1,10 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import LoginScreen from './components/LoginScreen';
-import AdminDashboard from './components/AdminDashboard';
-import HostDashboard from './components/HostDashboard';
-import PublicRegistration from './components/PublicRegistration';
-import RegistrationSuccess from './components/RegistrationSuccess';
 import { SymposiumEvent, Attendee, UserSession, MAP_EMAIL_TO_EVENT_ID, MAP_EMAIL_TO_NAME, normalizeEmail, Batch } from './types';
 import { 
   INITIAL_EVENTS, 
@@ -13,6 +8,12 @@ import {
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, collection, onSnapshot } from 'firebase/firestore';
+
+const LoginScreen = React.lazy(() => import('./components/LoginScreen'));
+const AdminDashboard = React.lazy(() => import('./components/AdminDashboard'));
+const HostDashboard = React.lazy(() => import('./components/HostDashboard'));
+const PublicRegistration = React.lazy(() => import('./components/PublicRegistration'));
+const RegistrationSuccess = React.lazy(() => import('./components/RegistrationSuccess'));
 import { 
   seedDatabaseIfEmpty,
   fetchEventsFromFirestore,
@@ -85,7 +86,24 @@ function AppContent() {
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
 
+  // Online / Offline state tracking
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      triggerPendingSync();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Initialize and load persistent state from Firestore & Auth
   useEffect(() => {
@@ -422,225 +440,243 @@ function AppContent() {
     return element;
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background text-on-background flex flex-col items-center justify-center font-sans">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          <div>
-            <h3 className="font-bold text-lg tracking-tight text-on-background">AItheronML Symposium OS</h3>
-            <p className="text-xs text-on-surface-variant mt-1">Connecting to Firestore cloud database...</p>
-          </div>
+  const LoadingFallback = () => (
+    <div className="min-h-screen bg-background text-on-background flex flex-col items-center justify-center font-sans">
+      <div className="flex flex-col items-center gap-4 text-center">
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <div>
+          <h3 className="font-bold text-lg tracking-tight text-on-background">AItheronML Symposium OS</h3>
+          <p className="text-xs text-on-surface-variant mt-1 animate-pulse">Loading system resources...</p>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 
   // Handle Public Registration Flow (e.g. ?mode=register)
   if (isPublicReg) {
     return (
       <div id="symposium-app-root" className="min-h-screen bg-background text-on-background selection:bg-primary/20">
         <div className="min-h-screen bg-background text-on-background w-full">
-          {publicRegSuccessAttendee ? (
-            <RegistrationSuccess
-              attendee={publicRegSuccessAttendee}
-              secondAttendee={publicRegSuccessSecondAttendee || undefined}
-              onReturnHome={() => {
-                setPublicRegSuccessAttendee(null);
-                setPublicRegSuccessSecondAttendee(null);
-              }}
-              isSpotSuccess={false}
-            />
-          ) : (
-            <PublicRegistration 
-              events={events}
-              attendees={attendees}
-              isSpotRegistration={false}
-              hideAdminSignIn={true}
-              onRegistrationSuccess={(newAtt, extra) => {
-                const allNew = [newAtt, ...(extra || [])];
-                updateAttendeesState([...attendees, ...allNew]);
-                
-                let updatedEvents = [...events];
-                allNew.forEach(att => {
-                  updatedEvents = updatedEvents.map(ev => ev.id === att.registeredEventId ? { ...ev, registeredCount: ev.registeredCount + 1 } : ev);
-                });
-                updateEventsState(updatedEvents);
-
-                setPublicRegSuccessAttendee(newAtt);
-                if (extra && extra.length > 0) {
-                  setPublicRegSuccessSecondAttendee(extra[0]);
-                } else {
+          <React.Suspense fallback={<LoadingFallback />}>
+            {publicRegSuccessAttendee ? (
+              <RegistrationSuccess
+                attendee={publicRegSuccessAttendee}
+                secondAttendee={publicRegSuccessSecondAttendee || undefined}
+                onReturnHome={() => {
+                  setPublicRegSuccessAttendee(null);
                   setPublicRegSuccessSecondAttendee(null);
-                }
-              }}
-              onBackToLogin={() => {}}
-            />
-          )}
+                }}
+                isSpotSuccess={false}
+              />
+            ) : (
+              <PublicRegistration 
+                events={events}
+                attendees={attendees}
+                isSpotRegistration={false}
+                hideAdminSignIn={true}
+                isLoadingEvents={isLoading}
+                isOnline={isOnline}
+                onRegistrationSuccess={(newAtt, extra) => {
+                  const allNew = [newAtt, ...(extra || [])];
+                  updateAttendeesState([...attendees, ...allNew]);
+                  
+                  let updatedEvents = [...events];
+                  allNew.forEach(att => {
+                    updatedEvents = updatedEvents.map(ev => ev.id === att.registeredEventId ? { ...ev, registeredCount: ev.registeredCount + 1 } : ev);
+                  });
+                  updateEventsState(updatedEvents);
+
+                  setPublicRegSuccessAttendee(newAtt);
+                  if (extra && extra.length > 0) {
+                    setPublicRegSuccessSecondAttendee(extra[0]);
+                  } else {
+                    setPublicRegSuccessSecondAttendee(null);
+                  }
+                }}
+                onBackToLogin={() => {}}
+              />
+            )}
+          </React.Suspense>
         </div>
       </div>
     );
   }
 
+  if (isLoading) {
+    return <LoadingFallback />;
+  }
+
   return (
     <div id="symposium-app-root" className="min-h-screen bg-background text-on-background selection:bg-primary/20">
-      <Routes>
-        <Route path="/login" element={session ? <Navigate to="/" replace /> : <LoginScreen onLogin={handleLogin} />} />
-        
-        <Route path="/admin" element={requireAdmin(
-          <AdminDashboard 
-            user={session!}
-            events={events}
-            attendees={attendees}
-            batches={batches}
-            onUpdateEvents={updateEventsState}
-            onUpdateAttendees={updateAttendeesState}
-            onSaveBatch={handleSaveBatch}
-            onDeleteBatch={handleDeleteBatch}
-            onLogout={handleLogout}
-          />
-        )} />
+      <React.Suspense fallback={<LoadingFallback />}>
+        <Routes>
+          <Route path="/login" element={session ? <Navigate to="/" replace /> : <LoginScreen onLogin={handleLogin} />} />
+          
+          <Route path="/admin" element={requireAdmin(
+            <AdminDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          )} />
 
-        <Route path="/registration" element={requireRegistration(
-          <AdminDashboard 
-            user={session!}
-            events={events}
-            attendees={attendees}
-            batches={batches}
-            onUpdateEvents={updateEventsState}
-            onUpdateAttendees={updateAttendeesState}
-            onSaveBatch={handleSaveBatch}
-            onDeleteBatch={handleDeleteBatch}
-            onLogout={handleLogout}
-          />
-        )} />
+          <Route path="/registration" element={requireRegistration(
+            <AdminDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          )} />
 
-        <Route path="/paperpresentation" element={requireHost('paper_presentation', (
-          <HostDashboard 
-            user={session!}
-            events={events}
-            attendees={attendees}
-            batches={batches}
-            onUpdateEvents={updateEventsState}
-            onUpdateAttendees={updateAttendeesState}
-            onSaveBatch={handleSaveBatch}
-            onDeleteBatch={handleDeleteBatch}
-            onLogout={handleLogout}
-          />
-        ))} />
+          <Route path="/paperpresentation" element={requireHost('paper_presentation', (
+            <HostDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          ))} />
 
-        <Route path="/posterpresentation" element={requireHost('poster_presentation', (
-          <HostDashboard 
-            user={session!}
-            events={events}
-            attendees={attendees}
-            batches={batches}
-            onUpdateEvents={updateEventsState}
-            onUpdateAttendees={updateAttendeesState}
-            onSaveBatch={handleSaveBatch}
-            onDeleteBatch={handleDeleteBatch}
-            onLogout={handleLogout}
-          />
-        ))} />
+          <Route path="/posterpresentation" element={requireHost('poster_presentation', (
+            <HostDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          ))} />
 
-        <Route path="/vibecoding" element={requireHost('vibe_coding', (
-          <HostDashboard 
-            user={session!}
-            events={events}
-            attendees={attendees}
-            batches={batches}
-            onUpdateEvents={updateEventsState}
-            onUpdateAttendees={updateAttendeesState}
-            onSaveBatch={handleSaveBatch}
-            onDeleteBatch={handleDeleteBatch}
-            onLogout={handleLogout}
-          />
-        ))} />
+          <Route path="/vibecoding" element={requireHost('vibe_coding', (
+            <HostDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          ))} />
 
-        <Route path="/projectexpo" element={requireHost('project_expo', (
-          <HostDashboard 
-            user={session!}
-            events={events}
-            attendees={attendees}
-            batches={batches}
-            onUpdateEvents={updateEventsState}
-            onUpdateAttendees={updateAttendeesState}
-            onSaveBatch={handleSaveBatch}
-            onDeleteBatch={handleDeleteBatch}
-            onLogout={handleLogout}
-          />
-        ))} />
+          <Route path="/projectexpo" element={requireHost('project_expo', (
+            <HostDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          ))} />
 
-        <Route path="/photography" element={requireHost('photography', (
-          <HostDashboard 
-            user={session!}
-            events={events}
-            attendees={attendees}
-            batches={batches}
-            onUpdateEvents={updateEventsState}
-            onUpdateAttendees={updateAttendeesState}
-            onSaveBatch={handleSaveBatch}
-            onDeleteBatch={handleDeleteBatch}
-            onLogout={handleLogout}
-          />
-        ))} />
+          <Route path="/photography" element={requireHost('photography', (
+            <HostDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          ))} />
 
-        <Route path="/treasurehunt" element={requireHost('treasure_hunt', (
-          <HostDashboard 
-            user={session!}
-            events={events}
-            attendees={attendees}
-            batches={batches}
-            onUpdateEvents={updateEventsState}
-            onUpdateAttendees={updateAttendeesState}
-            onSaveBatch={handleSaveBatch}
-            onDeleteBatch={handleDeleteBatch}
-            onLogout={handleLogout}
-          />
-        ))} />
+          <Route path="/treasurehunt" element={requireHost('treasure_hunt', (
+            <HostDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          ))} />
 
-        <Route path="/freefire" element={requireHost('free_fire', (
-          <HostDashboard 
-            user={session!}
-            events={events}
-            attendees={attendees}
-            batches={batches}
-            onUpdateEvents={updateEventsState}
-            onUpdateAttendees={updateAttendeesState}
-            onSaveBatch={handleSaveBatch}
-            onDeleteBatch={handleDeleteBatch}
-            onLogout={handleLogout}
-          />
-        ))} />
+          <Route path="/freefire" element={requireHost('free_fire', (
+            <HostDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          ))} />
 
-        <Route path="/dumbcharades" element={requireHost('dumb_charades', (
-          <HostDashboard 
-            user={session!}
-            events={events}
-            attendees={attendees}
-            batches={batches}
-            onUpdateEvents={updateEventsState}
-            onUpdateAttendees={updateAttendeesState}
-            onSaveBatch={handleSaveBatch}
-            onDeleteBatch={handleDeleteBatch}
-            onLogout={handleLogout}
-          />
-        ))} />
+          <Route path="/dumbcharades" element={requireHost('dumb_charades', (
+            <HostDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          ))} />
 
-        {/* Fallback route `/` redirects based on session */}
-        <Route path="/" element={
-          session ? (
-            session.role === 'superadmin' ? <Navigate to="/admin" replace /> :
-            session.role === 'registration' ? <Navigate to="/registration" replace /> :
-            <Navigate to={Object.keys(ROUTE_TO_EVENT_ID).find(k => ROUTE_TO_EVENT_ID[k] === session.assignedEventId) || "/login"} replace />
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        } />
+          {/* Fallback route `/` redirects based on session */}
+          <Route path="/" element={
+            session ? (
+              session.role === 'superadmin' ? <Navigate to="/admin" replace /> :
+              session.role === 'registration' ? <Navigate to="/registration" replace /> :
+              <Navigate to={Object.keys(ROUTE_TO_EVENT_ID).find(k => ROUTE_TO_EVENT_ID[k] === session.assignedEventId) || "/login"} replace />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          } />
 
-        {/* Catch-all redirects to `/` */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          {/* Catch-all redirects to `/` */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </React.Suspense>
     </div>
   );
 }

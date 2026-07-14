@@ -15,6 +15,7 @@ interface HostDashboardProps {
   events: SymposiumEvent[];
   attendees: Attendee[];
   batches?: Batch[];
+  isOnline?: boolean;
   onSaveBatch?: (batch: Batch) => void;
   onDeleteBatch?: (id: string) => void;
   onUpdateEvents: (updated: SymposiumEvent[]) => void;
@@ -27,13 +28,14 @@ export default function HostDashboard({
   events,
   attendees,
   batches = [],
+  isOnline = true,
   onSaveBatch,
   onDeleteBatch,
   onUpdateEvents,
   onUpdateAttendees,
   onLogout
 }: HostDashboardProps) {
-  // Tabs: overview, participants, batches, attendance, judging, results
+  // Navigation active tab (kept for state compatibility, not used for rendering tabs)
   const [activeTab, setActiveTab] = useState<'overview' | 'participants' | 'batches' | 'attendance' | 'judging' | 'results'>('overview');
   
   // Selected Profile State (for detail modal)
@@ -112,22 +114,67 @@ export default function HostDashboard({
   const [gateFilter, setGateFilter] = useState<'all' | 'checked-in' | 'pending'>('all');
   const [gateSelectedBatchId, setGateSelectedBatchId] = useState<string>('all');
 
-  // Sync criteriaScores when selected attendee changes
+  // Console operational states
+  const [activeConsoleFilter, setActiveConsoleFilter] = useState<string>('all');
+  const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState(false);
+  const [expandedBatchIds, setExpandedBatchIds] = useState<string[]>([]);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
+
   useEffect(() => {
-    if (selectedAttendeeForJudging) {
-      setJudgingRemarks(selectedAttendeeForJudging.remarks || '');
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  // Console state selectors
+  const eventBatches = batches.filter(b => b.eventId === (myAssignedEvent?.id || ''));
+
+  const consoleQueueAttendees = myAttendees.filter(a => {
+    const isLeaderOrIndividual = a.regType !== 'team' || a.teamMembers !== undefined || a.accessLevel === 'Team Leader Pass';
+    return isLeaderOrIndividual;
+  });
+
+  const filteredConsoleQueue = consoleQueueAttendees.filter(a => {
+    if (activeConsoleFilter === 'waiting') {
+      return a.attendanceStatus === 'Present' && a.judgingStatus !== 'Completed';
+    } else if (activeConsoleFilter === 'checked-in') {
+      return a.attendanceStatus === 'Present';
+    } else if (activeConsoleFilter === 'evaluating') {
+      return a.judgingStatus === 'In Progress';
+    } else if (activeConsoleFilter === 'evaluated') {
+      return a.judgingStatus === 'Completed';
+    } else if (activeConsoleFilter !== 'all') {
+      return a.batchId === activeConsoleFilter;
+    }
+    return true;
+  });
+
+  const sortedConsoleQueue = [...filteredConsoleQueue].sort((a, b) => {
+    const aEval = a.judgingStatus === 'Completed' ? 1 : 0;
+    const bEval = b.judgingStatus === 'Completed' ? 1 : 0;
+    return aEval - bEval;
+  });
+
+  const latestSelectedAttendee = selectedAttendeeForJudging ? attendees.find(a => a.id === selectedAttendeeForJudging.id) || null : null;
+  const currentActiveJudgingAttendee = latestSelectedAttendee || sortedConsoleQueue.find(a => a.judgingStatus !== 'Completed') || sortedConsoleQueue[0] || null;
+  const currentActiveJudgingAttendeeId = currentActiveJudgingAttendee?.id;
+
+  // Sync criteriaScores when current active attendee changes
+  useEffect(() => {
+    if (currentActiveJudgingAttendee) {
+      setJudgingRemarks(currentActiveJudgingAttendee.remarks || '');
       
-      // Load pre-existing scores if present
       const loadedScores: Record<string, string> = {};
-      const attendeeScores = (selectedAttendeeForJudging as any).criteriaScores || {};
+      const attendeeScores = (currentActiveJudgingAttendee as any).criteriaScores || {};
       
       evaluationCriteria.forEach(crit => {
         if (attendeeScores[crit.id] !== undefined) {
           loadedScores[crit.id] = String(attendeeScores[crit.id]);
         } else {
-          // Fallback if total score exists but breakdown doesn't (distributed evenly)
-          if (selectedAttendeeForJudging.score !== undefined && selectedAttendeeForJudging.score > 0) {
-            const evenDist = Math.min(crit.maxScore, Math.round(selectedAttendeeForJudging.score / evaluationCriteria.length));
+          if (currentActiveJudgingAttendee.score !== undefined && currentActiveJudgingAttendee.score > 0) {
+            const evenDist = Math.min(crit.maxScore, Math.round(currentActiveJudgingAttendee.score / evaluationCriteria.length));
             loadedScores[crit.id] = String(evenDist);
           } else {
             loadedScores[crit.id] = '';
@@ -140,17 +187,146 @@ export default function HostDashboard({
       setCriteriaScores({});
       setJudgingRemarks('');
     }
-  }, [selectedAttendeeForJudging, evaluationCriteria]);
+  }, [currentActiveJudgingAttendeeId, evaluationCriteria]);
 
-  // Batch helper functions
-  const eventBatches = batches.filter(b => b.eventId === (myAssignedEvent?.id || ''));
+  const handleSaveEvaluationInline = async (att: Attendee, status: 'Completed' | 'In Progress') => {
+    let total = 0;
+    for (const crit of evaluationCriteria) {
+      const valStr = criteriaScores[crit.id];
+      const val = (valStr === undefined || valStr === '') ? 0 : parseFloat(valStr);
+      if (isNaN(val) || val < 0 || val > crit.maxScore) {
+        setCriterionError(`Invalid entry for ${crit.name}. Score must be between 0 and ${crit.maxScore}`);
+        setToast({ message: `Score error: ${crit.name}`, type: 'error' });
+        return;
+      }
+      total += val;
+    }
+
+    const updatedAttendee = {
+      ...att,
+      score: total,
+      remarks: judgingRemarks,
+      judgingStatus: status,
+      criteriaScores: criteriaScores
+    } as Attendee;
+
+    const updatedList = attendees.map(a => a.id === att.id ? updatedAttendee : a);
+    onUpdateAttendees(updatedList);
+
+    const { saveAttendeeToFirestore: saveFn } = await import('../firebaseSync');
+    await saveFn(updatedAttendee);
+
+    if (status === 'Completed') {
+      setToast({ message: `Evaluation Submitted for ${att.name}`, type: 'success' });
+    } else {
+      setToast({ message: `Draft saved for ${att.name}`, type: 'info' });
+    }
+
+    if (status === 'Completed' && att.batchId) {
+      const batchAttendees = updatedList.filter(a => 
+        (a.registeredEventId === myAssignedEvent.id || a.eventId === myAssignedEvent.id) && 
+        a.batchId === att.batchId
+      );
+      const presentAttendees = batchAttendees.filter(a => a.attendanceStatus === 'Present');
+      const allScored = presentAttendees.length > 0 && presentAttendees.every(a => a.judgingStatus === 'Completed');
+      
+      if (allScored) {
+        handleUpdateBatchStatus(att.batchId, 'Completed');
+        setToast({ message: `Batch ${att.batchName || ''} completed & closed!`, type: 'success' });
+      }
+    }
+
+    if (status === 'Completed') {
+      const currentIndex = sortedConsoleQueue.findIndex(a => a.id === att.id);
+      const nextIndex = currentIndex + 1;
+      if (nextIndex < sortedConsoleQueue.length) {
+        const nextAtt = sortedConsoleQueue[nextIndex];
+        setSelectedAttendeeForJudging(nextAtt);
+        setTimeout(() => {
+          const rowEl = document.getElementById(`queue-row-${nextAtt.id}`);
+          if (rowEl) {
+            rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 50);
+      } else {
+        setToast({ message: 'All queue participants evaluated!', type: 'success' });
+      }
+    } else {
+      setSelectedAttendeeForJudging(updatedAttendee);
+    }
+  };
+
+  const moveConsoleSelection = (dir: number) => {
+    if (sortedConsoleQueue.length === 0) return;
+    const active = currentActiveJudgingAttendee;
+    const currentIndex = active ? sortedConsoleQueue.findIndex(a => a.id === active.id) : -1;
+    let nextIndex = currentIndex + dir;
+    if (nextIndex < 0) nextIndex = 0;
+    if (nextIndex >= sortedConsoleQueue.length) nextIndex = sortedConsoleQueue.length - 1;
+
+    const nextAtt = sortedConsoleQueue[nextIndex];
+    if (nextAtt) {
+      setSelectedAttendeeForJudging(nextAtt);
+      const rowEl = document.getElementById(`queue-row-${nextAtt.id}`);
+      if (rowEl) {
+        rowEl.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  };
 
   useEffect(() => {
-    if (eventBatches.length > 0 && (selectedJudgingBatchId === 'all' || !eventBatches.some(b => b.id === selectedJudgingBatchId))) {
-      setSelectedJudgingBatchId(eventBatches[0].id);
-    }
-  }, [eventBatches]);
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      const isEditing = active && (
+        active.tagName === 'INPUT' || 
+        active.tagName === 'TEXTAREA' || 
+        active.getAttribute('contenteditable') === 'true'
+      );
 
+      if (e.ctrlKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (currentActiveJudgingAttendee) {
+          handleSaveEvaluationInline(currentActiveJudgingAttendee, 'In Progress');
+        }
+        return;
+      }
+
+      if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        if (currentActiveJudgingAttendee) {
+          handleSaveEvaluationInline(currentActiveJudgingAttendee, 'Completed');
+        }
+        return;
+      }
+
+      if (isEditing) return;
+
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        moveConsoleSelection(-1);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        moveConsoleSelection(1);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentActiveJudgingAttendee) {
+          setSelectedAttendeeForJudging(currentActiveJudgingAttendee);
+          setTimeout(() => {
+            const firstInput = document.getElementById(`score-input-${evaluationCriteria[0]?.id}`);
+            if (firstInput) {
+              (firstInput as HTMLInputElement).focus();
+              (firstInput as HTMLInputElement).select();
+            }
+          }, 50);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [sortedConsoleQueue, currentActiveJudgingAttendee, criteriaScores, judgingRemarks]);
+
+  // Batch helper functions
   const handleAssignToBatch = (attendeeId: string, batchId: string) => {
     const targetBatch = batches.find(b => b.id === batchId);
     const updatedAttendees = attendees.map(a => {
@@ -178,16 +354,13 @@ export default function HostDashboard({
     e.preventDefault();
     if (!myAssignedEvent) return;
 
-    // Filter dynamicBatchNames to ensure none are empty
     const namesToUse = dynamicBatchNames.map(n => n.trim()).filter(Boolean);
     const K = namesToUse.length;
     if (K <= 0) return alert("Please specify at least one batch name.");
 
-    // Generate K batch objects
     const newBatchesList: Batch[] = [];
     const nowStr = new Date().toISOString();
     
-    // Sort attendees by createdAt / registration order to enforce first-come first-served
     const sortedAttendees = [...myAttendees].sort((a, b) => {
       const timeA = a.createdAt || a.id || '';
       const timeB = b.createdAt || b.id || '';
@@ -196,7 +369,6 @@ export default function HostDashboard({
 
     const N = sortedAttendees.length;
     
-    // Create Batches
     for (let i = 0; i < K; i++) {
       const bName = namesToUse[i];
       const newB: Batch = {
@@ -209,13 +381,8 @@ export default function HostDashboard({
       newBatchesList.push(newB);
     }
 
-    // Divide attendees
     const baseSize = Math.floor(N / K);
     const remainder = N % K;
-    
-    // To match: "One batch must consist of 16 participants, but one participant is getting extra, 
-    // so that extra participant will be assigned to the second batch, the last batch, in that way."
-    // So the first K - remainder batches get baseSize elements, and the last remainder batches get baseSize + 1 elements.
     
     const updatedAttendees = [...attendees];
     let currentIdx = 0;
@@ -228,7 +395,6 @@ export default function HostDashboard({
       for (let j = 0; j < groupSize; j++) {
         if (currentIdx < N) {
           const attendeeToUpdate = sortedAttendees[currentIdx];
-          // Find this attendee in the global attendees array and update it
           const globalIdx = updatedAttendees.findIndex(a => a.id === attendeeToUpdate.id);
           if (globalIdx >= 0) {
             updatedAttendees[globalIdx] = {
@@ -242,16 +408,13 @@ export default function HostDashboard({
       }
     }
 
-    // Save Batches
     if (onSaveBatch) {
       for (const b of newBatchesList) {
         onSaveBatch(b);
       }
     }
 
-    // Update Attendees
     onUpdateAttendees(updatedAttendees);
-
     setIsCreatingBatch(false);
     if (newBatchesList.length > 0) {
       setSelectedBatchId(newBatchesList[0].id);
@@ -263,7 +426,6 @@ export default function HostDashboard({
       if (onDeleteBatch) {
         onDeleteBatch(id);
       }
-      // Unassign participants
       const updatedAttendees = attendees.map(a => {
         if (a.batchId === id) {
           return { ...a, batchId: undefined, batchName: undefined };
@@ -282,7 +444,6 @@ export default function HostDashboard({
     if (targetBatch && onSaveBatch) {
       const updatedBatch = { ...targetBatch, name };
       onSaveBatch(updatedBatch);
-      // Update participants batchName as well!
       const updatedAttendees = attendees.map(a => {
         if (a.batchId === id) {
           return { ...a, batchName: name };
@@ -439,80 +600,31 @@ export default function HostDashboard({
   };
 
   // Quick Attendance change
-  const handleMarkAttendance = (attendeeId: string, status: 'Present' | 'Absent') => {
+  const handleMarkAttendance = async (attendeeId: string, status: 'Present' | 'Absent') => {
     if (isEventCompleted || isResultsPublished) return;
+    let targetAtt: Attendee | null = null;
     const updated = attendees.map(a => {
       if (a.id === attendeeId) {
-        return { 
+        targetAtt = { 
           ...a, 
           attendanceStatus: status,
           checkedInAt: status === 'Present' ? (a.checkedInAt || new Date().toISOString()) : undefined
         } as Attendee;
+        return targetAtt;
       }
       return a;
     });
     onUpdateAttendees(updated);
+    if (targetAtt) {
+      const { saveAttendeeToFirestore: saveFn } = await import('../firebaseSync');
+      await saveFn(targetAtt);
+    }
   };
 
   // Scoring / Evaluation functions
   const handleCriteriaScoreChange = (critId: string, val: string) => {
     setCriteriaScores(prev => ({ ...prev, [critId]: val }));
     setCriterionError(null);
-  };
-
-  const handleSaveEvaluation = (status: 'Completed' | 'In Progress') => {
-    if (!selectedAttendeeForJudging) return;
-
-    let total = 0;
-    for (const crit of evaluationCriteria) {
-      const valStr = criteriaScores[crit.id];
-      const val = (valStr === undefined || valStr === '') ? 0 : parseFloat(valStr);
-      if (isNaN(val) || val < 0 || val > crit.maxScore) {
-        setCriterionError(`Invalid entry for ${crit.name}. Score must be between 0 and ${crit.maxScore}`);
-        return;
-      }
-      total += val;
-    }
-
-    // Success - update participant document
-    const updatedAttendees = attendees.map(a => {
-      if (a.id === selectedAttendeeForJudging.id) {
-        return {
-          ...a,
-          score: total,
-          remarks: judgingRemarks,
-          judgingStatus: status,
-          criteriaScores: criteriaScores
-        } as Attendee;
-      }
-      return a;
-    });
-
-    onUpdateAttendees(updatedAttendees);
-    
-    // Refresh selection profile
-    const refetched = updatedAttendees.find(a => a.id === selectedAttendeeForJudging.id) || null;
-    setSelectedAttendeeForJudging(refetched);
-
-    // Auto-end batch if all present participants are evaluated
-    if (status === 'Completed' && selectedAttendeeForJudging.batchId) {
-      const batchAttendees = updatedAttendees.filter(a => 
-        (a.registeredEventId === myAssignedEvent.id || a.eventId === myAssignedEvent.id) && 
-        a.batchId === selectedAttendeeForJudging.batchId
-      );
-      const presentAttendees = batchAttendees.filter(a => a.attendanceStatus === 'Present');
-      const allScored = presentAttendees.length > 0 && presentAttendees.every(a => a.judgingStatus === 'Completed');
-      
-      if (allScored) {
-        handleUpdateBatchStatus(selectedAttendeeForJudging.batchId, 'Completed');
-        setConfirmationMessage(`Evaluation Submitted. All participants in "${selectedAttendeeForJudging.batchName || 'this batch'}" evaluated! Batch auto-ended successfully.`);
-        setTimeout(() => setConfirmationMessage(null), 5000);
-        return;
-      }
-    }
-
-    setConfirmationMessage(`Evaluation ${status === 'Completed' ? 'Submitted' : 'Saved as Draft'}`);
-    setTimeout(() => setConfirmationMessage(null), 3000);
   };
 
   // Add customized criteria
@@ -572,14 +684,13 @@ export default function HostDashboard({
       },
     ];
 
-    // 1. Update event in state
     const updatedEvents = events.map(ev => {
       if (ev.id === myAssignedEvent.id) {
         return {
           ...ev,
           status: 'Completed' as const,
           resultsSubmitted: true,
-          resultsPublished: true, // Custom flag to handle locks explicitly
+          resultsPublished: true, 
           results: resultsList
         } as SymposiumEvent;
       }
@@ -587,7 +698,6 @@ export default function HostDashboard({
     });
     onUpdateEvents(updatedEvents);
 
-    // 2. Save Result document to Firestore "results" collection
     const resultDoc = {
       resultId: `RES-${myAssignedEvent.id}`,
       eventId: myAssignedEvent.id,
@@ -608,2285 +718,967 @@ export default function HostDashboard({
     setTimeout(() => setConfirmationMessage(null), 5000);
   };
 
-  if (false) {
+  // Consolidated Event status updater
+  const updateEventStatus = (status: 'Upcoming' | 'Live' | 'Paused' | 'Completed') => {
+    const updatedEvents = events.map(e => {
+      if (e.id === myAssignedEvent.id) {
+        return { ...e, status };
+      }
+      return e;
+    });
+    onUpdateEvents(updatedEvents);
+    setToast({ message: `Event status set to ${status}`, type: 'success' });
+  };
+
+  // Determine active timeline stage
+  let activeTimelineStage = 'Upcoming';
+  if (isResultsPublished) {
+    activeTimelineStage = 'Published';
+  } else if (isEventCompleted) {
+    activeTimelineStage = 'Results Ready';
+  } else if (isEventLive || myAssignedEvent.status === 'Paused') {
     const presentCount = myAttendees.filter(a => a.attendanceStatus === 'Present').length;
-    const absentCount = myAttendees.filter(a => a.attendanceStatus === 'Absent').length;
-    const pendingCount = myAttendees.filter(a => !a.attendanceStatus || a.attendanceStatus === 'Pending').length;
-
-    return (
-      <div id="gate-check-in-desk" className="min-h-screen bg-background text-on-background flex flex-col font-sans">
-        {/* Header */}
-        <header className="bg-surface shadow-xs px-6 h-16 border-b border-outline-variant flex justify-between items-center z-50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-black shadow-xs">
-              🚪
-            </div>
-            <div>
-              <h1 className="font-extrabold text-sm text-primary tracking-tight leading-none">
-                Gate Entry Check-In Desk
-              </h1>
-              <p className="text-[10px] text-on-surface-variant font-bold mt-1 uppercase tracking-wider">
-                Symposium Track: {myAssignedEvent.title} • {myAssignedEvent.location}
-              </p>
-            </div>
-          </div>
-          <button 
-            onClick={() => {
-              setShowGateCheckIn(false);
-              setGateSearchQuery('');
-            }}
-            className="px-4 h-10 bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-bold rounded-lg border border-outline-variant/60 transition-all cursor-pointer flex items-center gap-1.5"
-          >
-            Return to Workspace Hub ✕
-          </button>
-        </header>
-
-        {/* Workspace Grid */}
-        <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col lg:flex-row gap-6 overflow-hidden h-[calc(100vh-64px)]">
-          
-          {/* Left Desk Controls */}
-          <div className="w-full lg:w-[320px] shrink-0 space-y-4 flex flex-col justify-between">
-            <div className="space-y-4">
-              <div className="bg-surface border border-outline-variant rounded-2xl p-5 space-y-3.5 shadow-xs">
-                <span className="text-[10px] font-black text-primary uppercase tracking-wider block">Coordinator Instructions</span>
-                <p className="text-xs text-on-surface-variant leading-relaxed">
-                  Welcome students at the gate. Simply ask for their <strong>Participant ID</strong>, search it on the right list, and click <strong>Check-In</strong> to mark them as Present!
-                </p>
-                <div className="bg-primary/5 border border-primary/20 p-3 rounded-xl text-[10px] text-primary font-bold leading-relaxed">
-                  💡 PRO TIP: Set the auto-batch selector below to automatically put students into Batch 1 or Batch 2 upon check-in!
-                </div>
-              </div>
-
-              {/* Stats Block */}
-              <div className="bg-surface border border-outline-variant rounded-2xl p-4.5 space-y-3 shadow-xs">
-                <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-wider block border-b pb-1.5">Desk Check-in Stats</span>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-on-surface-variant font-semibold">Total Registered</span>
-                    <span className="font-mono font-black text-on-surface">{myAttendees.length}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-emerald-600 font-bold">Present (Checked-In)</span>
-                    <span className="font-mono font-black text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded">{presentCount}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-error font-bold">Absent</span>
-                    <span className="font-mono font-black text-error bg-error/10 px-2 py-0.5 rounded">{absentCount}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-amber-600 font-bold">Pending Arrival</span>
-                    <span className="font-mono font-black text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded">{pendingCount}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick action button */}
-            <div className="bg-surface border border-outline-variant rounded-2xl p-4 space-y-2 pb-4 shadow-xs">
-              <span className="text-[9px] font-black text-on-surface-variant uppercase block tracking-wider">Desk Actions</span>
-              <button
-                onClick={() => {
-                  const updated = attendees.map(a => {
-                    if ((a.registeredEventId === myAssignedEvent.id || a.eventId === myAssignedEvent.id) && (!a.attendanceStatus || a.attendanceStatus === 'Pending')) {
-                      return { ...a, attendanceStatus: 'Absent' } as Attendee;
-                    }
-                    return a;
-                  });
-                  onUpdateAttendees(updated);
-                  setConfirmationMessage('All remaining pending attendees marked Absent');
-                  setTimeout(() => setConfirmationMessage(null), 3000);
-                }}
-                disabled={isEventCompleted || isResultsPublished}
-                className="w-full py-2.5 bg-surface hover:bg-surface-container text-on-surface-variant border border-outline-variant/60 font-bold rounded-xl text-[10px] uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50"
-              >
-                Mark Pending as Absent
-              </button>
-            </div>
-          </div>
-
-          {/* Right Desk Roster Workspace */}
-          <div className="flex-1 bg-surface border border-outline-variant rounded-2xl p-5 flex flex-col h-full overflow-hidden shadow-xs">
-            
-            {/* Filter & Search Header */}
-            <div className="space-y-4 pb-4 border-b border-outline-variant/40">
-              <div className="flex flex-col md:flex-row gap-3">
-                {/* Search box with autoFocus */}
-                <div className="flex-1 relative">
-                  <Search className="w-4 h-4 text-outline absolute left-3 top-3" />
-                  <input
-                    type="text"
-                    placeholder="Search by Participant ID, Name, or College... (Press Enter to Check-In)"
-                    autoFocus
-                    value={gateSearchQuery}
-                    onChange={(e) => setGateSearchQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        const queryStr = gateSearchQuery.toLowerCase().trim();
-                        if (!queryStr) return;
-                        
-                        const matches = myAttendees.filter(a => {
-                          return (
-                            (a.participantId || '').toLowerCase() === queryStr ||
-                            (a.id || '').toLowerCase() === queryStr ||
-                            a.name.toLowerCase().includes(queryStr)
-                          );
-                        });
-
-                        if (matches.length === 1) {
-                          const target = matches[0];
-                          let updatedBatchFields = {};
-                          if (gateSelectedBatchId !== 'all') {
-                            const targetBatch = batches.find(b => b.id === gateSelectedBatchId);
-                            if (targetBatch) {
-                              updatedBatchFields = {
-                                batchId: gateSelectedBatchId,
-                                batchName: targetBatch.name
-                              };
-                            }
-                          }
-
-                          const updated = attendees.map(a => {
-                            if (a.id === target.id) {
-                              return { 
-                                ...a, 
-                                attendanceStatus: 'Present',
-                                checkedInAt: a.checkedInAt || new Date().toISOString(),
-                                ...updatedBatchFields
-                              } as Attendee;
-                            }
-                            return a;
-                          });
-                          onUpdateAttendees(updated);
-                          setConfirmationMessage(`Successfully checked in ${target.name} (Attended)!`);
-                          setTimeout(() => setConfirmationMessage(null), 3500);
-                          setGateSearchQuery('');
-                        }
-                      }
-                    }}
-                    className="w-full h-10 pl-9 pr-8 bg-surface-container-low border border-outline rounded-xl text-xs font-semibold focus:border-primary focus:outline-none placeholder:text-outline"
-                  />
-                  {gateSearchQuery && (
-                    <button 
-                      onClick={() => setGateSearchQuery('')}
-                      className="absolute right-3 top-3 text-xs font-bold text-on-surface-variant hover:text-on-surface"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-
-                {/* Status selection filters */}
-                <div className="flex gap-1 bg-surface-container-low border border-outline-variant/60 rounded-xl p-1">
-                  {(['all', 'checked-in', 'pending'] as const).map(f => (
-                    <button
-                      key={f}
-                      onClick={() => setGateFilter(f)}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer capitalize ${
-                        gateFilter === f 
-                          ? 'bg-primary text-on-primary border-primary shadow-xs' 
-                          : 'bg-transparent text-on-surface-variant border-transparent hover:bg-surface-container'
-                      }`}
-                    >
-                      {f === 'checked-in' ? 'Present' : f === 'pending' ? 'Not Checked-In' : 'All Roster'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Auto assignment to Batch setting */}
-              <div className="flex flex-wrap items-center gap-3 bg-surface-container-low p-3 rounded-xl border border-outline-variant/40">
-                <span className="text-[10px] font-black text-on-surface-variant uppercase">Check-In Auto-Batcher Desk:</span>
-                <select
-                  value={gateSelectedBatchId}
-                  onChange={(e) => setGateSelectedBatchId(e.target.value)}
-                  className="h-8 px-2.5 bg-surface border border-outline rounded-lg text-xs text-on-surface font-extrabold"
-                >
-                  <option value="all">Keep general pool (No auto-assignment)</option>
-                  {eventBatches.map(b => (
-                    <option key={b.id} value={b.id}>Auto-assign to: {b.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Scrollable list of attendees */}
-            <div className="flex-1 overflow-y-auto space-y-2 mt-4 pr-1">
-              {myAttendees
-                .filter(a => {
-                  if (!gateSearchQuery.trim()) return true;
-                  const query = gateSearchQuery.toLowerCase();
-                  return (
-                    a.name.toLowerCase().includes(query) ||
-                    (a.participantId || '').toLowerCase().includes(query) ||
-                    (a.id || '').toLowerCase().includes(query) ||
-                    a.college.toLowerCase().includes(query)
-                  );
-                })
-                .filter(a => {
-                  if (gateFilter === 'checked-in') return a.attendanceStatus === 'Present';
-                  if (gateFilter === 'pending') return a.attendanceStatus !== 'Present';
-                  return true;
-                }).length === 0 ? (
-                <div className="p-16 text-center space-y-2">
-                  <p className="text-sm font-bold text-on-surface">No participants found</p>
-                  <p className="text-xs text-on-surface-variant">Verify spelling or try searching a different query.</p>
-                </div>
-              ) : (
-                myAttendees
-                  .filter(a => {
-                    if (!gateSearchQuery.trim()) return true;
-                    const query = gateSearchQuery.toLowerCase();
-                    return (
-                      a.name.toLowerCase().includes(query) ||
-                      (a.participantId || '').toLowerCase().includes(query) ||
-                      (a.id || '').toLowerCase().includes(query) ||
-                      a.college.toLowerCase().includes(query)
-                    );
-                  })
-                  .filter(a => {
-                    if (gateFilter === 'checked-in') return a.attendanceStatus === 'Present';
-                    if (gateFilter === 'pending') return a.attendanceStatus !== 'Present';
-                    return true;
-                  })
-                  .map(att => {
-                    const isCheckedIn = att.attendanceStatus === 'Present';
-
-                    return (
-                      <div 
-                        key={att.id}
-                        className={`p-4 border rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
-                          isCheckedIn 
-                            ? 'bg-emerald-500/5 border-emerald-500/30' 
-                            : 'bg-surface-container-lowest border-outline-variant/35 hover:border-outline-variant'
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-center gap-2.5">
-                            <span className="font-mono text-xs font-black text-primary bg-primary/10 border border-primary/20 px-2.5 py-0.5 rounded-lg shrink-0">
-                              {att.participantId || att.id}
-                            </span>
-                            <h3 className="font-black text-sm text-on-surface leading-none truncate">
-                              {att.name}
-                            </h3>
-                          </div>
-                          
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5 text-xs font-medium text-on-surface-variant">
-                            <span>🏫 {att.college}</span>
-                            {att.batchName && (
-                              <span className="bg-secondary-container text-on-secondary-container px-1.5 py-0.2 rounded font-black uppercase text-[9px] border border-secondary/10">
-                                📦 {att.batchName}
-                              </span>
-                            )}
-                            <span className="text-[10px] opacity-75 capitalize">
-                              👤 {att.registrationType || att.regType || 'Individual'}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          {/* Batch selection dropdown */}
-                          <select
-                            value={att.batchId || ''}
-                            onChange={(e) => handleAssignToBatch(att.id, e.target.value)}
-                            disabled={isEventCompleted || isResultsPublished}
-                            className="h-8 px-2 bg-surface border border-outline rounded-lg text-[10px] font-bold text-on-surface uppercase disabled:opacity-50 cursor-pointer"
-                          >
-                            <option value="">No Batch</option>
-                            {eventBatches.map(b => (
-                              <option key={b.id} value={b.id}>{b.name}</option>
-                            ))}
-                          </select>
-
-                          {/* Attended & Not Attended Button Group */}
-                          <div className="flex items-center gap-1 bg-surface-container-low border border-outline-variant/60 p-1 rounded-xl">
-                            {/* Attended (Present) */}
-                            <button
-                              onClick={() => {
-                                let updatedBatchFields = {};
-                                if (gateSelectedBatchId !== 'all') {
-                                  const targetBatch = batches.find(b => b.id === gateSelectedBatchId);
-                                  if (targetBatch) {
-                                    updatedBatchFields = {
-                                      batchId: gateSelectedBatchId,
-                                      batchName: targetBatch.name
-                                    };
-                                  }
-                                }
-                                const updated = attendees.map(a => {
-                                  if (a.id === att.id) {
-                                    return { 
-                                      ...a, 
-                                      attendanceStatus: 'Present',
-                                      checkedInAt: a.checkedInAt || new Date().toISOString(),
-                                      ...updatedBatchFields
-                                    } as Attendee;
-                                  }
-                                  return a;
-                                });
-                                onUpdateAttendees(updated);
-                                setConfirmationMessage(`Successfully checked in ${att.name} (Attended)!`);
-                                setTimeout(() => setConfirmationMessage(null), 3000);
-                              }}
-                              disabled={isEventCompleted || isResultsPublished}
-                              className={`h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 border transition-all cursor-pointer ${
-                                att.attendanceStatus === 'Present'
-                                  ? 'bg-emerald-600 text-on-emerald border-emerald-600 shadow-xs'
-                                  : 'bg-transparent border-transparent text-on-surface-variant hover:bg-surface-container'
-                              } disabled:opacity-50`}
-                            >
-                              <Check className="w-3 h-3 font-bold" /> Attended
-                            </button>
-
-                            {/* Not Attended (Absent) */}
-                            <button
-                              onClick={() => {
-                                const updated = attendees.map(a => {
-                                  if (a.id === att.id) {
-                                    return { 
-                                      ...a, 
-                                      attendanceStatus: 'Absent'
-                                    } as Attendee;
-                                  }
-                                  return a;
-                                });
-                                onUpdateAttendees(updated);
-                                setConfirmationMessage(`Successfully marked ${att.name} as Not Attended!`);
-                                setTimeout(() => setConfirmationMessage(null), 3000);
-                              }}
-                              disabled={isEventCompleted || isResultsPublished}
-                              className={`h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 border transition-all cursor-pointer ${
-                                att.attendanceStatus === 'Absent'
-                                  ? 'bg-error text-on-error border-error shadow-xs'
-                                  : 'bg-transparent border-transparent text-on-surface-variant hover:bg-surface-container'
-                              } disabled:opacity-50`}
-                            >
-                              <X className="w-3 h-3" /> Not Attended
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-              )}
-            </div>
-
-          </div>
-        </div>
-      </div>
-    );
+    const evaluatedCount = myAttendees.filter(a => a.judgingStatus === 'Completed').length;
+    if (presentCount > 0 && evaluatedCount >= presentCount) {
+      activeTimelineStage = 'Results Ready';
+    } else if (evaluatedCount > 0) {
+      activeTimelineStage = 'Judging';
+    } else if (presentCount > 0) {
+      activeTimelineStage = 'Attendance Completed';
+    } else {
+      activeTimelineStage = 'Started';
+    }
   }
 
+  const timelineStages = [
+    { id: 'Upcoming', label: 'Upcoming' },
+    { id: 'Started', label: 'Event Started' },
+    { id: 'Attendance Completed', label: 'Attendance Done' },
+    { id: 'Judging', label: 'Judging Live' },
+    { id: 'Results Ready', label: 'Results Ready' },
+    { id: 'Published', label: 'Published' }
+  ];
+
+  const activeStageIndex = timelineStages.findIndex(s => s.id === activeTimelineStage);
+
+  const handleSkipEvaluation = () => {
+    if (!currentActiveJudgingAttendee) return;
+    const currentIndex = sortedConsoleQueue.findIndex(a => a.id === currentActiveJudgingAttendee.id);
+    const nextIndex = currentIndex + 1;
+    if (nextIndex < sortedConsoleQueue.length) {
+      const nextAtt = sortedConsoleQueue[nextIndex];
+      setSelectedAttendeeForJudging(nextAtt);
+      setToast({ message: `Skipped to ${nextAtt.name}`, type: 'info' });
+      setTimeout(() => {
+        const rowEl = document.getElementById(`queue-row-${nextAtt.id}`);
+        if (rowEl) {
+          rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      }, 50);
+    } else {
+      setToast({ message: 'End of queue reached', type: 'info' });
+    }
+  };
+
   return (
-    <div id="host-shell" className="min-h-screen bg-background text-on-background flex flex-col font-sans">
+    <div id="host-console" className="min-h-screen bg-background text-on-background flex flex-col font-sans overflow-x-hidden">
       
-      {/* Mobile AppBar header */}
-      <header className="bg-surface shadow-xs lg:hidden fixed top-0 w-full z-40 flex justify-between items-center px-4 h-16 border-b border-outline-variant">
-        <div className="flex items-center gap-2">
-          <Shield className="w-5 h-5 text-primary" />
-          <h1 className="font-extrabold text-sm text-primary tracking-tight leading-none">
-            AItheronML Symposium OS
-          </h1>
+      {/* Event Header & Action Bar */}
+      <header className="bg-surface border-b border-outline-variant/60 shadow-xs px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 z-40">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-black shadow-sm text-xl">
+            🏆
+          </div>
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="font-extrabold text-lg text-primary tracking-tight leading-none">
+                {myAssignedEvent.title}
+              </h1>
+              <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${
+                myAssignedEvent.status === 'Live'
+                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                  : myAssignedEvent.status === 'Paused'
+                  ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                  : myAssignedEvent.status === 'Completed'
+                  ? 'bg-rose-500/10 text-rose-600 border-rose-500/20'
+                  : 'bg-outline-variant/20 text-on-surface-variant border-outline-variant/30'
+              }`}>
+                {myAssignedEvent.status || 'Upcoming'}
+              </span>
+              {isOnline === false ? (
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold flex items-center gap-1 border border-amber-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  Offline Mode
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold flex items-center gap-1 border border-emerald-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Connected
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-on-surface-variant font-semibold mt-1">
+              📍 Venue: <strong className="text-on-surface">{myAssignedEvent.location}</strong> • Host: {user.name} ({user.email})
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold bg-primary/10 text-primary px-2.5 py-0.5 rounded-full uppercase">
-            {myAssignedEvent.status}
-          </span>
-          <button onClick={onLogout} className="p-1.5 text-on-surface-variant hover:text-error">
-            <LogOut className="w-4 h-4" />
+
+        {/* Quick Action Button Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Start / Resume Event */}
+          {(myAssignedEvent.status === 'Upcoming' || !myAssignedEvent.status) && (
+            <button
+              onClick={() => updateEventStatus('Live')}
+              className="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+            >
+              <Play className="w-4 h-4" /> Start Event
+            </button>
+          )}
+
+          {myAssignedEvent.status === 'Paused' && (
+            <button
+              onClick={() => updateEventStatus('Live')}
+              className="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+            >
+              <Play className="w-4 h-4" /> Resume Event
+            </button>
+          )}
+
+          {/* Pause Event */}
+          {myAssignedEvent.status === 'Live' && (
+            <button
+              onClick={() => updateEventStatus('Paused')}
+              className="h-10 px-4 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+            >
+              <Clock className="w-4 h-4" /> Pause Event
+            </button>
+          )}
+
+          {/* End Event */}
+          {(myAssignedEvent.status === 'Live' || myAssignedEvent.status === 'Paused') && (
+            <button
+              onClick={() => updateEventStatus('Completed')}
+              className="h-10 px-4 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+            >
+              <X className="w-4 h-4" /> End Event
+            </button>
+          )}
+
+          {/* Publish Results */}
+          <button
+            onClick={() => setIsPublishConfirmOpen(true)}
+            disabled={!isEventCompleted || isResultsPublished}
+            className="h-10 px-4 bg-primary text-on-primary font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Award className="w-4 h-4" /> Publish Results
+          </button>
+
+          {/* Help Center */}
+          <button
+            onClick={() => setIsHelpModalOpen(true)}
+            className="h-10 px-3 bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <HelpCircle className="w-4 h-4" /> Help Center
+          </button>
+
+          {/* Logout */}
+          <button
+            onClick={onLogout}
+            className="h-10 px-3 bg-surface-container border border-outline-variant hover:bg-surface-container-high text-on-surface-variant font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <LogOut className="w-4 h-4" /> Logout
           </button>
         </div>
       </header>
 
-      <div className="flex pt-16 lg:pt-0 flex-1">
+      {/* Main Workspace Layout */}
+      <main className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6 p-4 md:p-6 overflow-y-auto lg:overflow-hidden lg:h-[calc(100vh-80px)]">
         
-        {/* Host Coordinator Sidebar - Strict Menu Layout constraint */}
-        <nav className="bg-surface border-r border-outline-variant hidden lg:flex flex-col pt-6 pb-6 h-screen fixed left-0 top-0 w-[280px] z-30 shadow-xs">
-          <div className="px-6 mb-6 flex flex-col gap-1">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-black shadow-sm">
-                OS
+        {/* ==================================================== */}
+        {/* COLUMN 1 (Left): Batch Control & Participant Queue  */}
+        {/* ==================================================== */}
+        <section className="col-span-1 md:col-span-1 lg:col-span-4 flex flex-col gap-4 lg:h-full lg:overflow-hidden min-w-0">
+          
+          {/* Batches Collapsible List */}
+          <div className="bg-surface border border-outline-variant/60 rounded-2xl p-4 flex flex-col gap-3 shadow-xs shrink-0 max-h-[220px] overflow-y-auto">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-black text-primary uppercase tracking-wider block">Event Batches</span>
+              <button
+                onClick={() => setIsCreatingBatch(!isCreatingBatch)}
+                className="text-[9px] font-bold bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-lg hover:bg-primary/20 transition-all"
+              >
+                {isCreatingBatch ? 'Cancel' : '+ Generate'}
+              </button>
+            </div>
+
+            {isCreatingBatch && (
+              <form onSubmit={handleCreateBatch} className="bg-surface-container-low border border-outline-variant/40 p-3 rounded-xl space-y-2.5">
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-[8px] font-black uppercase text-on-surface-variant">Batch Count</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={batchCount}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? '' : parseInt(e.target.value);
+                        setBatchCount(val);
+                        if (typeof val === 'number') {
+                          const arr = Array.from({ length: val }, (_, i) => `Batch ${i + 1}`);
+                          setDynamicBatchNames(arr);
+                        }
+                      }}
+                      className="w-full h-8 px-2.5 bg-surface border border-outline-variant rounded-lg text-xs outline-none"
+                    />
+                  </div>
+                </div>
+                {dynamicBatchNames.map((name, i) => (
+                  <input
+                    key={i}
+                    type="text"
+                    placeholder={`Batch ${i + 1} Name`}
+                    value={name}
+                    onChange={(e) => {
+                      const updated = [...dynamicBatchNames];
+                      updated[i] = e.target.value;
+                      setDynamicBatchNames(updated);
+                    }}
+                    className="w-full h-8 px-2.5 bg-surface border border-outline-variant rounded-lg text-xs outline-none"
+                  />
+                ))}
+                <button
+                  type="submit"
+                  className="w-full h-8 bg-primary text-on-primary font-semibold text-xs rounded-lg hover:bg-primary/95 transition-all"
+                >
+                  Confirm Batches
+                </button>
+              </form>
+            )}
+
+            {eventBatches.length === 0 ? (
+              <p className="text-[10px] text-on-surface-variant italic">No batches created. Use "+ Generate" to create batches.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-2">
+                {eventBatches.map(batch => {
+                  const bCount = myAttendees.filter(a => a.batchId === batch.id).length;
+                  const isExpanded = expandedBatchIds.includes(batch.id);
+                  const isFiltered = activeConsoleFilter === batch.id;
+
+                  return (
+                    <div 
+                      key={batch.id} 
+                      className={`border rounded-xl p-2.5 transition-all ${
+                        isFiltered 
+                          ? 'border-primary bg-primary/5 shadow-xs' 
+                          : 'border-outline-variant bg-surface hover:border-outline-variant-high'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-xs text-on-surface">{batch.name}</span>
+                          <span className="text-[9px] font-semibold text-on-surface-variant bg-surface-container px-1.5 py-0.2 rounded">
+                            {bCount}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              if (isFiltered) {
+                                setActiveConsoleFilter('all');
+                              } else {
+                                setActiveConsoleFilter(batch.id);
+                              }
+                            }}
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-all ${
+                              isFiltered 
+                                ? 'bg-primary text-on-primary border-primary' 
+                                : 'bg-surface hover:bg-surface-container border-outline-variant'
+                            }`}
+                          >
+                            Filter Queue
+                          </button>
+                          <button
+                            onClick={() => {
+                              setExpandedBatchIds(prev => 
+                                isExpanded ? prev.filter(id => id !== batch.id) : [...prev, batch.id]
+                              );
+                            }}
+                            className="p-0.5 text-on-surface-variant hover:text-on-surface"
+                          >
+                            <span className="material-symbols-outlined !text-sm">
+                              {isExpanded ? 'expand_less' : 'expand_more'}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="mt-2 pt-2 border-t border-outline-variant/40 space-y-1 max-h-[100px] overflow-y-auto">
+                          {myAttendees.filter(a => a.batchId === batch.id).length === 0 ? (
+                            <p className="text-[9px] text-on-surface-variant italic">No participants in batch</p>
+                          ) : (
+                            myAttendees.filter(a => a.batchId === batch.id).map(a => (
+                              <div key={a.id} className="flex justify-between items-center text-[9px] text-on-surface-variant">
+                                <span>{a.name} ({a.participantId || a.id})</span>
+                                <span className={a.attendanceStatus === 'Present' ? 'text-emerald-600 font-bold' : 'text-amber-600'}>
+                                  {a.attendanceStatus === 'Present' ? 'Present' : 'Pending'}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
+            )}
+          </div>
+
+          {/* Participant Queue List */}
+          <div className="flex-1 bg-surface border border-outline-variant/60 rounded-2xl p-4 flex flex-col gap-3 shadow-xs overflow-hidden h-full">
+            <span className="text-[10px] font-black text-primary uppercase tracking-wider block">Participant Queue</span>
+            
+            {/* Live Search */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-outline absolute left-2.5 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search name, ID, college..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-8 pl-8 pr-3 bg-surface-container-low border border-outline-variant rounded-xl text-xs outline-none focus:border-primary placeholder:text-outline"
+              />
+            </div>
+
+            {/* Console Filter Pills */}
+            <div className="flex flex-wrap gap-1 pb-1 shrink-0 overflow-x-auto">
+              {[
+                { id: 'all', label: 'All' },
+                { id: 'waiting', label: 'Waiting' },
+                { id: 'checked-in', label: 'Checked In' },
+                { id: 'evaluating', label: 'Evaluating' },
+                { id: 'evaluated', label: 'Evaluated' }
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => setActiveConsoleFilter(opt.id)}
+                  className={`px-2 py-1 rounded-lg text-[9px] font-bold border transition-all ${
+                    activeConsoleFilter === opt.id
+                      ? 'bg-primary text-on-primary border-primary'
+                      : 'bg-surface-container-low text-on-surface-variant border-outline-variant/40 hover:bg-surface-container'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Queue Roster */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-0">
+              {sortedConsoleQueue.length === 0 ? (
+                <div className="p-12 text-center">
+                  <p className="text-xs font-bold text-on-surface">Queue is Empty</p>
+                  <p className="text-[10px] text-on-surface-variant mt-1">Adjust search filter query or mark attendance</p>
+                </div>
+              ) : (
+                sortedConsoleQueue.map(att => {
+                  const isActive = currentActiveJudgingAttendee?.id === att.id;
+                  const isEvaluated = att.judgingStatus === 'Completed';
+                  const isEvaluating = att.judgingStatus === 'In Progress';
+
+                  return (
+                    <div
+                      key={att.id}
+                      id={`queue-row-${att.id}`}
+                      onClick={() => setSelectedAttendeeForJudging(att)}
+                      className={`p-3 border rounded-xl flex flex-col justify-between gap-2.5 transition-all cursor-pointer ${
+                        isActive
+                          ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                          : isEvaluated
+                          ? 'border-outline-variant/40 bg-surface-container-low/40 opacity-70 hover:opacity-100'
+                          : 'border-outline-variant/60 bg-surface hover:border-outline-variant'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-[9px] font-black text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.2 rounded leading-none shrink-0">
+                              {att.participantId || att.id}
+                            </span>
+                            <span className="font-extrabold text-xs text-on-surface truncate block">
+                              {att.name}
+                            </span>
+                          </div>
+                          {att.teamName && (
+                            <span className="text-[9px] font-bold text-amber-600 block mt-0.5 truncate">
+                              👥 Team: {att.teamName}
+                            </span>
+                          )}
+                          <span className="text-[9px] text-on-surface-variant block mt-0.5 truncate font-semibold">
+                            🏫 {att.college} • {att.batchName || 'Unbatched'}
+                          </span>
+                        </div>
+
+                        {/* Status badges */}
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className={`text-[8px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                            isEvaluated
+                              ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                              : isEvaluating
+                              ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                              : 'bg-outline-variant/20 text-on-surface-variant border border-outline-variant/30'
+                          }`}>
+                            {isEvaluated ? 'Evaluated' : isEvaluating ? 'Evaluating' : 'Not Started'}
+                          </span>
+                          
+                          <span className={`text-[8px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                            att.attendanceStatus === 'Present'
+                              ? 'bg-teal-500/10 text-teal-600'
+                              : 'bg-rose-500/10 text-rose-600'
+                          }`}>
+                            {att.attendanceStatus === 'Present' ? 'Checked In' : 'Absent'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between border-t border-outline-variant/30 pt-2 shrink-0">
+                        {isEvaluated ? (
+                          <span className="text-[10px] font-extrabold text-primary">
+                            Score: {att.score || 0} pts
+                          </span>
+                        ) : (
+                          <span className="text-[9px] text-on-surface-variant italic">Waiting score</span>
+                        )}
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedAttendeeForJudging(att);
+                              setTimeout(() => {
+                                const firstInput = document.getElementById(`score-input-${evaluationCriteria[0]?.id}`);
+                                if (firstInput) {
+                                  (firstInput as HTMLInputElement).focus();
+                                }
+                              }, 50);
+                            }}
+                            className="text-[9px] font-extrabold text-primary bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-lg transition-all"
+                          >
+                            Evaluate
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* ==================================================== */}
+        {/* COLUMN 2 (Center): Inline Evaluation Panel          */}
+        {/* ==================================================== */}
+        <section className="col-span-1 md:col-span-1 lg:col-span-5 flex flex-col gap-4 lg:h-full lg:overflow-hidden min-w-0">
+          
+          <div className="bg-surface border border-outline-variant/60 rounded-2xl p-5 flex flex-col gap-4 shadow-xs h-full overflow-hidden">
+            <div className="flex justify-between items-center border-b border-outline-variant/40 pb-3 shrink-0">
               <div>
-                <h2 className="font-black text-sm text-primary tracking-tight leading-none">AItheronML</h2>
-                <p className="text-[9px] text-on-surface-variant uppercase font-semibold mt-1 tracking-wider">
-                  Symposium Host OS
+                <span className="text-[10px] font-black text-primary uppercase tracking-wider block">Judge Panel (Inline)</span>
+                <h2 className="font-extrabold text-sm text-on-surface mt-0.5">Assessor Evaluation Desk</h2>
+              </div>
+              
+              <button
+                onClick={() => setShowCriteriaConfig(!showCriteriaConfig)}
+                className="p-1 text-on-surface-variant hover:text-on-surface"
+                title="Configure criteria"
+              >
+                <Settings2 className="w-4 h-4" />
+              </button>
+            </div>
+
+            {showCriteriaConfig && (
+              <div className="bg-surface-container-low border border-outline-variant/40 p-4 rounded-xl space-y-3 shrink-0">
+                <span className="text-[9px] font-black text-on-surface-variant uppercase block">Manage Scoring Criteria</span>
+                
+                <div className="space-y-1.5 max-h-[120px] overflow-y-auto pr-1">
+                  {evaluationCriteria.map(crit => (
+                    <div key={crit.id} className="flex justify-between items-center text-xs bg-surface border border-outline-variant p-2 rounded-lg">
+                      <span className="font-bold">{crit.name} (max: {crit.maxScore})</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCriterion(crit.id)}
+                        className="text-error hover:text-error-dark"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <form onSubmit={handleAddCriterion} className="flex items-center gap-2 pt-2 border-t border-outline-variant/40">
+                  <input
+                    type="text"
+                    placeholder="New Criteria (e.g. Innovation)"
+                    value={newCriterionName}
+                    onChange={(e) => setNewCriterionName(e.target.value)}
+                    className="flex-1 h-8 px-2.5 bg-surface border border-outline-variant rounded-lg text-xs outline-none"
+                  />
+                  <input
+                    type="number"
+                    value={newCriterionMax}
+                    onChange={(e) => setNewCriterionMax(e.target.value)}
+                    className="w-14 h-8 px-2 bg-surface border border-outline-variant rounded-lg text-xs outline-none text-center"
+                    placeholder="Max"
+                  />
+                  <button
+                    type="submit"
+                    className="h-8 px-3 bg-primary text-on-primary rounded-lg text-xs font-semibold hover:bg-primary/95"
+                  >
+                    Add
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {!currentActiveJudgingAttendee ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+                <AlertCircle className="w-12 h-12 text-outline-variant/80 mb-2" />
+                <p className="text-xs font-bold text-on-surface">No Participant Available</p>
+                <p className="text-[10px] text-on-surface-variant mt-1">Queue is empty or criteria filters returned 0 entries.</p>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-1 min-h-0">
+                
+                {/* Active participant card header */}
+                <div className="bg-surface-container-low border border-outline-variant/45 p-4 rounded-xl flex justify-between items-start gap-2 shrink-0">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[9px] font-black text-primary bg-primary/10 border border-primary/20 px-2 py-0.2 rounded">
+                        {currentActiveJudgingAttendee.participantId || currentActiveJudgingAttendee.id}
+                      </span>
+                      <h3 className="font-black text-sm text-on-surface">
+                        {currentActiveJudgingAttendee.name}
+                      </h3>
+                    </div>
+                    {currentActiveJudgingAttendee.teamName && (
+                      <p className="text-xs font-black text-amber-600 mt-1">
+                        👥 Team Leader: {currentActiveJudgingAttendee.teamName}
+                      </p>
+                    )}
+                    <div className="text-[10px] text-on-surface-variant mt-1.5 font-bold space-y-0.5">
+                      <p>🏫 College: <span className="text-on-surface">{currentActiveJudgingAttendee.college}</span></p>
+                      <p>📧 Email: {currentActiveJudgingAttendee.email} • 📞 Mobile: {(currentActiveJudgingAttendee as any).mobile || currentActiveJudgingAttendee.phone || 'N/A'}</p>
+                      {currentActiveJudgingAttendee.teamMembers && currentActiveJudgingAttendee.teamMembers.length > 0 && (
+                        <p className="text-amber-800 dark:text-amber-300 font-bold">
+                          👥 Members: {currentActiveJudgingAttendee.teamMembers.join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Attendance check box directly inline */}
+                  <div className="flex flex-col items-end gap-1.5">
+                    <label className="flex items-center gap-1.5 cursor-pointer bg-surface border border-outline-variant px-2.5 py-1.5 rounded-lg text-[10px] font-bold">
+                      <input
+                        type="checkbox"
+                        checked={currentActiveJudgingAttendee.attendanceStatus === 'Present'}
+                        onChange={(e) => {
+                          const status = e.target.checked ? 'Present' : 'Absent';
+                          handleMarkAttendance(currentActiveJudgingAttendee.id, status);
+                          setToast({ 
+                            message: `Marked ${currentActiveJudgingAttendee.name} ${status}`, 
+                            type: 'info' 
+                          });
+                        }}
+                        disabled={isResultsPublished}
+                        className="rounded border-outline-variant text-primary focus:ring-0 cursor-pointer"
+                      />
+                      <span>Checked In</span>
+                    </label>
+                    <span className="text-[9px] text-on-surface-variant font-bold">
+                      Batch: {currentActiveJudgingAttendee.batchName || 'Unassigned'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Score Input Matrix */}
+                <div className="space-y-3">
+                  <span className="text-[9px] font-black text-on-surface-variant uppercase tracking-wider block">Evaluation Metrics</span>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {evaluationCriteria.map(crit => {
+                      const currentVal = criteriaScores[crit.id] || '';
+                      const parsedVal = parseFloat(currentVal);
+                      const isErr = currentVal !== '' && (isNaN(parsedVal) || parsedVal < 0 || parsedVal > crit.maxScore);
+
+                      return (
+                        <div key={crit.id} className="bg-surface-container-low border border-outline-variant/40 p-3 rounded-xl space-y-1">
+                          <div className="flex justify-between items-center text-[10px] font-bold">
+                            <span className="text-on-surface">{crit.name}</span>
+                            <span className="text-on-surface-variant font-semibold">Max: {crit.maxScore}</span>
+                          </div>
+                          
+                          <input
+                            type="number"
+                            id={`score-input-${crit.id}`}
+                            value={currentVal}
+                            placeholder=""
+                            onChange={(e) => handleCriteriaScoreChange(crit.id, e.target.value)}
+                            disabled={isResultsPublished}
+                            className={`w-full h-8 px-2.5 bg-surface border rounded-lg text-xs outline-none ${
+                              isErr ? 'border-error focus:ring-error' : 'border-outline focus:border-primary'
+                            }`}
+                          />
+                          {isErr && (
+                            <span className="text-[8px] text-error font-bold block">
+                              Out of range (0-{crit.maxScore})
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Assessor Remarks */}
+                <div className="space-y-1">
+                  <label className="block text-[9px] font-black text-on-surface-variant uppercase tracking-wider">Evaluation Remarks</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Enter judging remarks, notes, or critique feedback..."
+                    value={judgingRemarks}
+                    onChange={(e) => setJudgingRemarks(e.target.value)}
+                    disabled={isResultsPublished}
+                    className="w-full p-2.5 bg-surface border border-outline-variant rounded-xl text-xs outline-none focus:border-primary placeholder:text-outline-variant/80"
+                  />
+                </div>
+
+                {criterionError && (
+                  <div className="bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg text-[10px] font-bold text-rose-600 flex items-center gap-1.5">
+                    <span>⚠️ {criterionError}</span>
+                  </div>
+                )}
+
+                {/* Score lock notification if results are published */}
+                {isResultsPublished && (
+                  <div className="bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-lg text-[9px] font-bold text-amber-700 flex items-center gap-1.5 shrink-0">
+                    <span>🔒 Official standings have been compiled and published. Scores are locked in read-only mode.</span>
+                  </div>
+                )}
+
+                {/* Panel Action Buttons */}
+                {!isResultsPublished && (
+                  <div className="flex items-center gap-3 pt-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleSkipEvaluation}
+                      className="h-10 px-4 border border-outline-variant hover:bg-surface-container text-on-surface-variant font-semibold rounded-xl text-xs transition-all cursor-pointer"
+                    >
+                      Skip
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveEvaluationInline(currentActiveJudgingAttendee, 'In Progress')}
+                      className="flex-1 h-10 border border-outline-variant hover:bg-surface-container text-on-surface-variant font-semibold rounded-xl text-xs transition-all cursor-pointer"
+                    >
+                      Save Draft
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveEvaluationInline(currentActiveJudgingAttendee, 'Completed')}
+                      className="flex-1 h-10 bg-primary hover:bg-primary/95 text-on-primary font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
+                    >
+                      Save & Next
+                    </button>
+                  </div>
+                )}
+
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ==================================================== */}
+        {/* COLUMN 3 (Right): Stats, Leaderboard & Timeline    */}
+        {/* ==================================================== */}
+        <section className="col-span-1 md:col-span-2 lg:col-span-3 flex flex-col gap-4 lg:h-full lg:overflow-hidden min-w-0">
+          
+          {/* Summary Panel */}
+          <div className="bg-surface border border-outline-variant/60 rounded-2xl p-4 flex flex-col gap-3 shadow-xs shrink-0">
+            <span className="text-[10px] font-black text-primary uppercase tracking-wider block">Summary Stats</span>
+            
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-surface-container-low p-2 rounded-xl text-center">
+                <span className="text-[8px] font-black text-on-surface-variant uppercase">Registered</span>
+                <p className="text-sm font-black text-on-surface mt-0.5">{totalRegistered}</p>
+              </div>
+              <div className="bg-surface-container-low p-2 rounded-xl text-center">
+                <span className="text-[8px] font-black text-emerald-600 uppercase">Checked In</span>
+                <p className="text-sm font-black text-emerald-600 mt-0.5">{totalCheckedIn}</p>
+              </div>
+              <div className="bg-surface-container-low p-2 rounded-xl text-center">
+                <span className="text-[8px] font-black text-amber-600 uppercase">Pending</span>
+                <p className="text-sm font-black text-amber-600 mt-0.5">{totalPendingAttendance}</p>
+              </div>
+              <div className="bg-surface-container-low p-2 rounded-xl text-center">
+                <span className="text-[8px] font-black text-primary uppercase">Evaluated</span>
+                <p className="text-sm font-black text-primary mt-0.5">
+                  {myAttendees.filter(a => a.judgingStatus === 'Completed').length}
                 </p>
               </div>
             </div>
-            <div className="bg-surface-container-low p-3 rounded-xl border border-outline-variant/35 mt-2">
-              <span className="text-[10px] text-on-surface-variant font-bold uppercase block tracking-wider">Assigned Coordinator Event</span>
-              <span className="text-xs font-bold text-on-surface block mt-0.5 truncate">{myAssignedEvent.title}</span>
-            </div>
-          </div>
 
-          {/* Navigation Links matching the Host Sidebar requirement */}
-          <div className="flex-1 px-3 flex flex-col gap-1">
-            <button 
-              onClick={() => setActiveTab('overview')}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold rounded-full transition-all ${
-                activeTab === 'overview' 
-                  ? 'bg-secondary-container text-on-secondary-container shadow-xs' 
-                  : 'text-on-surface-variant hover:bg-surface-variant/40'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4 shrink-0" />
-              <span>Overview</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('participants')}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold rounded-full transition-all ${
-                activeTab === 'participants' 
-                  ? 'bg-secondary-container text-on-secondary-container shadow-xs' 
-                  : 'text-on-surface-variant hover:bg-surface-variant/40'
-              }`}
-            >
-              <Users className="w-4 h-4 shrink-0" />
-              <span>Participants</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('batches')}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold rounded-full transition-all ${
-                activeTab === 'batches' 
-                  ? 'bg-secondary-container text-on-secondary-container shadow-xs' 
-                  : 'text-on-surface-variant hover:bg-surface-variant/40'
-              }`}
-            >
-              <Layers className="w-4 h-4 shrink-0" />
-              <span>Batches</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('attendance')}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold rounded-full transition-all ${
-                activeTab === 'attendance' 
-                  ? 'bg-secondary-container text-on-secondary-container shadow-xs' 
-                  : 'text-on-surface-variant hover:bg-surface-variant/40'
-              }`}
-            >
-              <UserCheck className="w-4 h-4 shrink-0" />
-              <span>Attendance</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('judging')}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold rounded-full transition-all ${
-                activeTab === 'judging' 
-                  ? 'bg-secondary-container text-on-secondary-container shadow-xs' 
-                  : 'text-on-surface-variant hover:bg-surface-variant/40'
-              }`}
-            >
-              <ClipboardList className="w-4 h-4 shrink-0" />
-              <span>Judging</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('results')}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold rounded-full transition-all ${
-                activeTab === 'results' 
-                  ? 'bg-secondary-container text-on-secondary-container shadow-xs' 
-                  : 'text-on-surface-variant hover:bg-surface-variant/40'
-              }`}
-            >
-              <Award className="w-4 h-4 shrink-0" />
-              <span>Results</span>
-            </button>
-
-          </div>
-
-          <div className="mt-auto px-3 pt-4 border-t border-outline-variant/60">
-            <button 
-              onClick={onLogout}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-on-surface-variant rounded-full hover:bg-error/10 hover:text-error transition-all"
-            >
-              <LogOut className="w-4 h-4 shrink-0" />
-              <span>Logout Portal</span>
-            </button>
-          </div>
-        </nav>
-
-        {/* Workspace Canvas Container */}
-        <main className="flex-1 lg:ml-[280px] pt-4 lg:pt-8 px-4 md:px-8 pb-12 w-full max-w-7xl mx-auto">
-          
-          {/* Confirmation Message Overlay Toast */}
-          <AnimatePresence>
-            {confirmationMessage && (
-              <motion.div 
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="bg-primary text-on-primary font-bold px-4 py-3 rounded-xl shadow-lg border border-primary-fixed mb-6 flex items-center gap-2.5 text-xs text-center justify-between"
-              >
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5" />
-                  <span>{confirmationMessage}</span>
-                </div>
-                <button onClick={() => setConfirmationMessage(null)} className="hover:opacity-85">✕</button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* TAB: OVERVIEW */}
-          {activeTab === 'overview' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-              
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-outline-variant/40 pb-4">
-                <div>
-                  <h1 className="text-2xl font-extrabold text-on-surface tracking-tight">Event Workspace Hub</h1>
-                  <p className="text-xs text-on-surface-variant">Permanent Host Workspace for conducting and coordinating the event.</p>
-                </div>
-                <div className="flex items-center gap-2 bg-surface border px-4 py-1.5 rounded-full text-xs font-bold">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping mr-1" />
-                  <span>Coordinator: {user.name}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* 1. Details Grid Block */}
-                <div className="lg:col-span-2 bg-surface border border-outline-variant rounded-2xl p-6 space-y-4 shadow-xs">
-                  <h3 className="text-sm font-bold text-primary uppercase tracking-wider flex items-center gap-2 pb-2 border-b border-outline-variant/40">
-                    <Info className="w-4 h-4" /> General Symposium Parameters
-                  </h3>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Event Name</span>
-                      <span className="text-base font-extrabold text-on-surface block leading-tight">{myAssignedEvent.title}</span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Physical Venue</span>
-                      <span className="text-sm font-extrabold text-on-surface flex items-center gap-1.5">
-                        <MapPin className="w-4 h-4 text-primary shrink-0" />
-                        {myAssignedEvent.location}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Category / Track</span>
-                      <span className="inline-flex h-6 px-3 bg-primary/10 text-primary text-xs font-bold rounded-full items-center">
-                        {myAssignedEvent.track}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Current Event Status</span>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className={`w-2.5 h-2.5 rounded-full ${
-                          myAssignedEvent.status === 'Live' ? 'bg-error animate-pulse' : 
-                          myAssignedEvent.status === 'Completed' ? 'bg-emerald-500' : 'bg-amber-500'
-                        }`} />
-                        <span className="text-sm font-extrabold text-on-surface">{myAssignedEvent.status}</span>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Assigned Hosts</span>
-                      <span className="text-xs font-semibold text-on-surface block bg-surface-container-low px-2.5 py-1.5 border rounded-lg">
-                        🧑‍🏫 {myAssignedEvent.hostName || user.name}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Assigned Judges</span>
-                      <span className="text-xs font-semibold text-on-surface block bg-surface-container-low px-2.5 py-1.5 border rounded-lg truncate">
-                        ⚖️ {myAssignedEvent.judgeIds?.map(j => j.includes('@') ? j.split('@')[0].replace(/[^a-zA-Z0-9]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : j).join(', ') || 'External Evaluation Panel'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Attendance Stats Cards nested inside */}
-                  <div className="pt-4 border-t border-outline-variant/40 mt-6">
-                    <h4 className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-3">Roster Check-in Summary</h4>
-                    <div className="grid grid-cols-3 gap-3 text-center">
-                      <div className="bg-surface-container-low p-3 rounded-xl border">
-                        <span className="text-xs font-bold text-primary block text-2xl">{totalRegistered}</span>
-                        <span className="text-[9px] font-bold text-on-surface-variant uppercase">Registered</span>
-                      </div>
-                      <div className="bg-surface-container-low p-3 rounded-xl border">
-                        <span className="text-xs font-bold text-emerald-600 block text-2xl">{totalCheckedIn}</span>
-                        <span className="text-[9px] font-bold text-on-surface-variant uppercase">Checked-In</span>
-                      </div>
-                      <div className="bg-surface-container-low p-3 rounded-xl border">
-                        <span className="text-xs font-bold text-amber-600 block text-2xl">{totalPendingAttendance}</span>
-                        <span className="text-[9px] font-bold text-on-surface-variant uppercase">Pending</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. Operational Controller Panel */}
-                <div className="bg-surface border border-outline-variant rounded-2xl p-6 flex flex-col justify-between space-y-6 shadow-xs">
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-bold text-primary uppercase tracking-wider flex items-center gap-2 pb-2 border-b border-outline-variant/40">
-                      <Settings2 className="w-4 h-4" /> Operational Controls
-                    </h3>
-                    <p className="text-xs text-on-surface-variant">
-                      Coordinating hosts must trigger appropriate lifecycle states as the symposium progresses physically.
-                    </p>
-
-                    {isResultsPublished && (
-                      <div className="bg-primary/5 border border-primary/15 p-3.5 rounded-xl flex items-start gap-2 text-xs text-primary">
-                        <Lock className="w-4 h-4 shrink-0 mt-0.5" />
-                        <div className="space-y-1">
-                          <span className="font-bold block">Roster Locked</span>
-                          <span className="text-[10px] opacity-90 block leading-tight">
-                            Event results have been compiled and published. Evaluation scoring is permanently locked. Only Super Admin can unlock.
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                  </div>
-
-                  <div className="space-y-3">
-                    {/* START EVENT Lifecycle switch */}
-                    {myAssignedEvent.status === 'Upcoming' && (
-                      <button 
-                        onClick={handleStartEvent}
-                        className="w-full h-12 bg-primary text-on-primary hover:bg-primary/95 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                      >
-                        <Play className="w-4 h-4" /> Start Event (Upcoming → Live)
-                      </button>
-                    )}
-
-                    {/* END EVENT Lifecycle switch */}
-                    {myAssignedEvent.status === 'Live' && (
-                      <button 
-                        onClick={handleEndEvent}
-                        className="w-full h-12 bg-error text-on-error hover:opacity-95 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                      >
-                        <Check className="w-4 h-4" /> End Event (Live → Completed)
-                      </button>
-                    )}
-
-                    {myAssignedEvent.status === 'Completed' && !isResultsPublished && (
-                      <div className="space-y-3">
-                        <div className="bg-amber-100 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200 border border-amber-300 p-3 rounded-xl text-center text-xs">
-                          <AlertCircle className="w-4 h-4 mx-auto mb-1 text-amber-700" />
-                          Event is completed. Attendance/Judging edits are deactivated. Proceed to compiling and publishing the Results tab!
-                        </div>
-                        <button
-                          onClick={handlePublishResults}
-                          className="w-full h-11 bg-primary text-on-primary hover:opacity-95 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-                        >
-                          <Award className="w-4.5 h-4.5" /> Compile & Publish Results
-                        </button>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            onClick={() => handleResetEvent('Upcoming')}
-                            className="py-2.5 px-3 bg-surface border border-outline hover:bg-surface-container text-on-surface font-semibold rounded-lg text-[11px] transition-all cursor-pointer flex items-center justify-center gap-1"
-                          >
-                            <RotateCcw className="w-3.5 h-3.5 text-on-surface-variant" /> Reset to Upcoming
-                          </button>
-                          <button
-                            onClick={() => handleResetEvent('Live')}
-                            className="py-2.5 px-3 bg-primary text-on-primary hover:bg-primary/95 font-semibold rounded-lg text-[11px] transition-all cursor-pointer flex items-center justify-center gap-1"
-                          >
-                            <Play className="w-3.5 h-3.5" /> Re-open (Live)
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {isResultsPublished && (
-                      <div className="bg-emerald-50 dark:bg-emerald-950/15 border border-emerald-200 text-emerald-700 dark:text-emerald-300 p-3.5 rounded-xl text-center text-xs font-bold flex items-center justify-center gap-1.5">
-                        <CheckCircle className="w-4 h-4" /> Results Successfully Certified
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-              </div>
-            </motion.div>
-          )}
-
-          {/* TAB: PARTICIPANTS */}
-          {activeTab === 'participants' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-              {selectedAttendeeForProfile ? (
-                <ParticipantProfile 
-                  attendee={selectedAttendeeForProfile}
-                  events={events}
-                  onUpdateAttendee={(updatedAtt) => {
-                    const updatedList = attendees.map(a => a.id === updatedAtt.id ? updatedAtt : a);
-                    onUpdateAttendees(updatedList);
-                    setSelectedAttendeeForProfile(updatedAtt);
-                  }}
-                  onDeleteAttendee={(id) => {
-                    const attToDelete = attendees.find(a => a.id === id);
-                    if (attToDelete) {
-                      onUpdateAttendees(attendees.filter(a => a.id !== id));
-                      onUpdateEvents(events.map(ev => ev.id === attToDelete.registeredEventId ? { ...ev, registeredCount: Math.max(0, ev.registeredCount - 1) } : ev));
-                      setSelectedAttendeeForProfile(null);
-                      alert('Registration successfully revoked.');
-                    }
-                  }}
-                  onClose={() => setSelectedAttendeeForProfile(null)}
-                />
-              ) : (
-                <>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-outline-variant/40">
-                    <div>
-                      <h1 className="text-2xl font-extrabold text-on-surface tracking-tight">Participant Roster</h1>
-                      <p className="text-xs text-on-surface-variant">View and manage registrations dedicated explicitly to {myAssignedEvent.title}.</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input 
-                        type="text" 
-                        placeholder="Search Roster..." 
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="h-10 px-3 bg-surface border border-outline rounded-lg text-xs font-medium w-48 sm:w-60 focus:border-primary focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="bg-surface border border-outline-variant rounded-2xl overflow-hidden shadow-xs">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-surface-container border-b border-outline-variant">
-                            <th className="p-4 font-bold text-on-surface uppercase">Participant ID</th>
-                            <th className="p-4 font-bold text-on-surface uppercase">Name & College</th>
-                            <th className="p-4 font-bold text-on-surface uppercase">Team Name</th>
-                            <th className="p-4 font-bold text-on-surface uppercase">Attendance</th>
-                            <th className="p-4 font-bold text-on-surface uppercase">Judging Status</th>
-                            <th className="p-4 font-bold text-on-surface uppercase text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {myAttendees.filter(a => {
-                            const s = searchQuery.toLowerCase().trim();
-                            if (!s) return true;
-                            return (
-                              a.name.toLowerCase().includes(s) ||
-                              a.college.toLowerCase().includes(s) ||
-                              a.id.toLowerCase().includes(s) ||
-                              (a.teamName || '').toLowerCase().includes(s) ||
-                              (a.phone || '').includes(s) ||
-                              (a.email || '').toLowerCase().includes(s) ||
-                              (a.teamMembers?.some(m => 
-                                m.name.toLowerCase().includes(s) ||
-                                (m.phone || '').includes(s) ||
-                                m.email.toLowerCase().includes(s)
-                              ) ?? false)
-                            );
-                          }).length === 0 ? (
-                            <tr>
-                              <td colSpan={6} className="p-8 text-center text-on-surface-variant italic">No matched participants found.</td>
-                            </tr>
-                          ) : (
-                            myAttendees.filter(a => {
-                              const s = searchQuery.toLowerCase().trim();
-                              if (!s) return true;
-                              return (
-                                a.name.toLowerCase().includes(s) ||
-                                a.college.toLowerCase().includes(s) ||
-                                a.id.toLowerCase().includes(s) ||
-                                (a.teamName || '').toLowerCase().includes(s) ||
-                                (a.phone || '').includes(s) ||
-                                (a.email || '').toLowerCase().includes(s) ||
-                                (a.teamMembers?.some(m => 
-                                  m.name.toLowerCase().includes(s) ||
-                                  (m.phone || '').includes(s) ||
-                                  m.email.toLowerCase().includes(s)
-                                ) ?? false)
-                              );
-                            }).map(att => (
-                              <tr 
-                                key={att.id} 
-                                className="border-b border-outline-variant/30 hover:bg-surface-container/30 transition-colors"
-                              >
-                                <td className="p-4 font-mono font-bold text-primary">{att.participantId || att.id}</td>
-                                <td className="p-4">
-                                  <div className="font-extrabold text-on-surface text-sm">{att.name}</div>
-                                  <div className="text-[10px] text-on-surface-variant font-medium">{att.college}</div>
-                                </td>
-                                <td className="p-4 font-semibold text-on-surface-variant text-sm">
-                                  {att.teamName || 'Individual'}
-                                </td>
-                                <td className="p-4">
-                                  <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase border ${
-                                    att.attendanceStatus === 'Present' ? 'bg-primary/10 text-primary border-primary/20' : 
-                                    att.attendanceStatus === 'Absent' ? 'bg-error-container text-on-error-container border-error/20' : 
-                                    'bg-surface-variant text-on-surface-variant'
-                                  }`}>
-                                    {att.attendanceStatus || 'Pending'}
-                                  </span>
-                                </td>
-                                <td className="p-4">
-                                  <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase border ${
-                                    att.judgingStatus === 'Completed' ? 'bg-teal-100 text-teal-800 border-teal-200' : 
-                                    att.judgingStatus === 'In Progress' ? 'bg-amber-100 text-amber-800 border-amber-200' : 
-                                    'bg-surface-variant text-on-surface-variant'
-                                  }`}>
-                                    {att.judgingStatus || 'Not Started'}
-                                  </span>
-                                </td>
-                                <td className="p-4 text-right">
-                                  <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                                    <button 
-                                      onClick={() => setSelectedAttendeeForProfile(att)}
-                                      className="h-8 px-2.5 border border-outline hover:bg-surface-container-high rounded text-[10px] font-bold transition-all"
-                                    >
-                                      Details
-                                    </button>
-                                    
-                                    {att.attendanceStatus === 'Present' && !isResultsPublished && !isEventCompleted && (
-                                      <button 
-                                        onClick={() => {
-                                          setSelectedAttendeeForJudging(att);
-                                          setActiveTab('judging');
-                                        }}
-                                        className="h-8 px-2.5 bg-primary text-on-primary hover:opacity-90 rounded text-[10px] font-bold transition-all"
-                                      >
-                                        Judge
-                                      </button>
-                                    )}
-
-                                    {!isEventCompleted && !isResultsPublished && att.attendanceStatus !== 'Present' && (
-                                      <button 
-                                        onClick={() => handleMarkAttendance(att.id, 'Present')}
-                                        className="h-8 px-2.5 border border-primary text-primary hover:bg-primary/5 rounded text-[10px] font-bold transition-all"
-                                      >
-                                        Check In
-                                      </button>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </>
-              )}
-            </motion.div>
-          )}
-
-          {/* TAB: BATCHES */}
-          {activeTab === 'batches' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-outline-variant/40">
-                <div>
-                  <h1 className="text-xl font-extrabold text-on-surface tracking-tight">Batch Management</h1>
-                  <p className="text-xs text-on-surface-variant">Divide participants into rounds or batches, manage statuses, and track attendance.</p>
-                </div>
-                <button
-                  onClick={() => {
-                    setIsCreatingBatch(true);
-                    setBatchCount(3);
-                    setDynamicBatchNames(['Batch 1', 'Batch 2', 'Batch 3']);
-                  }}
-                  className="px-4 py-2 bg-primary text-white rounded-full text-xs font-bold shadow-md hover:bg-primary/90 transition-all flex items-center gap-1.5 cursor-pointer self-start"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Create Batch</span>
-                </button>
-              </div>
-
-              {/* Create Batch Dialog Overlay Inline Card */}
-              {isCreatingBatch && (
-                <div className="p-5 bg-surface-container border border-outline-variant rounded-2xl max-w-md space-y-4 shadow-md">
-                  <h3 className="text-sm font-extrabold text-primary">Create & Distribute Batches</h3>
-                  
-                  <div className="bg-primary/5 p-3 rounded-xl border border-primary/20 text-xs text-primary leading-normal">
-                    💡 All <strong>{myAttendees.length}</strong> participants registered for this event will be automatically divided equally across these batches on a first-come, first-served basis.
-                  </div>
-
-                  <form onSubmit={handleCreateBatch} className="space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase mb-1.5">
-                        How many batches do you want to create?
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={20}
-                        value={batchCount}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === '') {
-                            setBatchCount('');
-                          } else {
-                            const count = Math.max(1, parseInt(val) || 1);
-                            setBatchCount(count);
-                            setDynamicBatchNames(prev => {
-                              const next = [...prev];
-                              if (next.length < count) {
-                                for (let i = next.length; i < count; i++) {
-                                  next.push(`Batch ${i + 1}`);
-                                }
-                              } else {
-                                next.splice(count);
-                              }
-                              return next;
-                            });
-                          }
-                        }}
-                        className="w-full h-10 px-3 bg-surface border border-outline rounded-lg text-xs font-semibold text-on-surface"
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
-                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase">
-                        Batch Names
-                      </label>
-                      {dynamicBatchNames.map((name, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-on-surface-variant shrink-0 w-16">
-                            Batch {index + 1}:
-                          </span>
-                          <input
-                            type="text"
-                            value={name}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setDynamicBatchNames(prev => {
-                                const next = [...prev];
-                                next[index] = val;
-                                return next;
-                              });
-                            }}
-                            placeholder={`Batch ${index + 1} Name`}
-                            className="flex-1 h-10 px-3 bg-surface border border-outline rounded-lg text-xs text-on-surface"
-                            required
-                          />
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="flex justify-end gap-2 text-xs font-bold pt-2 border-t border-outline-variant/30">
-                      <button
-                        type="button"
-                        onClick={() => setIsCreatingBatch(false)}
-                        className="px-4 h-9 border border-outline rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        className="px-4 h-9 bg-primary text-on-primary rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
-                      >
-                        Create & Divide
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Batches List Panel */}
-                <div className="bg-surface border border-outline-variant rounded-2xl p-4 shadow-xs space-y-3">
-                  <h3 className="text-xs uppercase font-extrabold text-on-surface-variant border-b border-outline-variant/40 pb-2">
-                    Event Batches ({eventBatches.length})
-                  </h3>
-
-                  {eventBatches.length === 0 ? (
-                    <div className="py-8 text-center text-xs text-on-surface-variant font-medium">
-                      No batches created for this event yet. Create a batch to start organizing!
-                    </div>
-                  ) : (
-                    <div className="space-y-2 max-h-[450px] overflow-y-auto">
-                      {eventBatches.map(b => {
-                        const count = attendees.filter(a => a.batchId === b.id).length;
-                        const isSelected = selectedBatchId === b.id;
-                        return (
-                          <div
-                            key={b.id}
-                            onClick={() => setSelectedBatchId(b.id)}
-                            className={`p-3 rounded-xl border transition-all cursor-pointer ${
-                              isSelected 
-                                ? 'bg-secondary-container/50 border-primary' 
-                                : 'bg-surface-container-low border-outline-variant hover:bg-surface-container'
-                            }`}
-                          >
-                            <div className="flex justify-between items-start">
-                              {editingBatchId === b.id ? (
-                                <div className="flex-1 flex gap-1 mr-2" onClick={e => e.stopPropagation()}>
-                                  <input
-                                    type="text"
-                                    value={editingBatchName}
-                                    onChange={e => setEditingBatchName(e.target.value)}
-                                    className="w-full h-8 px-2 bg-surface border border-outline rounded text-xs"
-                                  />
-                                  <button
-                                    onClick={() => handleRenameBatch(b.id, editingBatchName)}
-                                    className="p-1 bg-primary text-white rounded text-xs"
-                                  >
-                                    ✓
-                                  </button>
-                                  <button
-                                    onClick={() => setEditingBatchId(null)}
-                                    className="p-1 border border-outline rounded text-xs"
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="font-bold text-xs text-on-surface">{b.name}</div>
-                              )}
-
-                              <div className="flex gap-1.5" onClick={e => e.stopPropagation()}>
-                                <button
-                                  onClick={() => {
-                                    setEditingBatchId(b.id);
-                                    setEditingBatchName(b.name);
-                                  }}
-                                  className="p-1 text-on-surface-variant hover:text-primary transition-colors"
-                                  title="Rename"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteBatchClick(b.id)}
-                                  className="p-1 text-on-surface-variant hover:text-error transition-colors"
-                                  title="Delete Batch"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between mt-3 pt-2 border-t border-outline-variant/30 text-[10px]">
-                              <div className="flex items-center gap-1 font-bold text-on-surface-variant">
-                                <Users className="w-3.5 h-3.5" />
-                                <span>{count} participants</span>
-                              </div>
-                              <select
-                                value={b.status || 'Waiting'}
-                                onChange={e => handleUpdateBatchStatus(b.id, e.target.value as any)}
-                                onClick={e => e.stopPropagation()}
-                                className={`px-2 py-0.5 rounded-full font-bold text-[9px] uppercase border border-outline ${
-                                  b.status === 'Live' 
-                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
-                                    : b.status === 'Completed'
-                                      ? 'bg-blue-100 text-blue-800 border-blue-300'
-                                      : 'bg-amber-100 text-amber-800 border-amber-300'
-                                }`}
-                              >
-                                <option value="Waiting">Waiting</option>
-                                <option value="Live">Live</option>
-                                <option value="Completed">Completed</option>
-                              </select>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Batch Members Panel */}
-                <div className="lg:col-span-2 bg-surface border border-outline-variant rounded-2xl p-4 shadow-xs space-y-4">
-                  {selectedBatchId ? (() => {
-                    const activeBatch = eventBatches.find(b => b.id === selectedBatchId);
-                    if (!activeBatch) return <div className="text-xs text-on-surface-variant">Selected batch not found.</div>;
-                    const members = attendees.filter(a => a.batchId === selectedBatchId);
-                    const unassignedAttendees = attendees.filter(a => (a.registeredEventId === myAssignedEvent.id || a.eventId === myAssignedEvent.id) && !a.batchId);
-
-                    return (
-                      <>
-                        <div className="flex justify-between items-center border-b border-outline-variant/40 pb-2">
-                          <div>
-                            <span className="text-[10px] uppercase font-extrabold text-primary block">Active Batch View</span>
-                            <h4 className="text-sm font-extrabold text-on-surface">{activeBatch.name}</h4>
-                          </div>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] uppercase font-bold border ${
-                            activeBatch.status === 'Live' 
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
-                              : activeBatch.status === 'Completed'
-                                ? 'bg-blue-100 text-blue-800 border-blue-300'
-                                : 'bg-amber-100 text-amber-800 border-amber-300'
-                          }`}>
-                            {activeBatch.status || 'Waiting'}
-                          </span>
-                        </div>
-
-                        {/* Assign New Members Inline Form */}
-                        {unassignedAttendees.length > 0 && (
-                          <div className="p-3 bg-surface-container border border-outline-variant rounded-xl flex flex-col sm:flex-row items-center gap-3">
-                            <span className="text-xs font-bold text-on-surface shrink-0">Assign Participant:</span>
-                            <select
-                              onChange={(e) => {
-                                if (e.target.value) {
-                                  handleAssignToBatch(e.target.value, selectedBatchId);
-                                  e.target.value = '';
-                                }
-                              }}
-                              className="flex-1 h-9 px-3 bg-surface border border-outline rounded-lg text-xs text-on-surface"
-                            >
-                              <option value="">Select an unassigned participant...</option>
-                              {unassignedAttendees.map(u => (
-                                <option key={u.id} value={u.id}>
-                                  {u.participantId} - {u.name} ({u.teamName ? `Team: ${u.teamName}` : 'Individual'})
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-
-                        {/* Batch Members List */}
-                        <div className="space-y-2">
-                          <h5 className="text-xs font-bold text-on-surface-variant">Batch Roster ({members.length})</h5>
-                          {members.length === 0 ? (
-                            <div className="py-12 border-2 border-dashed border-outline-variant rounded-xl text-center text-xs text-on-surface-variant font-medium">
-                              No participants assigned to this batch yet. Assign some above!
-                            </div>
-                          ) : (
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-left text-xs border-collapse">
-                                <thead>
-                                  <tr className="bg-surface-container border-b border-outline-variant text-on-surface">
-                                    <th className="p-3 font-bold">ID</th>
-                                    <th className="p-3 font-bold">Name</th>
-                                    <th className="p-3 font-bold">College</th>
-                                    <th className="p-3 font-bold">Attendance</th>
-                                    <th className="p-3 font-bold text-right">Action</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {members.map(m => (
-                                    <tr key={m.id} className="border-b border-outline-variant/30 hover:bg-surface-container/30 transition-colors">
-                                      <td className="p-3 font-bold text-primary">{m.participantId || m.id}</td>
-                                      <td className="p-3">
-                                        <div className="font-bold text-on-surface text-xs">{m.name}</div>
-                                        {m.teamName && (
-                                          <div className="text-[10px] text-primary font-bold">Team: {m.teamName}</div>
-                                        )}
-                                      </td>
-                                      <td className="p-3 text-on-surface-variant text-[11px] font-medium">{m.college}</td>
-                                      <td className="p-3">
-                                        <select
-                                          value={m.attendanceStatus || 'Pending'}
-                                          onChange={(e) => {
-                                            const updatedAttendees = attendees.map(att => {
-                                              if (att.id === m.id) {
-                                                return { ...att, attendanceStatus: e.target.value as any };
-                                              }
-                                              return att;
-                                            });
-                                            onUpdateAttendees(updatedAttendees);
-                                          }}
-                                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
-                                            m.attendanceStatus === 'Present' 
-                                              ? 'bg-emerald-100 text-emerald-800' 
-                                              : m.attendanceStatus === 'Absent'
-                                                ? 'bg-red-100 text-red-800'
-                                                : 'bg-amber-100 text-amber-800'
-                                          }`}
-                                        >
-                                          <option value="Pending">Pending</option>
-                                          <option value="Present">Present</option>
-                                          <option value="Absent">Absent</option>
-                                        </select>
-                                      </td>
-                                      <td className="p-3 text-right">
-                                        <button
-                                          onClick={() => handleAssignToBatch(m.id, '')}
-                                          className="text-[10px] text-error font-bold hover:underline"
-                                        >
-                                          Unassign
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    );
-                  })() : (
-                    <div className="py-24 text-center text-xs text-on-surface-variant font-medium">
-                      Select a batch from the left to view participants, track attendance, and assign new registrations.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* TAB: ATTENDANCE */}
-          {activeTab === 'attendance' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-              
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-outline-variant/40">
-                <div>
-                  <h1 className="text-2xl font-extrabold text-on-surface tracking-tight">Roster Check-in</h1>
-                  <p className="text-xs text-on-surface-variant">Digitally evaluate student check-in states to verify physical venue arrivals.</p>
-                </div>
-                <input 
-                  type="text" 
-                  placeholder="Quick find attendee..." 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-10 px-3 bg-surface border border-outline rounded-lg text-xs font-medium w-48 focus:border-primary focus:outline-none"
-                />
-              </div>
-
-              {(isEventCompleted || isResultsPublished) && (
-                <div className="bg-primary/5 border border-primary/15 p-4 rounded-xl text-xs text-primary flex items-center gap-2">
-                  <Lock className="w-4.5 h-4.5 shrink-0" />
-                  <span>Attendance edits are locked. This event is Completed / Published.</span>
-                </div>
-              )}
-
-              {/* Status statistics block */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-surface-container-low border p-4 rounded-xl flex items-center justify-between">
-                  <span className="text-xs font-bold text-on-surface-variant uppercase">Checked In Present</span>
-                  <span className="text-xl font-black text-primary">{totalCheckedIn}</span>
-                </div>
-                <div className="bg-surface-container-low border p-4 rounded-xl flex items-center justify-between">
-                  <span className="text-xs font-bold text-on-surface-variant uppercase">Absent</span>
-                  <span className="text-xl font-black text-error">{myAttendees.filter(a => a.attendanceStatus === 'Absent').length}</span>
-                </div>
-                <div className="bg-surface-container-low border p-4 rounded-xl flex items-center justify-between">
-                  <span className="text-xs font-bold text-on-surface-variant uppercase">Pending Actions</span>
-                  <span className="text-xl font-black text-amber-600">{totalPendingAttendance}</span>
-                </div>
-              </div>
-
-              <div className="bg-surface rounded-2xl border border-outline-variant p-4 space-y-2 max-h-[500px] overflow-y-auto">
-                {myAttendees.filter(a => {
-                  const s = searchQuery.toLowerCase().trim();
-                  if (!s) return true;
-                  return (
-                    a.name.toLowerCase().includes(s) ||
-                    a.college.toLowerCase().includes(s) ||
-                    a.id.toLowerCase().includes(s) ||
-                    (a.teamName || '').toLowerCase().includes(s) ||
-                    (a.phone || '').includes(s) ||
-                    (a.email || '').toLowerCase().includes(s) ||
-                    (a.teamMembers?.some(m => 
-                      m.name.toLowerCase().includes(s) ||
-                      (m.phone || '').includes(s) ||
-                      m.email.toLowerCase().includes(s)
-                    ) ?? false)
-                  );
-                }).length === 0 ? (
-                  <p className="p-8 text-center text-xs text-on-surface-variant italic">No matched participants found.</p>
-                ) : (
-                  myAttendees.filter(a => {
-                    const s = searchQuery.toLowerCase().trim();
-                    if (!s) return true;
-                    return (
-                      a.name.toLowerCase().includes(s) ||
-                      a.college.toLowerCase().includes(s) ||
-                      a.id.toLowerCase().includes(s) ||
-                      (a.teamName || '').toLowerCase().includes(s) ||
-                      (a.phone || '').includes(s) ||
-                      (a.email || '').toLowerCase().includes(s) ||
-                      (a.teamMembers?.some(m => 
-                        m.name.toLowerCase().includes(s) ||
-                        (m.phone || '').includes(s) ||
-                        m.email.toLowerCase().includes(s)
-                      ) ?? false)
-                    );
-                  }).map(att => (
-                    <div 
-                      key={att.id} 
-                      className="flex flex-col sm:flex-row sm:items-center justify-between bg-surface-container-lowest p-3 border border-outline-variant/35 rounded-xl gap-3 hover:border-outline-variant transition-all"
-                    >
-                      <div>
-                        <h3 className="font-extrabold text-sm text-on-surface flex items-center gap-2">
-                          {att.teamName ? `Team: ${att.teamName}` : att.name}
-                          <span className="font-mono text-[10px] text-primary bg-primary/5 px-1.5 py-0.5 rounded border border-primary/10">
-                            {att.participantId || att.id}
-                          </span>
-                        </h3>
-                        <p className="text-xs text-on-surface-variant font-medium mt-0.5">
-                          {att.college} • {att.teamName ? `Leader: ${att.name}` : 'Individual'}
-                          {att.teamName && att.teamMembers && att.teamMembers.length > 0 && (
-                            <span className="block text-[10px] italic mt-0.5 text-on-surface-variant">
-                              Members: {att.teamMembers.map(m => m.name).join(', ')}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleMarkAttendance(att.id, 'Present')}
-                          disabled={isEventCompleted || isResultsPublished}
-                          className={`h-9 px-4 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
-                            att.attendanceStatus === 'Present' 
-                              ? 'bg-primary text-on-primary border-primary' 
-                              : 'border-outline text-on-surface-variant hover:bg-surface-container'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        >
-                          <Check className="w-3.5 h-3.5" /> Present
-                        </button>
-                        <button
-                          onClick={() => handleMarkAttendance(att.id, 'Absent')}
-                          disabled={isEventCompleted || isResultsPublished}
-                          className={`h-9 px-4 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
-                            att.attendanceStatus === 'Absent' 
-                              ? 'bg-error-container text-on-error-container border-error/20' 
-                              : 'border-outline text-on-surface-variant hover:bg-surface-container'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        >
-                          <X className="w-3.5 h-3.5" /> Absent
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </motion.div>
-          )}
-
-          {/* TAB: JUDGING */}
-          {activeTab === 'judging' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-              
-              <div className="pb-3 border-b border-outline-variant/40 flex justify-between items-center">
-                <div>
-                  <h1 className="text-2xl font-extrabold text-on-surface tracking-tight">Judging Evaluation Portal</h1>
-                  <p className="text-xs text-on-surface-variant">Hosts register offline verbal scores from Judges. Select checked-in participants to evaluate.</p>
-                </div>
-                
-                {/* Expand criteria controls */}
-                <button
-                  onClick={() => setShowCriteriaConfig(!showCriteriaConfig)}
-                  className="px-3 py-1.5 border border-primary text-primary hover:bg-primary/5 rounded-lg text-xs font-bold flex items-center gap-1.5"
-                >
-                  <Settings2 className="w-3.5 h-3.5" />
-                  <span>Configure Criteria</span>
-                </button>
-              </div>
-
-              {/* Collapsable Criteria config - Non Permanent requirement */}
-              <AnimatePresence>
-                {showCriteriaConfig && (
-                  <motion.div 
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="bg-surface border border-outline-variant p-5 rounded-2xl space-y-4 overflow-hidden"
-                  >
-                    <div className="border-b pb-2">
-                      <h3 className="font-extrabold text-xs text-primary uppercase tracking-wider">Evaluation Parameters Configurator</h3>
-                      <p className="text-[10px] text-on-surface-variant">Create and remove metrics. These parameters dynamically generate assessment forms instantly.</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      
-                      {/* Active criteria list */}
-                      <div className="md:col-span-2 space-y-2">
-                        <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Current Active Criteria</span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {evaluationCriteria.map(crit => (
-                            <div key={crit.id} className="flex justify-between items-center bg-surface-container-low border px-3 py-2 rounded-xl text-xs">
-                              <span className="font-bold text-on-surface">{crit.name} <span className="text-primary font-mono">(Max: {crit.maxScore})</span></span>
-                              <button 
-                                onClick={() => handleRemoveCriterion(crit.id)}
-                                disabled={isResultsPublished || isEventCompleted}
-                                className="text-error hover:bg-error/10 p-1 rounded-lg disabled:opacity-50"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Add new criteria form */}
-                      <form onSubmit={handleAddCriterion} className="bg-surface-container-low p-4 rounded-xl border border-outline-variant/40 space-y-3">
-                        <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Add Custom Metric</span>
-                        
-                        <div>
-                          <label className="text-[10px] font-bold text-on-surface-variant block mb-1">Criterion Name</label>
-                          <input 
-                            type="text" 
-                            placeholder="e.g. Q&A Defense" 
-                            required
-                            value={newCriterionName}
-                            onChange={(e) => setNewCriterionName(e.target.value)}
-                            className="w-full h-8 px-2.5 bg-surface border rounded text-xs text-on-surface"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-[10px] font-bold text-on-surface-variant block mb-1">Maximum Scale Weight</label>
-                          <input 
-                            type="number" 
-                            min="1" 
-                            max="100" 
-                            required
-                            value={newCriterionMax}
-                            onChange={(e) => setNewCriterionMax(e.target.value)}
-                            className="w-full h-8 px-2.5 bg-surface border rounded text-xs text-on-surface"
-                          />
-                        </div>
-
-                        <button 
-                          type="submit"
-                          disabled={isResultsPublished || isEventCompleted}
-                          className="w-full h-9 bg-primary text-on-primary rounded text-xs font-bold hover:opacity-90 disabled:opacity-50"
-                        >
-                          Insert Metric Parameters
-                        </button>
-                      </form>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Status Warning Banners */}
-              {!isEventLive && !isEventCompleted && (
-                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 text-amber-800 dark:text-amber-200 p-4 rounded-xl text-xs flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
-                  <span>The event has not been started yet. Please launch the event in the Overview tab to initiate attendee evaluations.</span>
-                </div>
-              )}
-
-              {(isEventCompleted || isResultsPublished) && (
-                <div className="bg-primary/5 border border-primary/15 p-4 rounded-xl text-xs text-primary flex items-center gap-2">
-                  <Lock className="w-5 h-5 shrink-0" />
-                  <span>Judging edits are disabled. Results are published / completed and compiled standings are locked.</span>
-                </div>
-              )}
-
-              {/* Main Workspace split columns */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                
-                {/* LEFT COL: Checked-In Participants list */}
-                <div className="bg-surface border border-outline-variant rounded-2xl p-4 space-y-3 flex flex-col h-[600px]">
-                  <div className="space-y-2">
-                    <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Select Checked-In Presentee</span>
-                    
-                    {/* Batch wise selection filter */}
-                    <div className="flex flex-col gap-1 pb-1">
-                      <label className="text-[9px] font-bold text-primary uppercase">Select Batch</label>
-                      <select
-                        value={selectedJudgingBatchId}
-                        onChange={(e) => setSelectedJudgingBatchId(e.target.value)}
-                        className="w-full h-8 px-2 bg-surface border border-outline rounded text-xs text-on-surface font-semibold"
-                      >
-                        <option value="all">All Batches</option>
-                        {eventBatches.map(b => (
-                          <option key={b.id} value={b.id}>{b.name} ({b.status || 'Waiting'})</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Judging status filters */}
-                    <div className="flex gap-1">
-                      {(['all', 'Not Started', 'In Progress', 'Completed'] as const).map(tab => (
-                        <button
-                          key={tab}
-                          onClick={() => setJudgingFilter(tab)}
-                          className={`px-2 py-1 rounded text-[9px] font-bold border capitalize ${
-                            judgingFilter === tab 
-                              ? 'bg-secondary-container text-on-secondary-container border-secondary/20' 
-                              : 'bg-surface text-on-surface-variant'
-                          }`}
-                        >
-                          {tab === 'all' ? 'All Status' : tab}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Real-time Top 3 Leaderboard Standings Preview */}
-                  <div className="bg-primary/5 border border-primary/20 rounded-2xl p-3 space-y-2.5 shadow-xs">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-[10px] font-black text-on-surface uppercase flex items-center gap-1">
-                        <Award className="w-3.5 h-3.5 text-primary" /> Live Standings (Top 3)
-                      </h4>
-                      <span className="text-[8px] font-black bg-primary/10 text-primary px-1.5 py-0.2 rounded-full uppercase tracking-wider">
-                        Dynamic Ranks
-                      </span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      {(() => {
-                        const top3 = myAttendees
-                          .filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed')
-                          .sort((a, b) => (b.score || 0) - (a.score || 0))
-                          .slice(0, 3);
-
-                        if (top3.length === 0) {
-                          return (
-                            <p className="text-[9px] text-on-surface-variant italic text-center py-1">
-                              No completed evaluations yet.
-                            </p>
-                          );
-                        }
-
-                        return top3.map((student, idx) => {
-                          const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉';
-                          const colors = idx === 0 ? 'text-amber-800 dark:text-amber-300 bg-amber-500/10 border-amber-500/20' : 
-                                         idx === 1 ? 'text-slate-800 dark:text-slate-300 bg-slate-500/10 border-slate-500/20' : 
-                                         'text-amber-700 dark:text-amber-400 bg-amber-700/5 border-amber-700/10';
-                          return (
-                            <div 
-                              key={student.id} 
-                              className={`flex justify-between items-center px-2.5 py-1.5 border rounded-xl ${colors} transition-all`}
-                            >
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="text-xs font-bold">{medal}</span>
-                                <div className="min-w-0">
-                                  <span className="text-[11px] font-black block truncate leading-none">
-                                    {student.teamName ? `Team: ${student.teamName}` : student.name}
-                                  </span>
-                                  <span className="text-[8px] font-medium opacity-85 block truncate font-mono uppercase">{student.participantId || student.id}</span>
-                                </div>
-                              </div>
-                              <span className="font-mono text-[11px] font-black whitespace-nowrap">
-                                {student.score} pts
-                              </span>
-                            </div>
-                          );
-                        });
-                      })()}
-                    </div>
-                  </div>
-
-                  {/* Scrollable grid of Presentees */}
-                  <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
-                    {myAttendees.filter(a => a.attendanceStatus === 'Present').length === 0 ? (
-                      <p className="text-center text-xs text-on-surface-variant italic py-10 leading-tight">
-                        No checked-in participants available. Attendee check-ins must be marked Present in the Attendance tab first.
-                      </p>
-                    ) : (
-                      myAttendees
-                        .filter(a => a.attendanceStatus === 'Present')
-                        .filter(a => selectedJudgingBatchId === 'all' || a.batchId === selectedJudgingBatchId)
-                        .filter(a => judgingFilter === 'all' || (a.judgingStatus || 'Not Started') === judgingFilter)
-                        .sort((a, b) => {
-                          const timeA = a.checkedInAt || a.createdAt || '';
-                          const timeB = b.checkedInAt || b.createdAt || '';
-                          return timeA.localeCompare(timeB);
-                        })
-                        .map(att => (
-                          <button
-                            key={att.id}
-                            onClick={() => setSelectedAttendeeForJudging(att)}
-                            className={`w-full text-left p-3 border rounded-xl flex items-start gap-2.5 transition-all ${
-                              selectedAttendeeForJudging?.id === att.id 
-                                ? 'bg-primary/5 border-primary shadow-xs' 
-                                : 'border-outline-variant/40 hover:bg-surface-container-low'
-                            }`}
-                          >
-                            <div className="flex-1 min-w-0">
-                              <span className="text-xs font-black text-on-surface block truncate">
-                                {att.teamName ? `Team: ${att.teamName}` : att.name}
-                              </span>
-                              <span className="text-[9px] font-bold text-on-surface-variant uppercase truncate block">
-                                {att.teamName ? `Leader: ${att.name} • ${att.college}` : att.college}
-                              </span>
-                              
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className="font-mono text-[9px] text-primary">{att.participantId || att.id}</span>
-                                <span className={`text-[8px] font-bold uppercase px-1.5 py-0.2 border rounded ${
-                                  att.judgingStatus === 'Completed' ? 'bg-teal-50 text-teal-700 border-teal-200' : 
-                                  att.judgingStatus === 'In Progress' ? 'bg-amber-50 text-amber-700 border-amber-200' : 
-                                  'bg-surface-variant text-on-surface-variant'
-                                }`}>
-                                  {att.judgingStatus || 'Not Started'}
-                                </span>
-                              </div>
-                            </div>
-                          </button>
-                        ))
-                    )}
-                  </div>
-                </div>
-
-                {/* RIGHT COL: Evaluation grading sheet form */}
-                <div className="md:col-span-2 bg-surface border border-outline-variant rounded-2xl p-6 flex flex-col h-[600px]">
-                  {!selectedAttendeeForJudging ? (
-                    <div className="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-3">
-                      <ClipboardList className="w-14 h-14 text-outline" />
-                      <div className="max-w-sm">
-                        <h3 className="font-extrabold text-sm text-on-surface">No Participant Selected</h3>
-                        <p className="text-xs text-on-surface-variant mt-1">
-                          Select an checked-in active presentee from the left roster layout to load evaluation parameters and record marks.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col h-full space-y-4">
-                      
-                      {/* Form Header */}
-                      <div className="border-b border-outline-variant/40 pb-3 flex justify-between items-start">
-                        <div>
-                          <h3 className="text-base font-extrabold text-on-surface flex items-center gap-1.5">
-                            Evaluating: {selectedAttendeeForJudging.name}
-                          </h3>
-                          <p className="text-[10px] text-on-surface-variant font-medium">
-                            College: {selectedAttendeeForJudging.college} • ID: {selectedAttendeeForJudging.participantId || selectedAttendeeForJudging.id}
-                          </p>
-                        </div>
-                        <button 
-                          onClick={() => setSelectedAttendeeForJudging(null)}
-                          className="p-1 rounded-full hover:bg-surface-container"
-                        >
-                          ✕
-                        </button>
-                      </div>
-
-                      {/* Criteria entry blocks */}
-                      <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-                        
-                        {/* Validation Error banner */}
-                        {criterionError && (
-                          <div className="p-3 bg-error-container text-on-error-container text-xs font-bold rounded-lg border border-error/20 flex items-center gap-1.5">
-                            <AlertCircle className="w-4 h-4" />
-                            <span>{criterionError}</span>
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          {evaluationCriteria.map(crit => {
-                            const currentVal = criteriaScores[crit.id] ?? '';
-                            const parsedVal = parseFloat(currentVal);
-                            const isErr = currentVal !== '' && (isNaN(parsedVal) || parsedVal < 0 || parsedVal > crit.maxScore);
-
-                            return (
-                              <div key={crit.id} className="bg-surface-container-low border border-outline-variant/35 p-3 rounded-xl space-y-1.5">
-                                <div className="flex justify-between items-center text-xs font-bold text-on-surface-variant">
-                                  <span className="text-on-surface">{crit.name}</span>
-                                  <span>Max: {crit.maxScore}</span>
-                                </div>
-                                <input 
-                                  type="number" 
-                                  min="0" 
-                                  max={crit.maxScore}
-                                  step="0.5"
-                                  disabled={isResultsPublished || isEventCompleted || !isEventLive}
-                                  value={currentVal}
-                                  onChange={(e) => handleCriteriaScoreChange(crit.id, e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      handleSaveEvaluation('Completed');
-                                    }
-                                  }}
-                                  className={`w-full h-10 px-3 bg-surface border rounded-lg text-sm font-semibold text-on-surface ${
-                                    isErr ? 'border-error text-error focus:border-error' : 'border-outline focus:border-primary'
-                                  }`}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* General Remarks block */}
-                        <div className="space-y-1.5 mt-2">
-                          <label className="text-[10px] font-bold text-on-surface-variant uppercase block">Judge Remarks / Evaluation Comments</label>
-                          <textarea 
-                            rows={3}
-                            disabled={isResultsPublished || isEventCompleted || !isEventLive}
-                            placeholder="Type assessor feedback comments and verbal judge notations..."
-                            value={judgingRemarks}
-                            onChange={(e) => setJudgingRemarks(e.target.value)}
-                            className="w-full p-3 bg-surface border border-outline rounded-lg text-xs font-medium text-on-surface focus:border-primary focus:outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Form Footer Action panel */}
-                      <div className="pt-4 border-t border-outline-variant/45 flex justify-between items-center">
-                        <div className="text-xs">
-                          <span className="text-[10px] font-bold text-on-surface-variant uppercase block leading-none">Calculated Score</span>
-                          <span className="text-xl font-black text-primary">
-                            {/* Compute dynamic sum */}
-                            {evaluationCriteria.reduce((acc, c) => {
-                              const v = criteriaScores[c.id];
-                              return acc + (v ? parseFloat(v) || 0 : 0);
-                            }, 0)}
-                            <span className="text-xs text-on-surface-variant font-medium"> / {evaluationCriteria.reduce((acc, c) => acc + c.maxScore, 0)}</span>
-                          </span>
-                        </div>
-
-                        <div className="flex gap-2">
-                          {isEventLive && !isResultsPublished && (
-                            <>
-                              <button
-                                onClick={() => handleSaveEvaluation('In Progress')}
-                                className="h-10 px-4 border border-outline-variant hover:bg-surface-container rounded-lg text-xs font-bold transition-all"
-                              >
-                                Save Draft
-                              </button>
-                              <button
-                                onClick={() => handleSaveEvaluation('Completed')}
-                                className="h-10 px-4 bg-primary text-on-primary hover:opacity-95 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5"
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" /> Submit Evaluation
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            </motion.div>
-          )}
-
-          {/* TAB: RESULTS */}
-          {activeTab === 'results' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-              
-              <div className="pb-3 border-b border-outline-variant/40 flex justify-between items-center flex-wrap gap-4">
-                <div>
-                  <h1 className="text-2xl font-extrabold text-on-surface tracking-tight">Official Standings & Certification</h1>
-                  <p className="text-xs text-on-surface-variant">Compile, lock, and publish final podium results to the Super Admin overview.</p>
-                </div>
-                
-                {myAssignedEvent.status === 'Completed' && !isResultsPublished && (
-                  <button
-                    onClick={handlePublishResults}
-                    className="h-10 px-4 bg-primary text-on-primary hover:opacity-95 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                  >
-                    <Award className="w-4.5 h-4.5" /> Compile & Publish Results
-                  </button>
-                )}
-
-                {isResultsPublished && (
-                  <div className="bg-emerald-50 dark:bg-emerald-950/15 border border-emerald-200 text-emerald-700 dark:text-emerald-300 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5">
-                    <CheckCircle className="w-4.5 h-4.5" /> Standings Certified & Published
-                  </div>
-                )}
-              </div>
-
-              {/* Ranks compilation Podium / Batch-wise Standings */}
-              {eventBatches.length > 0 ? (
-                <div className="space-y-8">
-                  {eventBatches.map(batch => {
-                    const batchAttendees = myAttendees
-                      .filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed' && a.batchId === batch.id)
-                      .sort((a, b) => (b.score || 0) - (a.score || 0));
-
-                    return (
-                      <div key={batch.id} className="bg-surface rounded-2xl border border-outline-variant p-6 space-y-6 shadow-xs">
-                        <div className="flex justify-between items-center border-b border-outline-variant/40 pb-3">
-                          <div>
-                            <h3 className="text-lg font-black text-on-surface flex items-center gap-2">
-                              <Award className="w-5 h-5 text-primary" /> {batch.name} Standings
-                            </h3>
-                            <p className="text-[10px] text-on-surface-variant font-medium">Rankings compiled specifically for {batch.name}.</p>
-                          </div>
-                          <span className={`text-[10px] font-black px-2.5 py-0.5 border rounded-full uppercase tracking-wider ${
-                            batch.status === 'Completed' ? 'bg-teal-50 text-teal-700 border-teal-200' :
-                            batch.status === 'Live' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                            'bg-surface-variant text-on-surface-variant'
-                          }`}>
-                            {batch.status || 'Waiting'}
-                          </span>
-                        </div>
-
-                        {/* Batch Podium */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                          {/* 1st Place */}
-                          <div className="bg-amber-50 dark:bg-amber-950/10 border-2 border-amber-400 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-44 shadow-xs">
-                            <div className="absolute -right-4 -bottom-4 text-amber-300/30 font-black text-7xl pointer-events-none select-none">1</div>
-                            <div>
-                              <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">🥇 First Place</span>
-                              <h4 className="text-lg font-black text-on-surface mt-2 truncate">
-                                {batchAttendees[0]?.teamName ? batchAttendees[0].teamName : (batchAttendees[0]?.name || 'Unassigned')}
-                              </h4>
-                              <p className="text-xs text-on-surface-variant font-medium truncate">
-                                {batchAttendees[0]?.college || 'N/A'}
-                                {batchAttendees[0]?.teamName && (
-                                  <span className="block text-[9px] text-on-surface-variant/80 truncate font-semibold mt-0.5">
-                                    Leader: {batchAttendees[0].name} ({batchAttendees[0].teamMembers?.map(m => m.name).join(', ')})
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                            <div className="text-xs font-bold mt-4">
-                              Score:{' '}
-                              <span className="text-lg font-black text-amber-800 dark:text-amber-300">
-                                {batchAttendees[0]?.score || 0} pts
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* 2nd Place */}
-                          <div className="bg-surface-container border border-outline-variant p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-44 shadow-xs">
-                            <div className="absolute -right-4 -bottom-4 text-on-surface-variant/10 font-black text-7xl pointer-events-none select-none">2</div>
-                            <div>
-                              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">🥈 Second Place</span>
-                              <h4 className="text-lg font-black text-on-surface mt-2 truncate">
-                                {batchAttendees[1]?.teamName ? batchAttendees[1].teamName : (batchAttendees[1]?.name || 'Unassigned')}
-                              </h4>
-                              <p className="text-xs text-on-surface-variant font-medium truncate">
-                                {batchAttendees[1]?.college || 'N/A'}
-                                {batchAttendees[1]?.teamName && (
-                                  <span className="block text-[9px] text-on-surface-variant/80 truncate font-semibold mt-0.5">
-                                    Leader: {batchAttendees[1].name} ({batchAttendees[1].teamMembers?.map(m => m.name).join(', ')})
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                            <div className="text-xs font-bold mt-4">
-                              Score:{' '}
-                              <span className="text-lg font-black text-primary">
-                                {batchAttendees[1]?.score || 0} pts
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* 3rd Place */}
-                          <div className="bg-amber-900/5 dark:bg-amber-900/10 border border-amber-800/10 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-44 shadow-xs">
-                            <div className="absolute -right-4 -bottom-4 text-amber-900/10 font-black text-7xl pointer-events-none select-none">3</div>
-                            <div>
-                              <span className="text-[10px] font-bold text-amber-900/85 dark:text-amber-400 uppercase tracking-wider block">🥉 Third Place</span>
-                              <h4 className="text-lg font-black text-on-surface mt-2 truncate">
-                                {batchAttendees[2]?.teamName ? batchAttendees[2].teamName : (batchAttendees[2]?.name || 'Unassigned')}
-                              </h4>
-                              <p className="text-xs text-on-surface-variant font-medium truncate">
-                                {batchAttendees[2]?.college || 'N/A'}
-                                {batchAttendees[2]?.teamName && (
-                                  <span className="block text-[9px] text-amber-900/80 dark:text-amber-400/80 truncate font-semibold mt-0.5">
-                                    Leader: {batchAttendees[2].name} ({batchAttendees[2].teamMembers?.map(m => m.name).join(', ')})
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                            <div className="text-xs font-bold mt-4">
-                              Score:{' '}
-                              <span className="text-lg font-black text-primary">
-                                {batchAttendees[2]?.score || 0} pts
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Batch Detailed Table */}
-                        <div className="bg-surface rounded-2xl border border-outline-variant/60 p-4 shadow-xs space-y-2">
-                          <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Full Batch Leaderboard</span>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs border-collapse">
-                              <thead>
-                                <tr className="bg-surface-container border-b">
-                                  <th className="p-2.5 font-bold text-on-surface uppercase w-16">Rank</th>
-                                  <th className="p-2.5 font-bold text-on-surface uppercase w-28">ID</th>
-                                  <th className="p-2.5 font-bold text-on-surface uppercase">Participant</th>
-                                  <th className="p-2.5 font-bold text-on-surface uppercase">College</th>
-                                  <th className="p-2.5 font-bold text-on-surface uppercase w-28">Total Score</th>
-                                  <th className="p-2.5 font-bold text-on-surface uppercase">Judge Remarks</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {batchAttendees.length === 0 ? (
-                                  <tr>
-                                    <td colSpan={6} className="p-4 text-center text-on-surface-variant italic">No evaluated presentees in this batch.</td>
-                                  </tr>
-                                ) : (
-                                  batchAttendees.map((att, idx) => (
-                                    <tr key={att.id} className="border-b border-outline-variant/30 hover:bg-surface-container-low transition-all">
-                                      <td className="p-2.5 font-bold">
-                                        {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
-                                      </td>
-                                      <td className="p-2.5 font-mono font-bold text-primary">{att.participantId || att.id}</td>
-                                      <td className="p-2.5">
-                                        {att.teamName ? (
-                                          <div>
-                                            <div className="font-extrabold text-on-surface text-sm">Team: {att.teamName}</div>
-                                            <div className="text-[10px] text-on-surface-variant font-medium">Leader: {att.name}</div>
-                                            {att.teamMembers && att.teamMembers.length > 0 && (
-                                              <div className="text-[9px] text-on-surface-variant italic">Members: {att.teamMembers.map(m => m.name).join(', ')}</div>
-                                            )}
-                                          </div>
-                                        ) : (
-                                          <div className="font-extrabold text-on-surface">{att.name}</div>
-                                        )}
-                                      </td>
-                                      <td className="p-2.5 text-on-surface-variant font-medium">{att.college}</td>
-                                      <td className="p-2.5 font-black text-primary">{att.score || 0}</td>
-                                      <td className="p-2.5 text-on-surface-variant italic truncate max-w-xs">{att.remarks || 'No remarks.'}</td>
-                                    </tr>
-                                  ))
-                                )}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Unbatched Standings (if any) */}
+            <div className="border-t border-outline-variant/40 pt-2 grid grid-cols-2 gap-2">
+              <div className="text-center">
+                <span className="text-[8px] font-black text-on-surface-variant uppercase">Top Score</span>
+                <p className="text-sm font-black text-primary">
                   {(() => {
-                    const unassignedAttendees = myAttendees
-                      .filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed' && !a.batchId)
-                      .sort((a, b) => (b.score || 0) - (a.score || 0));
+                    const scoredList = myAttendees.filter(a => a.judgingStatus === 'Completed' && a.score !== undefined);
+                    return scoredList.length > 0 ? Math.max(...scoredList.map(a => a.score || 0)) : 0;
+                  })()}
+                </p>
+              </div>
+              <div className="text-center">
+                <span className="text-[8px] font-black text-on-surface-variant uppercase">Average</span>
+                <p className="text-sm font-black text-on-surface">
+                  {(() => {
+                    const scoredList = myAttendees.filter(a => a.judgingStatus === 'Completed' && a.score !== undefined);
+                    return scoredList.length > 0 
+                      ? (scoredList.reduce((sum, a) => sum + (a.score || 0), 0) / scoredList.length).toFixed(1)
+                      : '0.0';
+                  })()}
+                </p>
+              </div>
+            </div>
+          </div>
 
-                    if (unassignedAttendees.length === 0) return null;
+          {/* Live Leaderboard */}
+          <div className="bg-surface border border-outline-variant/60 rounded-2xl p-4 flex flex-col gap-3 shadow-xs min-h-[160px] overflow-hidden">
+            <span className="text-[10px] font-black text-primary uppercase tracking-wider block">Live Leaderboard</span>
+            
+            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+              {myAttendees
+                .filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed')
+                .sort((a, b) => (b.score || 0) - (a.score || 0))
+                .length === 0 ? (
+                <p className="text-[10px] text-on-surface-variant italic text-center py-4">No evaluations completed yet.</p>
+              ) : (
+                myAttendees
+                  .filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed')
+                  .sort((a, b) => (b.score || 0) - (a.score || 0))
+                  .map((stud, idx) => {
+                    const isGold = idx === 0;
+                    const isSilver = idx === 1;
+                    const isBronze = idx === 2;
 
                     return (
-                      <div className="bg-surface rounded-2xl border border-outline-variant p-6 space-y-6 shadow-xs">
-                        <div className="flex justify-between items-center border-b border-outline-variant/40 pb-3">
-                          <div>
-                            <h3 className="text-lg font-black text-on-surface flex items-center gap-2">
-                              <Award className="w-5 h-5 text-primary" /> Unbatched Participants Standings
-                            </h3>
-                            <p className="text-[10px] text-on-surface-variant font-medium">Rankings of evaluated participants not assigned to any batch.</p>
-                          </div>
+                      <div 
+                        key={stud.id} 
+                        className={`flex justify-between items-center px-2.5 py-1.5 border rounded-xl transition-all ${
+                          isGold 
+                            ? 'bg-amber-50/10 border-amber-500/30 text-amber-800' 
+                            : isSilver 
+                            ? 'bg-slate-50/10 border-slate-500/20 text-slate-700'
+                            : isBronze 
+                            ? 'bg-amber-700/5 border-amber-700/10 text-amber-700' 
+                            : 'bg-surface-container-lowest border-outline-variant/30 text-on-surface-variant'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-xs font-black w-4 shrink-0">
+                            {isGold ? '🥇' : isSilver ? '🥈' : isBronze ? '🥉' : `${idx + 1}`}
+                          </span>
+                          <span className="font-extrabold text-xs truncate">
+                            {stud.teamName ? stud.teamName : stud.name}
+                          </span>
                         </div>
-
-                        {/* Unbatched Podium */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                          {/* 1st Place */}
-                          <div className="bg-amber-50 dark:bg-amber-950/10 border-2 border-amber-400 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-44 shadow-xs">
-                            <div className="absolute -right-4 -bottom-4 text-amber-300/30 font-black text-7xl pointer-events-none select-none">1</div>
-                            <div>
-                              <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">🥇 First Place</span>
-                              <h4 className="text-lg font-black text-on-surface mt-2 truncate">
-                                {unassignedAttendees[0]?.teamName ? unassignedAttendees[0].teamName : (unassignedAttendees[0]?.name || 'Unassigned')}
-                              </h4>
-                              <p className="text-xs text-on-surface-variant font-medium truncate">
-                                {unassignedAttendees[0]?.college || 'N/A'}
-                                {unassignedAttendees[0]?.teamName && (
-                                  <span className="block text-[9px] text-on-surface-variant/80 truncate font-semibold mt-0.5">
-                                    Leader: {unassignedAttendees[0].name} ({unassignedAttendees[0].teamMembers?.map(m => m.name).join(', ')})
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                            <div className="text-xs font-bold mt-4">
-                              Score:{' '}
-                              <span className="text-lg font-black text-amber-800 dark:text-amber-300">
-                                {unassignedAttendees[0]?.score || 0} pts
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* 2nd Place */}
-                          <div className="bg-surface-container border border-outline-variant p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-44 shadow-xs">
-                            <div className="absolute -right-4 -bottom-4 text-on-surface-variant/10 font-black text-7xl pointer-events-none select-none">2</div>
-                            <div>
-                              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">🥈 Second Place</span>
-                              <h4 className="text-lg font-black text-on-surface mt-2 truncate">
-                                {unassignedAttendees[1]?.teamName ? unassignedAttendees[1].teamName : (unassignedAttendees[1]?.name || 'Unassigned')}
-                              </h4>
-                              <p className="text-xs text-on-surface-variant font-medium truncate">
-                                {unassignedAttendees[1]?.college || 'N/A'}
-                                {unassignedAttendees[1]?.teamName && (
-                                  <span className="block text-[9px] text-on-surface-variant/80 truncate font-semibold mt-0.5">
-                                    Leader: {unassignedAttendees[1].name} ({unassignedAttendees[1].teamMembers?.map(m => m.name).join(', ')})
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                            <div className="text-xs font-bold mt-4">
-                              Score:{' '}
-                              <span className="text-lg font-black text-primary">
-                                {unassignedAttendees[1]?.score || 0} pts
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* 3rd Place */}
-                          <div className="bg-amber-900/5 dark:bg-amber-900/10 border border-amber-800/10 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-44 shadow-xs">
-                            <div className="absolute -right-4 -bottom-4 text-amber-900/10 font-black text-7xl pointer-events-none select-none">3</div>
-                            <div>
-                              <span className="text-[10px] font-bold text-amber-900/85 dark:text-amber-400 uppercase tracking-wider block">🥉 Third Place</span>
-                              <h4 className="text-lg font-black text-on-surface mt-2 truncate">
-                                {unassignedAttendees[2]?.teamName ? unassignedAttendees[2].teamName : (unassignedAttendees[2]?.name || 'Unassigned')}
-                              </h4>
-                              <p className="text-xs text-on-surface-variant font-medium truncate">
-                                {unassignedAttendees[2]?.college || 'N/A'}
-                                {unassignedAttendees[2]?.teamName && (
-                                  <span className="block text-[9px] text-amber-900/80 dark:text-amber-400/80 truncate font-semibold mt-0.5">
-                                    Leader: {unassignedAttendees[2].name} ({unassignedAttendees[2].teamMembers?.map(m => m.name).join(', ')})
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                            <div className="text-xs font-bold mt-4">
-                              Score:{' '}
-                              <span className="text-lg font-black text-primary">
-                                {unassignedAttendees[2]?.score || 0} pts
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Unbatched Detailed Table */}
-                        <div className="bg-surface rounded-2xl border border-outline-variant/60 p-4 shadow-xs space-y-2">
-                          <span className="text-[10px] font-bold text-on-surface-variant uppercase block">Full Unbatched Leaderboard</span>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs border-collapse">
-                              <thead>
-                                <tr className="bg-surface-container border-b">
-                                  <th className="p-2.5 font-bold text-on-surface uppercase w-16">Rank</th>
-                                  <th className="p-2.5 font-bold text-on-surface uppercase w-28">ID</th>
-                                  <th className="p-2.5 font-bold text-on-surface uppercase">Participant</th>
-                                  <th className="p-2.5 font-bold text-on-surface uppercase">College</th>
-                                  <th className="p-2.5 font-bold text-on-surface uppercase w-28">Total Score</th>
-                                  <th className="p-2.5 font-bold text-on-surface uppercase">Judge Remarks</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {unassignedAttendees.map((att, idx) => (
-                                  <tr key={att.id} className="border-b border-outline-variant/30 hover:bg-surface-container-low transition-all">
-                                    <td className="p-2.5 font-bold">
-                                      {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
-                                    </td>
-                                    <td className="p-2.5 font-mono font-bold text-primary">{att.participantId || att.id}</td>
-                                    <td className="p-2.5">
-                                      {att.teamName ? (
-                                        <div>
-                                          <div className="font-extrabold text-on-surface text-sm">Team: {att.teamName}</div>
-                                          <div className="text-[10px] text-on-surface-variant font-medium">Leader: {att.name}</div>
-                                          {att.teamMembers && att.teamMembers.length > 0 && (
-                                            <div className="text-[9px] text-on-surface-variant italic">Members: {att.teamMembers.map(m => m.name).join(', ')}</div>
-                                          )}
-                                        </div>
-                                      ) : (
-                                        <div className="font-extrabold text-on-surface">{att.name}</div>
-                                      )}
-                                    </td>
-                                    <td className="p-2.5 text-on-surface-variant font-medium">{att.college}</td>
-                                    <td className="p-2.5 font-black text-primary">{att.score || 0}</td>
-                                    <td className="p-2.5 text-on-surface-variant italic truncate max-w-xs">{att.remarks || 'No remarks.'}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
+                        <span className="font-black text-xs shrink-0">
+                          {stud.score || 0}
+                        </span>
                       </div>
                     );
-                  })()}
-                </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* FIRST PLACE */}
-                    <div className="bg-amber-50 dark:bg-amber-950/10 border-2 border-amber-400 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-48 shadow-sm">
-                      <div className="absolute -right-4 -bottom-4 text-amber-300/30 font-black text-8xl pointer-events-none select-none">1</div>
-                      
-                      <div>
-                        <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">🥇 Grand Winner (Rank 1)</span>
-                        {(() => {
-                          const winnerObj = myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[0];
-                          return (
-                            <>
-                              <h3 className="text-xl font-black text-on-surface mt-2 truncate">
-                                {winnerObj?.teamName ? winnerObj.teamName : (winnerObj?.name || 'Unassigned')}
-                              </h3>
-                              <p className="text-xs text-on-surface-variant font-medium truncate">
-                                {winnerObj?.college || 'N/A'}
-                                {winnerObj?.teamName && (
-                                  <span className="block text-[9px] text-on-surface-variant/80 truncate font-semibold mt-0.5">
-                                    Leader: {winnerObj.name} ({winnerObj.teamMembers?.map(m => m.name).join(', ')})
-                                  </span>
-                                )}
-                              </p>
-                            </>
-                          );
-                        })()}
-                      </div>
-
-                      <div className="text-xs font-bold mt-4">
-                        Score:{' '}
-                        <span className="text-lg font-black text-amber-800 dark:text-amber-300">
-                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[0]?.score || 0}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* SECOND PLACE */}
-                    <div className="bg-surface-container border-2 border-outline p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-48 shadow-xs">
-                      <div className="absolute -right-4 -bottom-4 text-on-surface-variant/10 font-black text-8xl pointer-events-none select-none">2</div>
-                      
-                      <div>
-                        <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">🥈 Runner Up (Rank 2)</span>
-                        {(() => {
-                          const runnerObj = myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[1];
-                          return (
-                            <>
-                              <h3 className="text-xl font-black text-on-surface mt-2 truncate">
-                                {runnerObj?.teamName ? runnerObj.teamName : (runnerObj?.name || 'Unassigned')}
-                              </h3>
-                              <p className="text-xs text-on-surface-variant font-medium truncate">
-                                {runnerObj?.college || 'N/A'}
-                                {runnerObj?.teamName && (
-                                  <span className="block text-[9px] text-on-surface-variant/80 truncate font-semibold mt-0.5">
-                                    Leader: {runnerObj.name} ({runnerObj.teamMembers?.map(m => m.name).join(', ')})
-                                  </span>
-                                )}
-                              </p>
-                            </>
-                          );
-                        })()}
-                      </div>
-
-                      <div className="text-xs font-bold mt-4">
-                        Score:{' '}
-                        <span className="text-lg font-black text-primary">
-                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[1]?.score || 0}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* THIRD PLACE */}
-                    <div className="bg-amber-900/5 dark:bg-amber-900/10 border border-amber-800/20 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between h-48 shadow-xs">
-                      <div className="absolute -right-4 -bottom-4 text-amber-900/10 font-black text-8xl pointer-events-none select-none">3</div>
-                      
-                      <div>
-                        <span className="text-[10px] font-bold text-amber-900/85 dark:text-amber-400 uppercase tracking-wider block">🥉 Second Runner Up (Rank 3)</span>
-                        {(() => {
-                          const thirdObj = myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[2];
-                          return (
-                            <>
-                              <h3 className="text-xl font-black text-on-surface mt-2 truncate">
-                                {thirdObj?.teamName ? thirdObj.teamName : (thirdObj?.name || 'Unassigned')}
-                              </h3>
-                              <p className="text-xs text-on-surface-variant font-medium truncate">
-                                {thirdObj?.college || 'N/A'}
-                                {thirdObj?.teamName && (
-                                  <span className="block text-[9px] text-amber-900/85 dark:text-amber-400/80 truncate font-semibold mt-0.5">
-                                    Leader: {thirdObj.name} ({thirdObj.teamMembers?.map(m => m.name).join(', ')})
-                                  </span>
-                                )}
-                              </p>
-                            </>
-                          );
-                        })()}
-                      </div>
-
-                      <div className="text-xs font-bold mt-4">
-                        Score:{' '}
-                        <span className="text-lg font-black text-primary">
-                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').sort((a,b) => (b.score || 0) - (a.score || 0))[2]?.score || 0}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Comprehensive Leaderboard Score list */}
-                  <div className="bg-surface rounded-2xl border border-outline-variant p-5 shadow-xs space-y-4">
-                    <div className="border-b pb-2">
-                      <h3 className="font-extrabold text-xs text-primary uppercase tracking-wider">Comprehensive Score Registry</h3>
-                      <p className="text-[10px] text-on-surface-variant">Ranks ordered dynamically by total calculated assessor score metrics.</p>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-surface-container border-b">
-                            <th className="p-3 font-bold text-on-surface uppercase">Rank</th>
-                            <th className="p-3 font-bold text-on-surface uppercase">ID</th>
-                            <th className="p-3 font-bold text-on-surface uppercase">Participant</th>
-                            <th className="p-3 font-bold text-on-surface uppercase">College</th>
-                            <th className="p-3 font-bold text-on-surface uppercase">Total Score</th>
-                            <th className="p-3 font-bold text-on-surface uppercase">Judge Remarks</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {myAttendees.filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed').length === 0 ? (
-                            <tr>
-                              <td colSpan={6} className="p-6 text-center text-on-surface-variant italic">No evaluated presentees recorded yet.</td>
-                            </tr>
-                          ) : (
-                            myAttendees
-                              .filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed')
-                              .sort((a, b) => (b.score || 0) - (a.score || 0))
-                              .map((att, idx) => (
-                                <tr key={att.id} className="border-b border-outline-variant/30 hover:bg-surface-container-low transition-all">
-                                  <td className="p-3 font-bold">
-                                    {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
-                                  </td>
-                                  <td className="p-3 font-mono font-bold text-primary">{att.participantId || att.id}</td>
-                                   <td className="p-3 text-sm">
-                                     {att.teamName ? (
-                                       <div>
-                                         <div className="font-extrabold text-on-surface text-sm">Team: {att.teamName}</div>
-                                         <div className="text-[10px] text-on-surface-variant font-medium">Leader: {att.name}</div>
-                                         {att.teamMembers && att.teamMembers.length > 0 && (
-                                           <div className="text-[9px] text-on-surface-variant italic">Members: {att.teamMembers.map(m => m.name).join(', ')}</div>
-                                         )}
-                                       </div>
-                                     ) : (
-                                       <div className="font-extrabold text-on-surface">{att.name}</div>
-                                     )}
-                                   </td>
-                                  <td className="p-3 text-on-surface-variant font-medium">{att.college}</td>
-                                  <td className="p-3 font-black text-primary text-sm">{att.score || 0}</td>
-                                  <td className="p-3 text-on-surface-variant italic truncate max-w-xs">{att.remarks || 'No assessor feedback remarks recorded.'}</td>
-                                </tr>
-                              ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </>
+                  })
               )}
-            </motion.div>
-          )}
-
-          {/* Start Event with Batch Selection Modal */}
-          {showStartBatchModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-              <motion.div 
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="bg-white rounded-2xl shadow-2xl border border-[#c7c5d2] p-6 max-w-md w-full text-gray-800 text-left space-y-4"
-              >
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    <Play className="w-5 h-5 text-[#080c5f]" /> Start Batch Evaluation
-                  </h3>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Select which batch you would like to start judging right now. This will make the event live and activate the chosen batch.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-xs font-semibold text-gray-700">Choose Batch</label>
-                  <select
-                    value={selectedStartBatchId}
-                    onChange={(e) => setSelectedStartBatchId(e.target.value)}
-                    className="w-full h-10 px-3 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 outline-none focus:border-[#080c5f] focus:ring-1 focus:ring-[#080c5f]"
-                  >
-                    {eventBatches.map(b => (
-                      <option key={b.id} value={b.id}>
-                        {b.name} ({b.status || 'Waiting'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    onClick={() => setShowStartBatchModal(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleConfirmStartWithBatch}
-                    className="px-4 py-2 bg-[#080c5f] text-white rounded-lg text-xs font-semibold hover:bg-[#080c5f]/95 shadow-sm"
-                  >
-                    Start Judging
-                  </button>
-                </div>
-              </motion.div>
             </div>
-          )}
+          </div>
 
-        </main>
-      </div>
+          {/* Event Timeline */}
+          <div className="bg-surface border border-outline-variant/60 rounded-2xl p-4 flex flex-col gap-3 shadow-xs shrink-0">
+            <span className="text-[10px] font-black text-primary uppercase tracking-wider block">Event Stage Timeline</span>
+            
+            <div className="space-y-2 pt-1">
+              {timelineStages.map((stage, idx) => {
+                const isActive = stage.id === activeTimelineStage;
+                const isCompleted = idx < activeStageIndex;
+
+                return (
+                  <div key={stage.id} className="flex items-center gap-2.5">
+                    <div className="relative flex flex-col items-center">
+                      <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-black shrink-0 ${
+                        isActive
+                          ? 'bg-primary text-on-primary ring-2 ring-primary/30'
+                          : isCompleted
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-outline-variant/40 text-on-surface-variant'
+                      }`}>
+                        {isCompleted ? '✓' : ''}
+                      </div>
+                      {idx < timelineStages.length - 1 && (
+                        <div className={`w-0.5 h-4 my-0.5 ${
+                          isCompleted ? 'bg-emerald-600' : 'bg-outline-variant/30'
+                        }`} />
+                      )}
+                    </div>
+                    <span className={`text-[10px] font-extrabold capitalize ${
+                      isActive ? 'text-primary' : isCompleted ? 'text-emerald-700' : 'text-on-surface-variant'
+                    }`}>
+                      {stage.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+        </section>
+
+      </main>
+
+      {/* Confirmation Publish Modal */}
+      {isPublishConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="bg-surface border border-outline-variant/60 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-amber-600">
+              <Award className="w-6 h-6 animate-pulse shrink-0" />
+              <h3 className="text-base font-black text-on-surface">Publish Final Results?</h3>
+            </div>
+            <p className="text-xs text-on-surface-variant leading-relaxed">
+              Are you sure you want to compile and publish the official standings for <strong>{myAssignedEvent.title}</strong>? Once published, all judging scores and criteria will become **read-only** and locked permanently.
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setIsPublishConfirmOpen(false)}
+                className="px-4 py-2 border border-outline-variant rounded-xl text-xs font-semibold text-on-surface-variant hover:bg-surface-container transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handlePublishResults();
+                  setIsPublishConfirmOpen(false);
+                }}
+                className="px-4 py-2 bg-primary text-on-primary rounded-xl text-xs font-semibold hover:bg-primary/95 transition-all shadow-md cursor-pointer"
+              >
+                Publish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Start Event with Batch Selection Modal */}
+      {showStartBatchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-[#c7c5d2] p-6 max-w-md w-full text-gray-800 text-left space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <Play className="w-5 h-5 text-[#080c5f]" /> Start Batch Evaluation
+              </h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Select which batch you would like to start judging right now. This will make the event live and activate the chosen batch.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-gray-700">Choose Batch</label>
+              <select
+                value={selectedStartBatchId}
+                onChange={(e) => setSelectedStartBatchId(e.target.value)}
+                className="w-full h-10 px-3 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 outline-none focus:border-[#080c5f] focus:ring-1 focus:ring-[#080c5f]"
+              >
+                {eventBatches.map(b => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.status || 'Waiting'})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setShowStartBatchModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmStartWithBatch}
+                className="px-4 py-2 bg-[#080c5f] text-white rounded-lg text-xs font-semibold hover:bg-[#080c5f]/95 shadow-sm"
+              >
+                Start Judging
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification Banner */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl bg-on-surface text-surface shadow-lg text-xs font-bold animate-slide-up">
+          <div className={`w-2 h-2 rounded-full shrink-0 ${
+            toast.type === 'success' ? 'bg-emerald-500' : toast.type === 'error' ? 'bg-error' : 'bg-primary'
+          }`} />
+          <span>{toast.message}</span>
+        </div>
+      )}
+
+      {/* Support & Help Center Modal */}
+      <AnimatePresence>
+        {isHelpModalOpen && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-xs">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-surface border border-outline-variant/60 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-xl text-center"
+            >
+              <div className="w-14 h-14 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto">
+                <span className="material-symbols-outlined !text-3xl">support_agent</span>
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-bold text-on-surface">Symposium Help Desk</h3>
+                <p className="text-xs text-on-surface-variant leading-relaxed">
+                  Need any immediate operational or technical support? Contact the symposium coordinator directly.
+                </p>
+              </div>
+              
+              <div className="bg-surface-container-low border border-outline-variant/40 p-4 rounded-xl space-y-1">
+                <span className="text-[10px] font-black text-primary uppercase block">Coordinator Contact Number</span>
+                <span className="text-lg font-black text-on-surface tracking-wide block select-all">8121280857</span>
+              </div>
+
+              <div className="flex gap-2">
+                <a 
+                  href="tel:8121280857"
+                  className="flex-1 h-10 bg-primary text-on-primary font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-primary/95 transition-all shadow-xs"
+                >
+                  <span className="material-symbols-outlined !text-sm">call</span>
+                  <span>Call Coordinator</span>
+                </a>
+                <button
+                  onClick={() => setIsHelpModalOpen(false)}
+                  className="px-4 h-10 bg-surface border border-outline text-on-surface-variant hover:bg-surface-container rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

@@ -1,5 +1,5 @@
 export type TrackType = 'Technical' | 'Non-Technical';
-export type EventStatus = 'Live' | 'Upcoming' | 'Completed';
+export type EventStatus = 'Live' | 'Upcoming' | 'Completed' | 'Paused';
 
 export interface ParticipantResult {
   rank: number;

@@ -254,8 +254,8 @@ export async function saveAttendeeToFirestore(attendee: Attendee) {
     await setDoc(doc(db, PARTICIPANTS_COL, attendee.id), sanitizeForFirestore(attendee));
     syncStatus.lastSyncTime = new Date().toLocaleTimeString();
   } catch (error: any) {
-    console.error("Registration failed:", error);
-    throw error;
+    console.warn(`Firestore save failed for participant ${attendee.id}, queuing offline operation`, error);
+    queueSyncOperation('save', PARTICIPANTS_COL, attendee.id, attendee);
   }
 }
 
