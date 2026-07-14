@@ -63,6 +63,20 @@ export default function AdminDashboard({
   const [spotAttendeeSuccess, setSpotAttendeeSuccess] = useState<Attendee | null>(null);
   const [spotAttendeeSecondSuccess, setSpotAttendeeSecondSuccess] = useState<Attendee | null>(null);
 
+  // Console operational states
+  const [activeConsoleFilter, setActiveConsoleFilter] = useState<string>('all');
+  const [selectedConsoleIds, setSelectedConsoleIds] = useState<string[]>([]);
+  const [showBulkConfirm, setShowBulkConfirm] = useState<'pay' | 'checkin' | 'delete' | 'batch' | null>(null);
+  const [bulkTargetBatchId, setBulkTargetBatchId] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
+
+  React.useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
   // New Filters for Registration Management
   const [collegeFilter, setCollegeFilter] = useState<string>('all');
   const [regTypeFilter, setRegTypeFilter] = useState<string>('all');
@@ -93,6 +107,332 @@ export default function AdminDashboard({
   const [speakerInstitution, setSpeakerInstitution] = useState('');
   const [speakerTopic, setSpeakerTopic] = useState('');
   const [speakerSession, setSpeakerSession] = useState('');
+
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
+
+  const consoleFilters = [
+    { id: 'all', label: 'All' },
+    { id: 'pending-payment', label: 'Pending Payment' },
+    { id: 'paid', label: 'Paid' },
+    { id: 'checked-in', label: 'Checked In' },
+    { id: 'not-checked-in', label: 'Not Checked In' },
+    { id: 'morning-session', label: 'Morning Session' },
+    { id: 'afternoon-session', label: 'Afternoon Session' },
+    { id: 'technical', label: 'Technical' },
+    { id: 'non-technical', label: 'Non-Technical' },
+  ];
+
+  // Console state selectors
+  const filteredConsoleAttendees = attendees.filter(a => {
+    const isLeaderOrIndividual = a.regType !== 'team' || a.teamMembers !== undefined || a.accessLevel === 'Team Leader Pass';
+    if (!isLeaderOrIndividual) return false;
+
+    const sLower = (attendeeSearch || '').toLowerCase().trim();
+    if (sLower) {
+      const matchesSearch = (
+        (a.participantId || '').toLowerCase().includes(sLower) ||
+        (a.id || '').toLowerCase().includes(sLower) ||
+        (a.name || '').toLowerCase().includes(sLower) ||
+        (a.teamName || '').toLowerCase().includes(sLower) ||
+        (a.phone || '').includes(sLower) ||
+        (a.college || '').toLowerCase().includes(sLower) ||
+        (a.email || '').toLowerCase().includes(sLower) ||
+        (a.teamMembers?.some(m => 
+          (m.name || '').toLowerCase().includes(sLower) ||
+          (m.phone || '').includes(sLower) ||
+          (m.email || '').toLowerCase().includes(sLower)
+        ) ?? false)
+      );
+      if (!matchesSearch) return false;
+    }
+
+    const ev = events.find(e => e.id === a.registeredEventId);
+    if (activeConsoleFilter === 'pending-payment') {
+      if (a.paymentStatus === 'Paid') return false;
+    } else if (activeConsoleFilter === 'paid') {
+      if (a.paymentStatus !== 'Paid') return false;
+    } else if (activeConsoleFilter === 'checked-in') {
+      if (a.attendanceStatus !== 'Present') return false;
+    } else if (activeConsoleFilter === 'not-checked-in') {
+      if (a.attendanceStatus === 'Present') return false;
+    } else if (activeConsoleFilter === 'morning-session') {
+      const s = (ev?.session || '').toLowerCase();
+      if (!s.includes('morning') && !s.includes('full-day') && !s.includes('full day')) return false;
+    } else if (activeConsoleFilter === 'afternoon-session') {
+      const s = (ev?.session || '').toLowerCase();
+      if (!s.includes('afternoon') && !s.includes('full-day') && !s.includes('full day')) return false;
+    } else if (activeConsoleFilter === 'technical') {
+      if (ev?.track !== 'Technical') return false;
+    } else if (activeConsoleFilter === 'non-technical') {
+      if (ev?.track !== 'Non-Technical') return false;
+    }
+
+    return true;
+  });
+
+  const currentActiveAttendee = filteredConsoleAttendees.find(a => a.id === selectedAttendeeForProfile?.id) || filteredConsoleAttendees[0] || null;
+
+  const handleTogglePayment = async (att: Attendee) => {
+    const nextStatus = att.paymentStatus === 'Paid' ? 'Pending' : 'Paid';
+    const updatedAtt = { ...att, paymentStatus: nextStatus } as Attendee;
+    
+    const updatedList = attendees.map(a => a.id === att.id ? updatedAtt : a);
+    onUpdateAttendees(updatedList);
+    
+    if (selectedAttendeeForProfile?.id === att.id || (!selectedAttendeeForProfile && filteredConsoleAttendees[0]?.id === att.id)) {
+      setSelectedAttendeeForProfile(updatedAtt);
+    }
+    
+    const { saveAttendeeToFirestore: saveFn } = await import('../firebaseSync');
+    await saveFn(updatedAtt);
+
+    if (nextStatus === 'Paid') {
+      setToast({ message: 'Payment Verified', type: 'success' });
+    } else {
+      setToast({ message: 'Payment Set to Pending', type: 'info' });
+    }
+  };
+
+  const handleToggleAttendance = async (att: Attendee) => {
+    const nextStatus = att.attendanceStatus === 'Present' ? 'Pending' : 'Present';
+    const updatedAtt = { 
+      ...att, 
+      attendanceStatus: nextStatus,
+      checkedInAt: nextStatus === 'Present' ? new Date().toISOString() : undefined
+    } as Attendee;
+
+    const updatedList = attendees.map(a => a.id === att.id ? updatedAtt : a);
+    onUpdateAttendees(updatedList);
+
+    if (selectedAttendeeForProfile?.id === att.id || (!selectedAttendeeForProfile && filteredConsoleAttendees[0]?.id === att.id)) {
+      setSelectedAttendeeForProfile(updatedAtt);
+    }
+
+    const { saveAttendeeToFirestore: saveFn } = await import('../firebaseSync');
+    await saveFn(updatedAtt);
+
+    if (nextStatus === 'Present') {
+      setToast({ message: 'Participant Checked In', type: 'success' });
+    } else {
+      setToast({ message: 'Check-in Revoked', type: 'info' });
+    }
+  };
+
+  const handleRemarksChange = async (att: Attendee, val: string) => {
+    const updatedAtt = { ...att, remarks: val } as Attendee;
+
+    const updatedList = attendees.map(a => a.id === att.id ? updatedAtt : a);
+    onUpdateAttendees(updatedList);
+
+    if (selectedAttendeeForProfile?.id === att.id || (!selectedAttendeeForProfile && filteredConsoleAttendees[0]?.id === att.id)) {
+      setSelectedAttendeeForProfile(updatedAtt);
+    }
+
+    const { saveAttendeeToFirestore: saveFn } = await import('../firebaseSync');
+    await saveFn(updatedAtt);
+  };
+
+  const handleSaveAttendee = async (att: Attendee) => {
+    const { saveAttendeeToFirestore: saveFn } = await import('../firebaseSync');
+    await saveFn(att);
+    setToast({ message: 'Participant details saved', type: 'success' });
+  };
+
+  const handleSaveAndNext = async () => {
+    const active = currentActiveAttendee;
+    if (!active) return;
+
+    const { saveAttendeeToFirestore: saveFn } = await import('../firebaseSync');
+    await saveFn(active);
+
+    const currentIndex = filteredConsoleAttendees.findIndex(a => a.id === active.id);
+    const nextIndex = currentIndex + 1;
+
+    if (nextIndex >= filteredConsoleAttendees.length) {
+      setToast({ message: 'Saved. End of list reached', type: 'info' });
+      return;
+    }
+
+    const nextAtt = filteredConsoleAttendees[nextIndex];
+    setSelectedAttendeeForProfile(nextAtt);
+
+    setTimeout(() => {
+      const rowEl = document.getElementById(`row-${nextAtt.id}`);
+      if (rowEl) {
+        rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }, 50);
+
+    setToast({ message: 'Saved & Loaded next participant', type: 'success' });
+  };
+
+  const moveSelection = (dir: number) => {
+    if (filteredConsoleAttendees.length === 0) return;
+    const active = currentActiveAttendee;
+    const currentIndex = active ? filteredConsoleAttendees.findIndex(a => a.id === active.id) : -1;
+    
+    let nextIndex = currentIndex + dir;
+    if (nextIndex < 0) nextIndex = 0;
+    if (nextIndex >= filteredConsoleAttendees.length) nextIndex = filteredConsoleAttendees.length - 1;
+
+    const nextAtt = filteredConsoleAttendees[nextIndex];
+    if (nextAtt) {
+      setSelectedAttendeeForProfile(nextAtt);
+      const rowEl = document.getElementById(`row-${nextAtt.id}`);
+      if (rowEl) {
+        rowEl.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  };
+
+  const handleBulkMarkPaid = async () => {
+    if (selectedConsoleIds.length === 0) return;
+    const { saveAttendeeToFirestore: saveFn } = await import('../firebaseSync');
+    
+    let updatedList = [...attendees];
+    for (const id of selectedConsoleIds) {
+      const att = attendees.find(a => a.id === id);
+      if (att) {
+        const updatedAtt = { ...att, paymentStatus: 'Paid' } as Attendee;
+        updatedList = updatedList.map(a => a.id === id ? updatedAtt : a);
+        await saveFn(updatedAtt);
+      }
+    }
+    
+    onUpdateAttendees(updatedList);
+    setSelectedConsoleIds([]);
+    setShowBulkConfirm(null);
+    setToast({ message: 'Selected participants marked as Paid', type: 'success' });
+  };
+
+  const handleBulkMarkCheckedIn = async () => {
+    if (selectedConsoleIds.length === 0) return;
+    const { saveAttendeeToFirestore: saveFn } = await import('../firebaseSync');
+
+    let updatedList = [...attendees];
+    for (const id of selectedConsoleIds) {
+      const att = attendees.find(a => a.id === id);
+      if (att) {
+        const updatedAtt = { 
+          ...att, 
+          attendanceStatus: 'Present',
+          checkedInAt: new Date().toISOString()
+        } as Attendee;
+        updatedList = updatedList.map(a => a.id === id ? updatedAtt : a);
+        await saveFn(updatedAtt);
+      }
+    }
+
+    onUpdateAttendees(updatedList);
+    setSelectedConsoleIds([]);
+    setShowBulkConfirm(null);
+    setToast({ message: 'Selected participants Checked In', type: 'success' });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedConsoleIds.length === 0) return;
+    const { deleteDoc, doc } = await import('firebase/firestore');
+    const { db } = await import('../firebase');
+
+    let updatedList = attendees.filter(a => !selectedConsoleIds.includes(a.id));
+    let updatedEvents = [...events];
+
+    for (const id of selectedConsoleIds) {
+      const att = attendees.find(a => a.id === id);
+      if (att) {
+        try {
+          await deleteDoc(doc(db, 'participants', id));
+        } catch (e) {
+          console.warn("Bulk delete document error:", e);
+        }
+        updatedEvents = updatedEvents.map(ev => ev.id === att.registeredEventId ? { ...ev, registeredCount: Math.max(0, ev.registeredCount - 1) } : ev);
+      }
+    }
+
+    onUpdateAttendees(updatedList);
+    onUpdateEvents(updatedEvents);
+    setSelectedConsoleIds([]);
+    setShowBulkConfirm(null);
+    setToast({ message: 'Selected registrations revoked', type: 'success' });
+  };
+
+  const handleBulkAssignBatch = async () => {
+    if (selectedConsoleIds.length === 0 || !bulkTargetBatchId) return;
+    const selectedBatch = (batches || []).find(b => b.id === bulkTargetBatchId);
+    if (!selectedBatch) return;
+
+    const { saveAttendeeToFirestore: saveFn } = await import('../firebaseSync');
+
+    let updatedList = [...attendees];
+    for (const id of selectedConsoleIds) {
+      const att = attendees.find(a => a.id === id);
+      if (att) {
+        const updatedAtt = { 
+          ...att, 
+          batchId: selectedBatch.id,
+          batchName: selectedBatch.name
+        } as Attendee;
+        updatedList = updatedList.map(a => a.id === id ? updatedAtt : a);
+        await saveFn(updatedAtt);
+      }
+    }
+
+    onUpdateAttendees(updatedList);
+    setSelectedConsoleIds([]);
+    setBulkTargetBatchId('');
+    setShowBulkConfirm(null);
+    setToast({ message: `Assigned selected participants to ${selectedBatch.name}`, type: 'success' });
+  };
+
+  React.useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      const isEditing = active && (
+        active.tagName === 'INPUT' || 
+        active.tagName === 'TEXTAREA' || 
+        active.getAttribute('contenteditable') === 'true'
+      );
+
+      if (e.ctrlKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (currentActiveAttendee) {
+          handleSaveAttendee(currentActiveAttendee);
+        }
+        return;
+      }
+
+      if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        handleSaveAndNext();
+        return;
+      }
+
+      if (isEditing) return;
+
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        moveSelection(-1);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        moveSelection(1);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentActiveAttendee) {
+          handleToggleAttendance(currentActiveAttendee);
+        }
+      } else {
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          const searchInput = document.getElementById('console-search-input');
+          if (searchInput) {
+            searchInput.focus();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [filteredConsoleAttendees, currentActiveAttendee]);
 
   // Attendee register state
   const [isNewAttendeeOpen, setIsNewAttendeeOpen] = useState(false);
@@ -711,357 +1051,524 @@ export default function AdminDashboard({
 
 
 
-          {/* Attendees Tab Workspace */}
+          {/* Attendees Tab Workspace (Fast Operations Console Redesign) */}
           {activeTab === 'attendees' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-              {selectedAttendeeForProfile ? (
-                <ParticipantProfile 
-                  attendee={selectedAttendeeForProfile}
-                  events={events}
-                  user={user}
-                  onUpdateAttendee={(updatedAtt) => {
-                    const updatedList = attendees.map(a => a.id === updatedAtt.id ? updatedAtt : a);
-                    onUpdateAttendees(updatedList);
-                    setSelectedAttendeeForProfile(updatedAtt);
-                  }}
-                  onDeleteAttendee={(id) => {
-                    const attToDelete = attendees.find(a => a.id === id);
-                    if (attToDelete) {
-                      onUpdateAttendees(attendees.filter(a => a.id !== id));
-                      onUpdateEvents(events.map(ev => ev.id === attToDelete.registeredEventId ? { ...ev, registeredCount: Math.max(0, ev.registeredCount - 1) } : ev));
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-6">
+              {/* Header section with Stats & Actions */}
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl font-black text-on-surface tracking-tight flex items-center gap-2">
+                    <span className="material-symbols-outlined !text-3xl text-primary">terminal</span>
+                    Registration Desk Console
+                  </h1>
+                  <p className="text-xs text-on-surface-variant font-semibold">
+                    Real-time participant check-in, payment verification, and batch assignments.
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  {/* Status Stats Summary Pill */}
+                  <div className="hidden lg:flex items-center gap-4 bg-surface-container-low px-4 py-1.5 rounded-full border border-outline-variant/30 text-[11px] font-bold">
+                    <span className="text-on-surface-variant">
+                      Total: <strong className="text-primary">{attendees.length}</strong>
+                    </span>
+                    <span className="h-3 w-px bg-outline-variant/60" />
+                    <span className="text-emerald-600">
+                      Paid: <strong>{attendees.filter(a => a.paymentStatus === 'Paid').length}</strong>
+                    </span>
+                    <span className="h-3 w-px bg-outline-variant/60" />
+                    <span className="text-primary">
+                      Checked In: <strong>{attendees.filter(a => a.attendanceStatus === 'Present').length}</strong>
+                    </span>
+                  </div>
+
+                  <button 
+                    onClick={() => setIsRightPanelCollapsed(!isRightPanelCollapsed)}
+                    className="flex items-center gap-2 h-10 px-4 bg-surface border border-outline rounded-xl text-xs font-semibold hover:bg-surface-container transition-all cursor-pointer shadow-xs"
+                  >
+                    <span className="material-symbols-outlined !text-sm">
+                      {isRightPanelCollapsed ? 'dock_to_left' : 'dock_to_right'}
+                    </span>
+                    <span>{isRightPanelCollapsed ? 'Show Quick Actions' : 'Hide Quick Actions'}</span>
+                  </button>
+
+                  <button 
+                    onClick={() => {
                       setSelectedAttendeeForProfile(null);
-                      alert('Registration successfully revoked.');
-                    }
-                  }}
-                  onClose={() => setSelectedAttendeeForProfile(null)}
-                />
-              ) : (
-                <>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h1 className="text-3xl font-bold text-on-surface tracking-tight">Registration Management</h1>
-                      <p className="text-sm text-on-surface-variant mt-1">Manage and monitor all participant entries for the upcoming Symposium.</p>
-                    </div>
+                      setSpotAttendeeSuccess(null);
+                      setActiveTab('spot-registration');
+                    }}
+                    className="bg-primary text-on-primary h-10 px-4 rounded-xl text-xs font-semibold flex items-center gap-2 hover:bg-primary/95 transition-all cursor-pointer shadow-xs"
+                  >
+                    <Plus className="w-4 h-4" /> Spot Register
+                  </button>
+                </div>
+              </div>
+
+              {/* Toast Message Display */}
+              {toast && (
+                <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl bg-on-surface text-surface shadow-lg text-xs font-bold animate-slide-up">
+                  <span className="material-symbols-outlined text-primary-fixed !text-base">
+                    {toast.type === 'success' ? 'check_circle' : toast.type === 'error' ? 'error' : 'info'}
+                  </span>
+                  <span>{toast.message}</span>
+                </div>
+              )}
+
+              {/* Bulk operations bar */}
+              {selectedConsoleIds.length > 0 && (
+                <motion.div 
+                  initial={{ y: -20, opacity: 0 }} 
+                  animate={{ y: 0, opacity: 1 }} 
+                  className="bg-primary-fixed text-on-primary-fixed px-5 py-3 rounded-2xl border border-primary/25 flex flex-wrap gap-4 items-center justify-between shadow-md"
+                >
+                  <div className="flex items-center gap-2 text-xs font-bold">
+                    <span className="material-symbols-outlined !text-lg">rule</span>
+                    <span>{selectedConsoleIds.length} participants selected</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button 
-                      onClick={() => {
-                        setSelectedAttendeeForProfile(null);
-                        setSpotAttendeeSuccess(null);
-                        setActiveTab('spot-registration');
-                      }}
-                      className="bg-primary text-on-primary h-10 px-4 rounded-xl text-xs font-semibold flex items-center gap-2 cursor-pointer"
+                      onClick={() => setShowBulkConfirm('pay')}
+                      className="bg-surface hover:bg-surface-container text-on-surface px-3 py-1.5 rounded-lg text-xs font-bold border border-outline-variant/40 cursor-pointer transition-all"
                     >
-                      <Plus className="w-4 h-4" /> New Registration
+                      Mark Paid
+                    </button>
+                    <button 
+                      onClick={() => setShowBulkConfirm('checkin')}
+                      className="bg-surface hover:bg-surface-container text-on-surface px-3 py-1.5 rounded-lg text-xs font-bold border border-outline-variant/40 cursor-pointer transition-all"
+                    >
+                      Mark Checked In
+                    </button>
+                    <button 
+                      onClick={() => setShowBulkConfirm('batch')}
+                      className="bg-surface hover:bg-surface-container text-on-surface px-3 py-1.5 rounded-lg text-xs font-bold border border-outline-variant/40 cursor-pointer transition-all"
+                    >
+                      Assign Batch
+                    </button>
+                    <button 
+                      onClick={() => setShowBulkConfirm('delete')}
+                      className="bg-error-container hover:bg-error-container/90 text-on-error-container px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all"
+                    >
+                      Delete Registrations
+                    </button>
+                    <button 
+                      onClick={() => setSelectedConsoleIds([])}
+                      className="text-on-surface-variant hover:text-on-surface px-2 text-xs font-semibold cursor-pointer"
+                    >
+                      Clear Selection
                     </button>
                   </div>
+                </motion.div>
+              )}
 
-                  {/* Metric Cards (Bento Grid Style) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-                    {/* Total Registrations */}
-                    <div className="bg-surface p-5 rounded-2xl border border-outline-variant/60 flex flex-col justify-between">
-                      <div>
-                        <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">Total Registrations</p>
-                        <h4 className="text-3xl font-bold text-primary mt-1">{attendees.length}</h4>
-                      </div>
-                    </div>
-                    {/* Pre Registrations */}
-                    <div className="bg-surface p-5 rounded-2xl border border-outline-variant/60 flex flex-col justify-between">
-                      <div>
-                        <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">Pre Registrations</p>
-                        <h4 className="text-3xl font-bold text-primary mt-1">
-                          {attendees.filter(a => a.id.startsWith('SYM') && !a.id.includes('-SPOT')).length}
-                        </h4>
-                      </div>
-                    </div>
-                    {/* Spot Registrations */}
-                    <div className="bg-surface p-5 rounded-2xl border border-outline-variant/60 flex flex-col justify-between">
-                      <div>
-                        <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">Spot Registrations</p>
-                        <h4 className="text-3xl font-bold text-primary mt-1">
-                          {attendees.filter(a => a.id.includes('-SPOT') || a.id.endsWith('SPOT')).length}
-                        </h4>
-                      </div>
-                    </div>
-                    {/* Active Check-ins */}
-                    <div className="bg-surface p-5 rounded-2xl border border-outline-variant/60 flex flex-col justify-between">
-                      <div>
-                        <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">Present Attendees</p>
-                        <h4 className="text-3xl font-bold text-primary mt-1">
-                          {attendees.filter(a => a.attendanceStatus === 'Present').length}
-                        </h4>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Filtering Controls */}
-                  <div className="flex flex-wrap gap-4 items-center bg-surface p-4 rounded-xl border border-outline-variant/30">
-                    <div className="relative w-full sm:w-64">
-                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
+              {/* Split Layout Container */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                {/* LEFT PANEL: Search, filters, list (col-span-7 or full-width) */}
+                <div className={`${isRightPanelCollapsed ? "lg:col-span-12" : "lg:col-span-7"} space-y-4`}>
+                  
+                  {/* Search and Filters box */}
+                  <div className="bg-surface p-4 rounded-2xl border border-outline-variant/60 space-y-3 shadow-xs">
+                    <div className="relative">
+                      <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-outline" />
                       <input 
+                        id="console-search-input"
                         type="text" 
-                        placeholder="Search Participants..." 
+                        placeholder="Smart Search (Type ID, Name, Phone, Email, Team name...)" 
                         value={attendeeSearch}
                         onChange={(e) => setAttendeeSearch(e.target.value)}
-                        className="w-full h-9 pl-9 pr-4 bg-surface-container border border-outline rounded-lg text-xs outline-none"
+                        className="w-full h-11 pl-10 pr-4 bg-surface-container border border-outline rounded-xl text-xs font-semibold focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
                       />
+                      {attendeeSearch && (
+                        <button 
+                          onClick={() => setAttendeeSearch('')}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface text-xs font-bold"
+                        >
+                          Clear
+                        </button>
+                      )}
                     </div>
 
-                    {/* Event Filter */}
-                    <div className="flex items-center gap-1.5 text-xs text-on-surface-variant font-medium">
-                      <span>Event:</span>
-                      <select 
-                        value={selectedAttendeeFilter}
-                        onChange={(e) => setSelectedAttendeeFilter(e.target.value)}
-                        className="h-9 px-3 bg-surface-container border border-outline rounded-lg text-xs text-on-surface outline-none"
-                      >
-                        <option value="all">All Events</option>
-                        {events.map(e => (
-                          <option key={e.id} value={e.id}>{e.title}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* College Filter */}
-                    <div className="flex items-center gap-1.5 text-xs text-on-surface-variant font-medium">
-                      <span>College:</span>
-                      <select 
-                        value={collegeFilter}
-                        onChange={(e) => setCollegeFilter(e.target.value)}
-                        className="h-9 px-3 bg-surface-container border border-outline rounded-lg text-xs text-on-surface outline-none"
-                      >
-                        <option value="all">All Colleges</option>
-                        {Array.from(new Set(attendees.map(a => a.college).filter(Boolean))).map(col => (
-                          <option key={col} value={col}>{col}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Reg Type Filter */}
-                    <div className="flex items-center gap-1.5 text-xs text-on-surface-variant font-medium">
-                      <span>Type:</span>
-                      <select 
-                        value={regTypeFilter}
-                        onChange={(e) => setRegTypeFilter(e.target.value)}
-                        className="h-9 px-3 bg-surface-container border border-outline rounded-lg text-xs text-on-surface outline-none"
-                      >
-                        <option value="all">All Types</option>
-                        <option value="individual">Individual</option>
-                        <option value="team">Team Entry</option>
-                      </select>
-                    </div>
-
-                    {/* Attendance Status Filter */}
-                    <div className="flex items-center gap-1.5 text-xs text-on-surface-variant font-medium">
-                      <span>Attendance:</span>
-                      <select 
-                        value={attendanceStatusFilter}
-                        onChange={(e) => setAttendanceStatusFilter(e.target.value)}
-                        className="h-9 px-3 bg-surface-container border border-outline rounded-lg text-xs text-on-surface outline-none"
-                      >
-                        <option value="all">All Statuses</option>
-                        <option value="Present">Present</option>
-                        <option value="Absent">Absent</option>
-                        <option value="Pending">Pending</option>
-                      </select>
+                    {/* Quick Pill Filters */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                      {consoleFilters.map(filter => {
+                        const isActive = activeConsoleFilter === filter.id;
+                        return (
+                          <button
+                            key={filter.id}
+                            onClick={() => {
+                              setActiveConsoleFilter(filter.id);
+                              setSelectedConsoleIds([]);
+                            }}
+                            className={`h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer shrink-0 border ${
+                              isActive 
+                                ? 'bg-primary border-primary text-on-primary shadow-xs' 
+                                : 'bg-surface border-outline-variant text-on-surface-variant hover:bg-surface-container-low'
+                            }`}
+                          >
+                            {filter.label}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* Roster Table List */}
-                  <div className="bg-surface rounded-2xl border border-outline-variant overflow-hidden shadow-xs">
-                    <div className="overflow-x-auto">
+                  {/* Participant List */}
+                  <div className="bg-surface rounded-2xl border border-outline-variant/60 overflow-hidden shadow-xs">
+                    <div className="max-h-[600px] overflow-y-auto">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
-                          <tr className="bg-surface-container border-b border-outline-variant">
-                            <th className="p-4 font-bold text-on-surface uppercase tracking-wider">Participant ID</th>
-                            <th className="p-4 font-bold text-on-surface uppercase tracking-wider">Name</th>
-                            <th className="p-4 font-bold text-on-surface uppercase tracking-wider">College</th>
-                            <th className="p-4 font-bold text-on-surface uppercase tracking-wider">Event Track</th>
-                            <th className="p-4 font-bold text-on-surface uppercase tracking-wider">Type</th>
-                            <th className="p-4 font-bold text-on-surface uppercase tracking-wider">Payment</th>
-                            <th className="p-4 font-bold text-on-surface uppercase tracking-wider">Status</th>
-                            <th className="p-4 font-bold text-on-surface uppercase tracking-wider text-center">Check-In</th>
-                            <th className="p-4 font-bold text-on-surface uppercase tracking-wider text-right">Actions</th>
+                          <tr className="bg-surface-container-low border-b border-outline-variant/50 sticky top-0 z-10">
+                            <th className="p-3 w-10 text-center">
+                              <input 
+                                type="checkbox"
+                                checked={filteredConsoleAttendees.length > 0 && selectedConsoleIds.length === filteredConsoleAttendees.length}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedConsoleIds(filteredConsoleAttendees.map(a => a.id));
+                                  } else {
+                                    setSelectedConsoleIds([]);
+                                  }
+                                }}
+                                className="w-3.5 h-3.5 text-primary border-outline rounded focus:ring-primary"
+                              />
+                            </th>
+                            <th className="p-3 font-bold text-on-surface uppercase tracking-wider text-[10px]">Participant</th>
+                            <th className="p-3 font-bold text-on-surface uppercase tracking-wider text-[10px]">Registered Event</th>
+                            <th className="p-3 font-bold text-on-surface uppercase tracking-wider text-[10px]">Payment</th>
+                            <th className="p-3 font-bold text-on-surface uppercase tracking-wider text-[10px]">Status</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {attendees
-                            .filter(a => {
-                              // Hide team members, only show individual and team leader documents
-                              const isLeaderOrIndividual = a.regType !== 'team' || a.teamMembers !== undefined || a.accessLevel === 'Team Leader Pass';
-                              if (!isLeaderOrIndividual) return false;
+                          {filteredConsoleAttendees.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="p-8 text-center text-on-surface-variant font-medium">
+                                No participants matched the current search / filters.
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredConsoleAttendees.map(att => {
+                              const isSelected = currentActiveAttendee?.id === att.id;
+                              const isChecked = selectedConsoleIds.includes(att.id);
+                              
+                              const paymentColorClass = att.paymentStatus === 'Paid' 
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' 
+                                : 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20';
 
-                              const sLower = (attendeeSearch || searchQuery || '').toLowerCase().trim();
-                              const matchesSearch = !sLower ? true : (
-                                (a.participantId || '').toLowerCase().includes(sLower) ||
-                                (a.id || '').toLowerCase().includes(sLower) ||
-                                (a.name || '').toLowerCase().includes(sLower) ||
-                                (a.teamName || '').toLowerCase().includes(sLower) ||
-                                (a.phone || '').includes(sLower) ||
-                                (a.college || '').toLowerCase().includes(sLower) ||
-                                (a.email || '').toLowerCase().includes(sLower) ||
-                                (a.teamMembers?.some(m => 
-                                  (m.name || '').toLowerCase().includes(sLower) ||
-                                  (m.phone || '').includes(sLower) ||
-                                  (m.email || '').toLowerCase().includes(sLower)
-                                ) ?? false)
-                              );
-                              const matchesEvent = selectedAttendeeFilter === 'all' || a.registeredEventId === selectedAttendeeFilter;
-                              const matchesCollege = collegeFilter === 'all' || a.college === collegeFilter;
-                              const matchesRegType = regTypeFilter === 'all' || a.regType === regTypeFilter;
-                              const matchesStatus = attendanceStatusFilter === 'all' || a.attendanceStatus === attendanceStatusFilter;
-                              return matchesSearch && matchesEvent && matchesCollege && matchesRegType && matchesStatus;
-                            })
-                            .map(att => {
+                              const attendanceColorClass = att.attendanceStatus === 'Present'
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20';
+
                               return (
-                                <tr key={att.id} className="border-b border-outline-variant/30 hover:bg-surface-container/30 transition-colors">
-                                  <td className="p-4 font-semibold text-primary">{att.id}</td>
-                                  <td className="p-4">
-                                    {att.teamName ? (
-                                      <div className="font-bold text-on-surface text-sm">Team: {att.teamName}</div>
-                                    ) : (
-                                      <div className="font-semibold text-on-surface text-sm">{att.name}</div>
-                                    )}
-                                    {att.teamName && (
-                                      <div className="text-[11px] text-on-surface-variant font-medium">Leader: {att.name}</div>
-                                    )}
-                                    <div className="text-[10px] text-on-surface-variant">{att.email} • {att.phone}</div>
-                                    {att.regType === 'team' && (
-                                      <div className="text-[10px] text-primary font-bold mt-0.5">Members: {att.memberCount || 1}</div>
-                                    )}
-                                  </td>
-                                  <td className="p-4 text-on-surface-variant font-medium">{att.college}</td>
-                                  <td className="p-4 text-primary font-semibold">{att.registeredEventTitle}</td>
-                                  <td className="p-4">
-                                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold capitalize ${
-                                      att.regType === 'team' ? 'bg-tertiary-fixed text-on-tertiary-fixed' : 'bg-primary-fixed text-on-primary-fixed'
-                                    }`}>
-                                      {att.regType || 'individual'}
-                                    </span>
-                                  </td>
-                                <td className="p-4">
-                                   <button
-                                     onClick={() => {
-                                       const nextPaymentStatus = att.paymentStatus === 'Paid' ? 'Pending' : 'Paid';
-                                       const updated = attendees.map(a => {
-                                         if (a.id === att.id) {
-                                           return { ...a, paymentStatus: nextPaymentStatus } as Attendee;
-                                         }
-                                         return a;
-                                       });
-                                       onUpdateAttendees(updated);
-                                     }}
-                                     className={`h-7 px-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 border transition-all cursor-pointer ${
-                                       att.paymentStatus === 'Paid'
-                                         ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
-                                         : 'bg-transparent border-outline text-on-surface-variant hover:bg-surface-container'
-                                     }`}
-                                   >
-                                     {att.paymentStatus === 'Paid' ? (
-                                       <>
-                                         <Check className="w-3 h-3" /> Paid
-                                       </>
-                                     ) : (
-                                       'Not Paid'
-                                     )}
-                                   </button>
-                                 </td>
-                                 <td className="p-4">
-                                   <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                     att.attendanceStatus === 'Present' 
-                                       ? 'bg-primary/10 text-primary' 
-                                       : att.attendanceStatus === 'Absent' 
-                                         ? 'bg-error-container text-on-error-container' 
-                                         : 'bg-surface-variant text-on-surface-variant'
-                                   }`}>
-                                     {att.attendanceStatus}
-                                   </span>
-                                 </td>
-                                 <td className="p-4 text-center">
-                                   {att.attendanceStatus === 'Present' ? (
-                                     <button
-                                       onClick={() => {
-                                         const updated = attendees.map(a => {
-                                           if (a.id === att.id) {
-                                             return {
-                                               ...a,
-                                               attendanceStatus: 'Pending',
-                                               checkedInAt: undefined
-                                             } as Attendee;
-                                           }
-                                           return a;
-                                         });
-                                         onUpdateAttendees(updated);
-                                       }}
-                                       className="px-2.5 h-7 bg-emerald-600 border border-emerald-600 text-white hover:bg-emerald-700 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 mx-auto cursor-pointer shadow-xs"
-                                       title="Click to Undo Check-In"
-                                     >
-                                       <Check className="w-3 h-3" /> Checked In
-                                     </button>
-                                   ) : (
-                                     <button
-                                       onClick={() => {
-                                         const updated = attendees.map(a => {
-                                           if (a.id === att.id) {
-                                             return {
-                                               ...a,
-                                               attendanceStatus: 'Present',
-                                               checkedInAt: a.checkedInAt || new Date().toISOString()
-                                             } as Attendee;
-                                           }
-                                           return a;
-                                         });
-                                         onUpdateAttendees(updated);
-                                       }}
-                                       className="px-3 h-7 bg-transparent border border-outline text-on-surface-variant hover:bg-surface-container rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center justify-center mx-auto cursor-pointer shadow-xs"
-                                     >
-                                       Check In
-                                     </button>
-                                   )}
-                                 </td>
-                                <td className="p-4 text-right">
-                                  <div className="flex justify-end gap-1.5">
-                                    <button 
-                                      onClick={() => setSelectedAttendeeForProfile(att)}
-                                      className="p-1 text-primary hover:bg-primary/10 rounded font-semibold text-xs"
-                                      title="View Details"
-                                    >
-                                      View
-                                    </button>
-                                    <button 
-                                      onClick={() => {
-                                        setSelectedAttendeeForProfile(att);
-                                        // Auto open editing inside the profile view
-                                        setTimeout(() => {
-                                          const editBtn = document.querySelector('button[title="Edit Details"]');
-                                          if (editBtn) (editBtn as HTMLButtonElement).click();
-                                        }, 100);
-                                      }}
-                                      className="p-1 text-primary hover:bg-primary/10 rounded font-semibold text-xs"
-                                      title="Edit Record"
-                                    >
-                                      Edit
-                                    </button>
-                                    <button 
-                                      onClick={() => {
-                                        if (confirm(`Are you sure you want to delete registration for ${att.name}?`)) {
-                                          onUpdateAttendees(attendees.filter(a => a.id !== att.id));
-                                          onUpdateEvents(events.map(ev => ev.id === att.registeredEventId ? { ...ev, registeredCount: Math.max(0, ev.registeredCount - 1) } : ev));
+                                <tr 
+                                  key={att.id} 
+                                  id={`row-${att.id}`}
+                                  onClick={(e) => {
+                                    if ((e.target as HTMLElement).tagName === 'INPUT') return;
+                                    setSelectedAttendeeForProfile(att);
+                                  }}
+                                  className={`border-b border-outline-variant/20 hover:bg-surface-container-low transition-colors cursor-pointer select-none ${
+                                    isSelected ? 'bg-primary/5 border-l-4 border-l-primary font-bold' : ''
+                                  }`}
+                                >
+                                  <td className="p-3 text-center">
+                                    <input 
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setSelectedConsoleIds([...selectedConsoleIds, att.id]);
+                                        } else {
+                                          setSelectedConsoleIds(selectedConsoleIds.filter(id => id !== att.id));
                                         }
                                       }}
-                                      className="p-1 text-on-surface-variant hover:text-error rounded"
-                                      title="Delete"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                            })}
+                                      className="w-3.5 h-3.5 text-primary border-outline rounded focus:ring-primary"
+                                    />
+                                  </td>
+                                  <td className="p-3 space-y-0.5">
+                                    <div className="font-bold text-on-surface text-sm flex items-center gap-1.5">
+                                      {att.teamName ? (
+                                        <span className="truncate">Team: {att.teamName}</span>
+                                      ) : (
+                                        <span className="truncate">{att.name}</span>
+                                      )}
+                                      <span className="text-[10px] text-primary/75 bg-primary/5 px-1.5 py-0.25 rounded-md font-semibold">
+                                        {att.id}
+                                      </span>
+                                    </div>
+                                    {att.teamName && (
+                                      <div className="text-[10px] text-on-surface-variant font-medium">Leader: {att.name}</div>
+                                    )}
+                                    <div className="text-[10px] text-on-surface-variant">
+                                      {att.phone} • {att.email}
+                                    </div>
+                                  </td>
+                                  <td className="p-3">
+                                    <div className="font-semibold text-on-surface">{att.registeredEventTitle}</div>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <span className={`text-[9px] font-black uppercase px-1.5 py-0.25 rounded ${
+                                        att.regType === 'team' ? 'bg-tertiary-fixed text-on-tertiary-fixed' : 'bg-primary-fixed text-on-primary-fixed'
+                                      }`}>
+                                        {att.regType || 'individual'}
+                                      </span>
+                                      {att.batchName && (
+                                        <span className="text-[9px] font-bold bg-secondary-fixed text-on-secondary-fixed px-1.5 py-0.25 rounded">
+                                          {att.batchName}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="p-3">
+                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${paymentColorClass}`}>
+                                      {att.paymentStatus === 'Paid' ? 'Paid' : 'Pending'}
+                                    </span>
+                                  </td>
+                                  <td className="p-3">
+                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${attendanceColorClass}`}>
+                                      {att.attendanceStatus === 'Present' ? 'Checked In' : 'Absent'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
                         </tbody>
                       </table>
                     </div>
                   </div>
-                </>
+                </div>
+
+                 {/* RIGHT PANEL: Quick Action Panel (col-span-5) */}
+                 {!isRightPanelCollapsed && (
+                   <div className="lg:col-span-5">
+                     {currentActiveAttendee ? (
+                       <div className="bg-surface rounded-2xl border border-outline-variant/60 p-6 space-y-6 shadow-md sticky top-6">
+                         
+                         {/* Title / Action Header */}
+                         <div className="border-b border-outline-variant/40 pb-4 flex justify-between items-start">
+                           <div>
+                             <div className="text-[10px] font-black uppercase text-primary tracking-widest">Selected Participant</div>
+                             <h2 className="text-lg font-black text-on-surface mt-0.5 leading-tight">
+                               {currentActiveAttendee.teamName ? `Team: ${currentActiveAttendee.teamName}` : currentActiveAttendee.name}
+                             </h2>
+                             <div className="text-xs text-on-surface-variant font-medium mt-1">
+                               ID: <strong className="text-primary font-bold">{currentActiveAttendee.id}</strong>
+                             </div>
+                           </div>
+                           <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold capitalize ${
+                             currentActiveAttendee.regType === 'team' ? 'bg-tertiary-fixed text-on-tertiary-fixed' : 'bg-primary-fixed text-on-primary-fixed'
+                           }`}>
+                             {currentActiveAttendee.regType || 'individual'}
+                           </span>
+                         </div>
+
+                         {/* Participant Fields Grid */}
+                         <div className="grid grid-cols-2 gap-4 text-xs font-semibold text-on-surface-variant">
+                           <div>
+                             <span className="text-[10px] font-bold text-primary uppercase block">Leader / Name</span>
+                             <span className="text-on-surface block mt-0.5 truncate">{currentActiveAttendee.name}</span>
+                           </div>
+                           <div>
+                             <span className="text-[10px] font-bold text-primary uppercase block">College</span>
+                             <span className="text-on-surface block mt-0.5 truncate" title={currentActiveAttendee.college}>
+                               {currentActiveAttendee.college || 'N/A'}
+                             </span>
+                           </div>
+                           <div>
+                             <span className="text-[10px] font-bold text-primary uppercase block">Academic Info</span>
+                             <span className="text-on-surface block mt-0.5 truncate">
+                               {currentActiveAttendee.year || 'N/A'} • {currentActiveAttendee.branch || 'N/A'}
+                             </span>
+                           </div>
+                           <div>
+                             <span className="text-[10px] font-bold text-primary uppercase block">Contact</span>
+                             <span className="text-on-surface block mt-0.5 truncate">
+                               {currentActiveAttendee.phone}
+                             </span>
+                           </div>
+                           <div className="col-span-2">
+                             <span className="text-[10px] font-bold text-primary uppercase block">Email Address</span>
+                             <span className="text-on-surface block mt-0.5 truncate">{currentActiveAttendee.email}</span>
+                           </div>
+                           <div className="col-span-2 border-t border-outline-variant/20 pt-3">
+                             <span className="text-[10px] font-bold text-primary uppercase block">Registered Event</span>
+                             <span className="text-on-surface block mt-0.5 font-bold text-sm">
+                               {currentActiveAttendee.registeredEventTitle}
+                             </span>
+                           </div>
+                         </div>
+
+                         {/* Quick Action Switches */}
+                         <div className="grid grid-cols-2 gap-4 border-t border-b border-outline-variant/35 py-4">
+                           <label className="flex items-center gap-3 p-3 rounded-xl border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer select-none">
+                             <input 
+                               type="checkbox"
+                               checked={currentActiveAttendee.paymentStatus === 'Paid'}
+                               onChange={() => handleTogglePayment(currentActiveAttendee)}
+                               className="w-5 h-5 text-primary border-outline rounded focus:ring-primary cursor-pointer"
+                             />
+                             <div className="flex flex-col">
+                               <span className="text-xs font-bold text-on-surface">Paid</span>
+                               <span className="text-[9px] text-on-surface-variant">Verify Payment</span>
+                             </div>
+                           </label>
+
+                           <label className="flex items-center gap-3 p-3 rounded-xl border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer select-none">
+                             <input 
+                               type="checkbox"
+                               checked={currentActiveAttendee.attendanceStatus === 'Present'}
+                               onChange={() => handleToggleAttendance(currentActiveAttendee)}
+                               className="w-5 h-5 text-primary border-outline rounded focus:ring-primary cursor-pointer"
+                             />
+                             <div className="flex flex-col">
+                               <span className="text-xs font-bold text-on-surface">Checked In</span>
+                               <span className="text-[9px] text-on-surface-variant">Mark Present</span>
+                             </div>
+                           </label>
+                         </div>
+
+                         {/* Team Members List (If applicable) */}
+                         {currentActiveAttendee.regType === 'team' && currentActiveAttendee.teamMembers && currentActiveAttendee.teamMembers.length > 0 && (
+                           <div className="space-y-2 border-b border-outline-variant/35 pb-4">
+                             <span className="text-[10px] font-bold text-primary uppercase block">Additional Team Members</span>
+                             <div className="space-y-2 max-h-36 overflow-y-auto">
+                               {currentActiveAttendee.teamMembers.map((m, idx) => (
+                                 <div key={idx} className="bg-surface-container-low border border-outline-variant/30 rounded-lg p-2.5 text-[11px] font-semibold text-on-surface">
+                                   <div className="flex justify-between">
+                                     <span>{m.name}</span>
+                                     <span className="text-[9px] text-on-surface-variant">Member {idx + 1}</span>
+                                   </div>
+                                   <div className="text-[10px] text-on-surface-variant font-medium mt-0.5">
+                                     {m.phone} • {m.email}
+                                   </div>
+                                 </div>
+                               ))}
+                             </div>
+                           </div>
+                         )}
+
+                         {/* Remarks TextArea (Auto-save) */}
+                         <div className="space-y-1">
+                           <span className="text-[10px] font-bold text-primary uppercase block">Remarks</span>
+                           <textarea
+                             placeholder="Add operational notes or remarks (auto-saves)..."
+                             value={currentActiveAttendee.remarks || ''}
+                             onChange={(e) => handleRemarksChange(currentActiveAttendee, e.target.value)}
+                             className="w-full h-20 p-3 bg-surface-container-low border border-outline rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all resize-none"
+                           />
+                         </div>
+
+                         {/* Control Panel Action Buttons */}
+                         <div className="flex items-center gap-3 pt-2">
+                           <button
+                             onClick={() => handleSaveAttendee(currentActiveAttendee)}
+                             className="flex-1 h-11 bg-surface border border-outline text-on-surface hover:bg-surface-container-low rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+                           >
+                             Save Changes
+                           </button>
+                           <button
+                             onClick={handleSaveAndNext}
+                             className="flex-1 h-11 bg-primary text-on-primary hover:bg-primary/95 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+                           >
+                             <span>Save & Next</span>
+                             <span className="material-symbols-outlined !text-sm">arrow_forward</span>
+                           </button>
+                         </div>
+
+                         {/* Revoke Registration Button */}
+                         <button
+                           onClick={() => {
+                             if (confirm(`Are you sure you want to revoke/delete registration for ${currentActiveAttendee.name}?`)) {
+                               onUpdateAttendees(attendees.filter(a => a.id !== currentActiveAttendee.id));
+                               onUpdateEvents(events.map(ev => ev.id === currentActiveAttendee.registeredEventId ? { ...ev, registeredCount: Math.max(0, ev.registeredCount - 1) } : ev));
+                               setToast({ message: 'Registration successfully revoked.', type: 'info' });
+                             }
+                           }}
+                           className="w-full py-2 bg-error/5 text-error hover:bg-error/10 border border-error/15 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer transition-all"
+                         >
+                           <Trash2 className="w-3.5 h-3.5" /> Revoke Registration Entry
+                         </button>
+
+                       </div>
+                     ) : (
+                       <div className="bg-surface rounded-2xl border border-outline-variant/60 p-12 text-center text-on-surface-variant font-semibold shadow-xs sticky top-6">
+                         <span className="material-symbols-outlined !text-4xl text-outline mb-3">account_box</span>
+                         <p className="text-xs font-bold">No active selection</p>
+                         <p className="text-[11px] text-on-surface-variant/75 mt-1 leading-relaxed">
+                           Select any participant from the roster list on the left to show the quick actions console.
+                         </p>
+                       </div>
+                     )}
+                   </div>
+                 )}
+
+              </div>
+
+              {/* Custom Bulk Confirm Dialog */}
+              {showBulkConfirm && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-xs">
+                  <motion.div 
+                    initial={{ scale: 0.95, opacity: 0 }} 
+                    animate={{ scale: 1, opacity: 1 }} 
+                    className="bg-surface border border-outline-variant/60 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-left"
+                  >
+                    <h3 className="text-base font-black text-on-surface flex items-center gap-2">
+                      <span className="material-symbols-outlined text-warning">warning</span>
+                      Confirm Bulk Action
+                    </h3>
+                    
+                    <p className="text-xs text-on-surface-variant font-semibold leading-relaxed">
+                      {showBulkConfirm === 'pay' && `Are you sure you want to mark all ${selectedConsoleIds.length} selected participants as Paid?`}
+                      {showBulkConfirm === 'checkin' && `Are you sure you want to mark all ${selectedConsoleIds.length} selected participants as Checked In?`}
+                      {showBulkConfirm === 'delete' && `WARNING: Are you sure you want to permanently delete/revoke registrations for all ${selectedConsoleIds.length} selected participants?`}
+                      {showBulkConfirm === 'batch' && `Select a batch to assign to all ${selectedConsoleIds.length} selected participants:`}
+                    </p>
+
+                    {showBulkConfirm === 'batch' && (
+                      <select 
+                        value={bulkTargetBatchId}
+                        onChange={(e) => setBulkTargetBatchId(e.target.value)}
+                        className="w-full h-11 px-3 bg-surface-container border border-outline rounded-xl text-xs font-bold outline-none"
+                      >
+                        <option value="">Choose Batch...</option>
+                        {(batches || []).map(b => {
+                          const ev = events.find(e => e.id === b.eventId);
+                          return (
+                            <option key={b.id} value={b.id}>
+                              {b.name} - {ev?.title || 'Unknown Event'}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    )}
+
+                    <div className="flex items-center gap-3 pt-2">
+                      <button
+                        onClick={() => {
+                          setShowBulkConfirm(null);
+                          setBulkTargetBatchId('');
+                        }}
+                        className="flex-1 h-10 bg-surface border border-outline text-on-surface hover:bg-surface-container-low rounded-xl text-xs font-bold transition-all cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (showBulkConfirm === 'pay') handleBulkMarkPaid();
+                          if (showBulkConfirm === 'checkin') handleBulkMarkCheckedIn();
+                          if (showBulkConfirm === 'delete') handleBulkDelete();
+                          if (showBulkConfirm === 'batch') handleBulkAssignBatch();
+                        }}
+                        disabled={showBulkConfirm === 'batch' && !bulkTargetBatchId}
+                        className={`flex-1 h-10 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed ${
+                          showBulkConfirm === 'delete' ? 'bg-error hover:bg-error/95' : 'bg-primary hover:bg-primary/95'
+                        }`}
+                      >
+                        Confirm
+                      </button>
+                    </div>
+                  </motion.div>
+                </div>
               )}
             </motion.div>
           )}
