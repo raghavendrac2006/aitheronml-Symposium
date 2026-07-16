@@ -193,10 +193,6 @@ function AppContent() {
       }
 
       try {
-        if (localStorage.getItem('ai_symposium_has_reset_first_time_v2') !== 'true') {
-          await clearAllRegistrationsAndReset();
-          localStorage.setItem('ai_symposium_has_reset_first_time_v2', 'true');
-        }
         await triggerPendingSync();
         await seedDatabaseIfEmpty();
 
