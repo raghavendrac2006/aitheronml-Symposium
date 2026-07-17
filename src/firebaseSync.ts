@@ -269,21 +269,140 @@ export async function saveParticipantsWithAtomicIds(
   const count = attendeeTemplates.length;
   const createdAttendees: Attendee[] = [];
 
+  // Helper for transaction retry with randomized exponential backoff
+  const executeTransaction = async () => {
+    let attempt = 0;
+    const maxAttempts = 6;
+    while (true) {
+      try {
+        await runTransaction(db, async (transaction) => {
+          // Clear array on retry to prevent duplicates from failed attempts
+          createdAttendees.length = 0;
+          
+          const counterSnap = await transaction.get(counterRef);
+          let currentVal = 0;
+          if (counterSnap.exists()) {
+            const data = counterSnap.data();
+            currentVal = data.currentValue || 0;
+          }
+
+          const nextVal = currentVal + count;
+
+          // Prepare documents inside transaction
+          for (let i = 0; i < count; i++) {
+            const num = currentVal + 1 + i;
+            const baseId = `SYM-${String(num).padStart(6, '0')}`;
+            const finalId = isSpot ? `${baseId}-SPOT` : baseId;
+            const template = attendeeTemplates[i] as any;
+
+            const sharedTeamId = template.regType === 'team' ? finalId : '';
+            const teamMembersDataForLeader: any[] = [];
+
+            if (template.regType === 'team' && template._tempMembersInput) {
+              template._tempMembersInput.forEach((m: any) => {
+                teamMembersDataForLeader.push({
+                  name: m.name.trim(),
+                  phone: m.phone.trim(),
+                  email: m.email.trim().toLowerCase(),
+                  college: template.college,
+                  branch: template.branch,
+                  year: template.year,
+                  participantId: finalId
+                });
+              });
+            }
+
+            const { _tempMembersInput, ...cleanTemplate } = template;
+
+            const attendeeObj: Attendee = {
+              ...cleanTemplate,
+              id: finalId,
+              participantId: finalId,
+              teamId: sharedTeamId,
+              teamMembers: template.regType === 'team' ? teamMembersDataForLeader : undefined,
+              createdAt: template.createdAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              createdBy: createdBy,
+              secureToken: `${baseId}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`
+            } as Attendee;
+
+            createdAttendees.push(attendeeObj);
+          }
+
+          // 1. Update the counter document
+          transaction.set(counterRef, { currentValue: nextVal }, { merge: true });
+
+          // 2. Set each participant document
+          for (const att of createdAttendees) {
+            const participantRef = doc(db, PARTICIPANTS_COL, att.id);
+            transaction.set(participantRef, sanitizeForFirestore(att));
+          }
+        });
+        
+        return; // Success, exit retry loop
+      } catch (err: any) {
+        attempt++;
+        const isContention = err.code === 'aborted' || 
+                             err.code === 'resource-exhausted' || 
+                             err.message?.includes('contention') || 
+                             err.message?.includes('Resource exhausted');
+        
+        if (isContention && attempt < maxAttempts) {
+          const delay = Math.random() * 400 + 100 * attempt;
+          console.warn(`Transaction contention. Retrying attempt ${attempt}/${maxAttempts} in ${delay.toFixed(0)}ms...`, err);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        } else {
+          throw err; // Real error or max attempts exceeded
+        }
+      }
+    }
+  };
+
   try {
-    // Try online transaction first to guarantee strict serializability & avoid collisions
-    await runTransaction(db, async (transaction) => {
-      const counterSnap = await transaction.get(counterRef);
-      let currentVal = 0;
-      if (counterSnap.exists()) {
-        const data = counterSnap.data();
-        currentVal = data.currentValue || 0;
+    // Try online transaction
+    await executeTransaction();
+
+    // Successfully committed to Firestore, now update local cache
+    const cached = getCachedAttendees();
+    for (const att of createdAttendees) {
+      const idx = cached.findIndex(c => c.id === att.id);
+      if (idx >= 0) {
+        cached[idx] = att;
+      } else {
+        cached.push(att);
+      }
+    }
+    localStorage.setItem('ai_symposium_attendees', JSON.stringify(cached));
+    localStorage.setItem('ai_symposium_attendees_last_saved', JSON.stringify(cached));
+
+    syncStatus.lastSyncTime = new Date().toLocaleTimeString();
+    return createdAttendees;
+
+  } catch (error: any) {
+    const isNetworkError = (typeof navigator !== 'undefined' && !navigator.onLine) || 
+                           error.code === 'unavailable' || 
+                           error.code === 'failed-precondition' ||
+                           error.message?.includes('offline');
+
+    if (isNetworkError) {
+      console.warn("Firestore transaction failed because the client is offline. Falling back to local ID generation.", error);
+
+      // Fallback: Client-side generation using local state
+      const cachedAttendees = getCachedAttendees();
+      let nextNum = 1;
+      if (cachedAttendees.length > 0) {
+        const symIds = cachedAttendees.map(a => {
+          const cleanId = (a.participantId || a.id || '').replace('-SPOT', '');
+          const m = cleanId.match(/^SYM-(\d+)$/);
+          return m ? parseInt(m[1], 10) : 0;
+        });
+        const maxId = Math.max(...symIds, 0);
+        nextNum = maxId + 1;
       }
 
-      const nextVal = currentVal + count;
-
-      // Prepare documents inside transaction
+      const localAttendees: Attendee[] = [];
       for (let i = 0; i < count; i++) {
-        const num = currentVal + 1 + i;
+        const num = nextNum + i;
         const baseId = `SYM-${String(num).padStart(6, '0')}`;
         const finalId = isSpot ? `${baseId}-SPOT` : baseId;
         const template = attendeeTemplates[i] as any;
@@ -319,104 +438,25 @@ export async function saveParticipantsWithAtomicIds(
           secureToken: `${baseId}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`
         } as Attendee;
 
-        createdAttendees.push(attendeeObj);
+        localAttendees.push(attendeeObj);
       }
 
-      // 1. Update the counter document
-      transaction.set(counterRef, { currentValue: nextVal }, { merge: true });
-
-      // 2. Set each participant document
-      for (const att of createdAttendees) {
-        const participantRef = doc(db, PARTICIPANTS_COL, att.id);
-        transaction.set(participantRef, sanitizeForFirestore(att));
+      // Update local cache
+      for (const att of localAttendees) {
+        cachedAttendees.push(att);
       }
-    });
+      localStorage.setItem('ai_symposium_attendees', JSON.stringify(cachedAttendees));
 
-    // Successfully committed to Firestore, now update local cache
-    const cached = getCachedAttendees();
-    for (const att of createdAttendees) {
-      const idx = cached.findIndex(c => c.id === att.id);
-      if (idx >= 0) {
-        cached[idx] = att;
-      } else {
-        cached.push(att);
-      }
-    }
-    localStorage.setItem('ai_symposium_attendees', JSON.stringify(cached));
-    localStorage.setItem('ai_symposium_attendees_last_saved', JSON.stringify(cached));
-
-    syncStatus.lastSyncTime = new Date().toLocaleTimeString();
-    return createdAttendees;
-
-  } catch (error) {
-    console.warn("Firestore transaction failed or client is offline. Falling back to local ID generation.", error);
-
-    // Fallback: Client-side generation using local state
-    const cachedAttendees = getCachedAttendees();
-    let nextNum = 1;
-    if (cachedAttendees.length > 0) {
-      const symIds = cachedAttendees.map(a => {
-        const cleanId = (a.participantId || a.id || '').replace('-SPOT', '');
-        const m = cleanId.match(/^SYM-(\d+)$/);
-        return m ? parseInt(m[1], 10) : 0;
-      });
-      const maxId = Math.max(...symIds, 0);
-      nextNum = maxId + 1;
-    }
-
-    const localAttendees: Attendee[] = [];
-    for (let i = 0; i < count; i++) {
-      const num = nextNum + i;
-      const baseId = `SYM-${String(num).padStart(6, '0')}`;
-      const finalId = isSpot ? `${baseId}-SPOT` : baseId;
-      const template = attendeeTemplates[i] as any;
-
-      const sharedTeamId = template.regType === 'team' ? finalId : '';
-      const teamMembersDataForLeader: any[] = [];
-
-      if (template.regType === 'team' && template._tempMembersInput) {
-        template._tempMembersInput.forEach((m: any) => {
-          teamMembersDataForLeader.push({
-            name: m.name.trim(),
-            phone: m.phone.trim(),
-            email: m.email.trim().toLowerCase(),
-            college: template.college,
-            branch: template.branch,
-            year: template.year,
-            participantId: finalId
-          });
-        });
+      // Queue offline sync operations for each fallback attendee
+      for (const att of localAttendees) {
+        queueSyncOperation('save', PARTICIPANTS_COL, att.id, att);
       }
 
-      const { _tempMembersInput, ...cleanTemplate } = template;
-
-      const attendeeObj: Attendee = {
-        ...cleanTemplate,
-        id: finalId,
-        participantId: finalId,
-        teamId: sharedTeamId,
-        teamMembers: template.regType === 'team' ? teamMembersDataForLeader : undefined,
-        createdAt: template.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        createdBy: createdBy,
-        secureToken: `${baseId}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`
-      } as Attendee;
-
-      localAttendees.push(attendeeObj);
+      return localAttendees;
+    } else {
+      console.error("Firestore transaction failed due to write collision or database error. Aborting.", error);
+      throw error; // Propagate to let the UI display failure & allow retry
     }
-
-    // Update local cache
-    for (const att of localAttendees) {
-      cachedAttendees.push(att);
-    }
-    localStorage.setItem('ai_symposium_attendees', JSON.stringify(cachedAttendees));
-
-    // Queue offline sync operations for each fallback attendee
-    for (const att of localAttendees) {
-      queueSyncOperation('save', PARTICIPANTS_COL, att.id, att);
-    }
-
-    return localAttendees;
   }
 }
 
