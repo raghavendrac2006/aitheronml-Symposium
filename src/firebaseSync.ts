@@ -685,5 +685,14 @@ export async function clearAllRegistrationsAndReset() {
   } catch (err) {
     console.error('Error clearing localStorage caches:', err);
   }
+
+  // 6. Reset Firestore sequential ID counter to 0
+  try {
+    const counterRef = doc(db, 'counters', 'symposium');
+    await setDoc(counterRef, { currentValue: 0 });
+    console.log('Firestore sequential ID counter successfully reset to 0.');
+  } catch (err) {
+    console.error('Error resetting sequential ID counter:', err);
+  }
 }
 
