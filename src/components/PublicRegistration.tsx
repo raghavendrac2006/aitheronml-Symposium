@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { SymposiumEvent, Attendee } from '../types';
-import { saveAttendeeToFirestore } from '../firebaseSync';
+import { saveAttendeeToFirestore, saveParticipantsWithAtomicIds } from '../firebaseSync';
 import { 
   FileText, Layers, Brain, Award, Camera, Map, Gamepad2, Users, Check, AlertCircle, HelpCircle, Info, Clock, MapPin
 } from 'lucide-react';
@@ -236,70 +236,9 @@ export default function PublicRegistration({
         selectedEventsToCreate.push(afternoonSelected);
       }
 
-      // Generate sequential readable Participant ID (SYM-000001 format)
-      let nextNum = 1;
-      const allAtts = [...attendees];
-      if (allAtts.length === 0) {
-        // Fallback: search localStorage if attendees not passed
-        try {
-          const stored = localStorage.getItem('ai_symposium_attendees');
-          if (stored) {
-            allAtts.push(...JSON.parse(stored));
-          }
-        } catch (localErr) {
-          console.warn("Failed to read attendees from cache", localErr);
-        }
-      }
-
-      if (allAtts.length > 0) {
-        const symIds = allAtts
-          .map(a => {
-            const cleanId = (a.participantId || a.id || '').replace('-SPOT', '');
-            const m = cleanId.match(/^SYM-(\d+)$/);
-            return m ? parseInt(m[1], 10) : 0;
-          });
-        const maxId = Math.max(...symIds, 0);
-        nextNum = maxId + 1;
-      } else {
-        nextNum = 1;
-      }
-
-      const createdAttendees: Attendee[] = [];
-
-      for (let i = 0; i < selectedEventsToCreate.length; i++) {
-        const ev = selectedEventsToCreate[i];
-        const currentNum = nextNum + i;
-        const leaderParticipantId = `SYM-${String(currentNum).padStart(6, '0')}`;
-        const finalLeaderId = isSpotRegistration ? `${leaderParticipantId}-SPOT` : leaderParticipantId;
-        const sharedTeamId = regType === 'team' ? finalLeaderId : '';
-        const teamMembersDataForLeader: Array<{
-          name: string;
-          phone: string;
-          email: string;
-          college: string;
-          branch: string;
-          year: string;
-          participantId: string;
-        }> = [];
-
-        if (regType === 'team') {
-          teamMembersInput.forEach((m) => {
-            teamMembersDataForLeader.push({
-              name: m.name.trim(),
-              phone: m.phone.trim(),
-              email: m.email.trim().toLowerCase(),
-              college: collegeName.trim(),
-              branch: branch.trim(),
-              year: year,
-              participantId: finalLeaderId
-            });
-          });
-        }
-
-        // Create attendee object matching Section 11 schema perfectly
-        const attendeeObj: Attendee = {
-          id: finalLeaderId,
-          participantId: finalLeaderId,
+      // Construct base attendee templates (without IDs and secureTokens, to be completed atomically)
+      const templates = selectedEventsToCreate.map(ev => {
+        return {
           name: fullName.trim(),
           college: collegeName.trim(),
           branch: branch.trim(),
@@ -309,26 +248,25 @@ export default function PublicRegistration({
           eventId: ev.id,
           registeredEventId: ev.id,
           registeredEventTitle: ev.title,
-          teamId: sharedTeamId,
           registrationType: regType,
           regType: regType,
-          attendanceStatus: isSpotRegistration ? 'Present' : 'Pending',
-          paymentStatus: isSpotRegistration ? 'Paid' : 'Pending',
+          attendanceStatus: (isSpotRegistration ? 'Present' : 'Pending') as 'Present' | 'Absent' | 'Pending',
+          paymentStatus: (isSpotRegistration ? 'Paid' : 'Pending') as 'Paid' | 'Pending',
           checkedInAt: isSpotRegistration ? new Date().toISOString() : undefined,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
           teamName: regType === 'team' ? (teamName.trim() || undefined) : undefined,
           memberCount: regType === 'team' ? 1 + teamMembersInput.length : undefined,
-          teamMembers: regType === 'team' ? teamMembersDataForLeader : undefined,
           registrationDate: new Date().toISOString(),
           accessLevel: regType === 'team' ? 'Team Leader Pass' : 'Individual Pass',
-          secureToken: `${leaderParticipantId}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`
+          _tempMembersInput: regType === 'team' ? teamMembersInput : undefined
         };
+      });
 
-        // Save attendee to Firestore
-        await saveAttendeeToFirestore(attendeeObj);
-        createdAttendees.push(attendeeObj);
-      }
+      // Save participants using atomic server-side transaction ID generation (with client offline fallback queueing)
+      const createdAttendees = await saveParticipantsWithAtomicIds(
+        templates,
+        isSpotRegistration,
+        isSpotRegistration ? 'volunteer' : 'public'
+      );
 
       // Trigger callback with success data (pass first registration, and extra ones in second argument array)
       if (createdAttendees.length === 1) {

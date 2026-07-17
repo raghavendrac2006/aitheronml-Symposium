@@ -4,7 +4,8 @@ import {
   getDocs, 
   doc, 
   setDoc, 
-  deleteDoc
+  deleteDoc,
+  runTransaction
 } from 'firebase/firestore';
 import { SymposiumEvent, Attendee, Team, Host, Judge, Result, Batch } from './types';
 import { 
@@ -256,6 +257,166 @@ export async function saveAttendeeToFirestore(attendee: Attendee) {
   } catch (error: any) {
     console.warn(`Firestore save failed for participant ${attendee.id}, queuing offline operation`, error);
     queueSyncOperation('save', PARTICIPANTS_COL, attendee.id, attendee);
+  }
+}
+
+export async function saveParticipantsWithAtomicIds(
+  attendeeTemplates: Omit<Attendee, 'id' | 'participantId' | 'secureToken'>[],
+  isSpot: boolean,
+  createdBy: string = 'system'
+): Promise<Attendee[]> {
+  const counterRef = doc(db, 'counters', 'symposium');
+  const count = attendeeTemplates.length;
+  const createdAttendees: Attendee[] = [];
+
+  try {
+    // Try online transaction first to guarantee strict serializability & avoid collisions
+    await runTransaction(db, async (transaction) => {
+      const counterSnap = await transaction.get(counterRef);
+      let currentVal = 0;
+      if (counterSnap.exists()) {
+        const data = counterSnap.data();
+        currentVal = data.currentValue || 0;
+      }
+
+      const nextVal = currentVal + count;
+
+      // Prepare documents inside transaction
+      for (let i = 0; i < count; i++) {
+        const num = currentVal + 1 + i;
+        const baseId = `SYM-${String(num).padStart(6, '0')}`;
+        const finalId = isSpot ? `${baseId}-SPOT` : baseId;
+        const template = attendeeTemplates[i] as any;
+
+        const sharedTeamId = template.regType === 'team' ? finalId : '';
+        const teamMembersDataForLeader: any[] = [];
+
+        if (template.regType === 'team' && template._tempMembersInput) {
+          template._tempMembersInput.forEach((m: any) => {
+            teamMembersDataForLeader.push({
+              name: m.name.trim(),
+              phone: m.phone.trim(),
+              email: m.email.trim().toLowerCase(),
+              college: template.college,
+              branch: template.branch,
+              year: template.year,
+              participantId: finalId
+            });
+          });
+        }
+
+        const { _tempMembersInput, ...cleanTemplate } = template;
+
+        const attendeeObj: Attendee = {
+          ...cleanTemplate,
+          id: finalId,
+          participantId: finalId,
+          teamId: sharedTeamId,
+          teamMembers: template.regType === 'team' ? teamMembersDataForLeader : undefined,
+          createdAt: template.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          createdBy: createdBy,
+          secureToken: `${baseId}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`
+        } as Attendee;
+
+        createdAttendees.push(attendeeObj);
+      }
+
+      // 1. Update the counter document
+      transaction.set(counterRef, { currentValue: nextVal }, { merge: true });
+
+      // 2. Set each participant document
+      for (const att of createdAttendees) {
+        const participantRef = doc(db, PARTICIPANTS_COL, att.id);
+        transaction.set(participantRef, sanitizeForFirestore(att));
+      }
+    });
+
+    // Successfully committed to Firestore, now update local cache
+    const cached = getCachedAttendees();
+    for (const att of createdAttendees) {
+      const idx = cached.findIndex(c => c.id === att.id);
+      if (idx >= 0) {
+        cached[idx] = att;
+      } else {
+        cached.push(att);
+      }
+    }
+    localStorage.setItem('ai_symposium_attendees', JSON.stringify(cached));
+    localStorage.setItem('ai_symposium_attendees_last_saved', JSON.stringify(cached));
+
+    syncStatus.lastSyncTime = new Date().toLocaleTimeString();
+    return createdAttendees;
+
+  } catch (error) {
+    console.warn("Firestore transaction failed or client is offline. Falling back to local ID generation.", error);
+
+    // Fallback: Client-side generation using local state
+    const cachedAttendees = getCachedAttendees();
+    let nextNum = 1;
+    if (cachedAttendees.length > 0) {
+      const symIds = cachedAttendees.map(a => {
+        const cleanId = (a.participantId || a.id || '').replace('-SPOT', '');
+        const m = cleanId.match(/^SYM-(\d+)$/);
+        return m ? parseInt(m[1], 10) : 0;
+      });
+      const maxId = Math.max(...symIds, 0);
+      nextNum = maxId + 1;
+    }
+
+    const localAttendees: Attendee[] = [];
+    for (let i = 0; i < count; i++) {
+      const num = nextNum + i;
+      const baseId = `SYM-${String(num).padStart(6, '0')}`;
+      const finalId = isSpot ? `${baseId}-SPOT` : baseId;
+      const template = attendeeTemplates[i] as any;
+
+      const sharedTeamId = template.regType === 'team' ? finalId : '';
+      const teamMembersDataForLeader: any[] = [];
+
+      if (template.regType === 'team' && template._tempMembersInput) {
+        template._tempMembersInput.forEach((m: any) => {
+          teamMembersDataForLeader.push({
+            name: m.name.trim(),
+            phone: m.phone.trim(),
+            email: m.email.trim().toLowerCase(),
+            college: template.college,
+            branch: template.branch,
+            year: template.year,
+            participantId: finalId
+          });
+        });
+      }
+
+      const { _tempMembersInput, ...cleanTemplate } = template;
+
+      const attendeeObj: Attendee = {
+        ...cleanTemplate,
+        id: finalId,
+        participantId: finalId,
+        teamId: sharedTeamId,
+        teamMembers: template.regType === 'team' ? teamMembersDataForLeader : undefined,
+        createdAt: template.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: createdBy,
+        secureToken: `${baseId}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`
+      } as Attendee;
+
+      localAttendees.push(attendeeObj);
+    }
+
+    // Update local cache
+    for (const att of localAttendees) {
+      cachedAttendees.push(att);
+    }
+    localStorage.setItem('ai_symposium_attendees', JSON.stringify(cachedAttendees));
+
+    // Queue offline sync operations for each fallback attendee
+    for (const att of localAttendees) {
+      queueSyncOperation('save', PARTICIPANTS_COL, att.id, att);
+    }
+
+    return localAttendees;
   }
 }
 
