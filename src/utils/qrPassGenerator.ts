@@ -66,114 +66,239 @@ export async function downloadQrPass(attendee: Attendee, secondAttendee?: Attend
     const qrImg = new Image();
     qrImg.onload = () => {
       try {
-        // Draw Pass Background (Sleek slate-dark tech card)
-        const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-        gradient.addColorStop(0, '#0f172a'); // slate-900
-        gradient.addColorStop(1, '#020617'); // slate-950
-        ctx.fillStyle = gradient;
+        // --- 1. Sleek Cyberpunk Tech Background ---
+        ctx.fillStyle = '#090a1e'; // Midnight space navy
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Draw premium double border
-        ctx.strokeStyle = '#3b82f6'; // primary blue
-        ctx.lineWidth = 8;
-        ctx.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
+        // Draw subtle technological grid pattern
+        ctx.strokeStyle = 'rgba(96, 165, 250, 0.03)';
+        ctx.lineWidth = 1;
+        const gridGap = 30;
+        for (let x = 0; x < canvas.width; x += gridGap) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, canvas.height);
+          ctx.stroke();
+        }
+        for (let y = 0; y < canvas.height; y += gridGap) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(canvas.width, y);
+          ctx.stroke();
+        }
 
-        ctx.strokeStyle = '#1e293b'; // subtle inner frame
-        ctx.lineWidth = 2;
-        ctx.strokeRect(24, 24, canvas.width - 48, canvas.height - 48);
-
-        // --- Ticket Header ---
-        ctx.fillStyle = '#3b82f6';
-        ctx.font = '900 24px system-ui, -apple-system, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('AItheronML Symposium', canvas.width / 2, 70);
-
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = 'bold 12px system-ui, -apple-system, sans-serif';
-        ctx.fillText('KUPPAM ENGINEERING COLLEGE', canvas.width / 2, 98);
-
-        // Subtle divider line
-        ctx.strokeStyle = '#1e293b';
+        // Draw abstract glowing technological orbits
+        ctx.strokeStyle = 'rgba(96, 165, 250, 0.06)';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.moveTo(40, 120);
-        ctx.lineTo(canvas.width - 40, 120);
+        ctx.arc(0, 0, 200, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, 0, 300, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(canvas.width, canvas.height, 220, 0, Math.PI * 2);
         ctx.stroke();
 
-        // --- Participant Details ---
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 22px system-ui, -apple-system, sans-serif';
-        const titleText = isTeam ? `Team: ${displayName}` : displayName;
-        ctx.fillText(titleText, canvas.width / 2, 165);
+        // --- 2. Premium Glowing Neon Borders ---
+        ctx.shadowColor = '#3b82f6';
+        ctx.shadowBlur = 15;
+        ctx.strokeStyle = 'rgba(59, 130, 246, 0.35)';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(16, 16, canvas.width - 32, canvas.height - 32);
 
+        ctx.shadowBlur = 0; // Reset shadow glow
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(18, 18, canvas.width - 36, canvas.height - 36);
+
+        ctx.strokeStyle = 'rgba(30, 41, 59, 0.5)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(28, 28, canvas.width - 56, canvas.height - 56);
+
+        // --- 3. Premium Header Card Box ---
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+        ctx.strokeStyle = 'rgba(59, 130, 246, 0.2)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(40, 45, canvas.width - 80, 80, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#60a5fa'; // Neon light blue
+        ctx.font = '900 23px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('AItheronML Symposium', canvas.width / 2, 80);
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+        ctx.fillText('KUPPAM ENGINEERING COLLEGE  •  DEPT OF CSE', canvas.width / 2, 105);
+
+        // --- 4. Participant Badge Card ---
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.5)';
+        ctx.strokeStyle = 'rgba(59, 130, 246, 0.15)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(40, 145, canvas.width - 80, 85, 16);
+        ctx.fill();
+        ctx.stroke();
+
+        // Name text
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 21px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'left';
+        const titleText = isTeam ? `Team: ${displayName}` : displayName;
+        ctx.fillText(titleText, 60, 182);
+
+        // Category Tag Badge on the right
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.35)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(canvas.width - 185, 161, 125, 26, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#10b981'; // Emerald Green accent
+        ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(isTeam ? 'TEAM PASS' : 'INDIVIDUAL PASS', canvas.width - 122, 177);
+
+        // Subtitle role text
         ctx.fillStyle = '#64748b';
         ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
-        ctx.fillText(isTeam ? `TEAM LEADER: ${attendee.name}` : 'OFFICIAL PARTICIPANT', canvas.width / 2, 190);
+        ctx.textAlign = 'left';
+        ctx.fillText(isTeam ? `LEADER: ${attendee.name}` : 'OFFICIAL PARTICIPANT', 60, 208);
 
-        // --- Event Details & IDs Layout ---
+        // --- 5. Event Info Cards ---
         if (secondAttendee) {
           const secondId = secondAttendee.participantId || secondAttendee.id;
 
-          // Event 1 (Morning)
-          ctx.fillStyle = '#e2e8f0';
-          ctx.font = 'bold 15px system-ui, -apple-system, sans-serif';
-          ctx.fillText(attendee.registeredEventTitle, canvas.width / 2, 235);
-          ctx.fillStyle = '#64748b';
-          ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
-          ctx.fillText(`MORNING EVENT  •  ID: ${firstId}`, canvas.width / 2, 255);
-
-          // Event 2 (Afternoon)
-          ctx.fillStyle = '#e2e8f0';
-          ctx.font = 'bold 15px system-ui, -apple-system, sans-serif';
-          ctx.fillText(secondAttendee.registeredEventTitle, canvas.width / 2, 300);
-          ctx.fillStyle = '#64748b';
-          ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
-          ctx.fillText(`AFTERNOON EVENT  •  ID: ${secondId}`, canvas.width / 2, 320);
-
-          // --- QR Code Area ---
-          ctx.fillStyle = '#ffffff';
+          // Event 1 (Morning Card)
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
           ctx.beginPath();
-          ctx.roundRect(140, 360, 320, 320, 16);
+          ctx.roundRect(40, 250, canvas.width - 80, 52, 10);
           ctx.fill();
-          ctx.drawImage(qrImg, 150, 370, 300, 300);
+          ctx.stroke();
 
-          // --- Participant IDs Display at bottom ---
-          ctx.fillStyle = '#94a3b8';
-          ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
-          ctx.fillText('PARTICIPANT PASS ID(S)', canvas.width / 2, 730);
-
+          ctx.fillStyle = '#e2e8f0';
+          ctx.font = 'bold 14px system-ui, -apple-system, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(`M: ${attendee.registeredEventTitle}`, 55, 273);
           ctx.fillStyle = '#3b82f6';
+          ctx.font = 'bold 10px monospace';
+          ctx.textAlign = 'right';
+          ctx.fillText(`ID: ${firstId}`, canvas.width - 55, 273);
+          ctx.fillStyle = '#64748b';
+          ctx.font = '8px system-ui, -apple-system, sans-serif';
+          ctx.fillText('MORNING EVENT DESK', canvas.width - 55, 288);
+
+          // Event 2 (Afternoon Card)
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+          ctx.beginPath();
+          ctx.roundRect(40, 312, canvas.width - 80, 52, 10);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#e2e8f0';
+          ctx.font = 'bold 14px system-ui, -apple-system, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(`A: ${secondAttendee.registeredEventTitle}`, 55, 335);
+          ctx.fillStyle = '#3b82f6';
+          ctx.font = 'bold 10px monospace';
+          ctx.textAlign = 'right';
+          ctx.fillText(`ID: ${secondId}`, canvas.width - 55, 335);
+          ctx.fillStyle = '#64748b';
+          ctx.font = '8px system-ui, -apple-system, sans-serif';
+          ctx.fillText('AFTERNOON EVENT DESK', canvas.width - 55, 350);
+
+          // --- 6. QR Code Area with Glowing Neon Border Frame ---
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowColor = '#3b82f6';
+          ctx.shadowBlur = 15;
+          ctx.beginPath();
+          ctx.roundRect(140, 385, 320, 320, 16);
+          ctx.fill();
+          ctx.shadowBlur = 0; // Reset
+
+          ctx.strokeStyle = '#3b82f6';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(138, 383, 324, 324);
+          ctx.drawImage(qrImg, 150, 395, 300, 300);
+
+          // --- 7. Bottom Unified ID Badge Block ---
+          ctx.fillStyle = 'rgba(30, 41, 59, 0.4)';
+          ctx.strokeStyle = 'rgba(59, 130, 246, 0.2)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.roundRect(100, 735, 400, 75, 12);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('UNIFIED ENTRY PASS IDS', canvas.width / 2, 755);
+
+          ctx.fillStyle = '#60a5fa';
           ctx.font = 'bold 24px monospace';
-          ctx.fillText(`${firstId} & ${secondId}`, canvas.width / 2, 775);
+          ctx.fillText(`${firstId}  •  ${secondId}`, canvas.width / 2, 792);
 
         } else {
-          // Single Event Layout
-          ctx.fillStyle = '#e2e8f0';
-          ctx.font = 'bold 16px system-ui, -apple-system, sans-serif';
-          ctx.fillText(attendee.registeredEventTitle, canvas.width / 2, 235);
-          ctx.fillStyle = '#64748b';
-          ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
-          ctx.fillText('REGISTERED EVENT TRACK', canvas.width / 2, 255);
-
-          // --- QR Code Area ---
-          ctx.fillStyle = '#ffffff';
+          // --- Single Event Layout ---
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
           ctx.beginPath();
-          ctx.roundRect(140, 290, 320, 320, 16);
+          ctx.roundRect(40, 245, canvas.width - 80, 52, 10);
           ctx.fill();
-          ctx.drawImage(qrImg, 150, 300, 300, 300);
+          ctx.stroke();
 
-          // --- Participant ID Display at bottom ---
+          ctx.fillStyle = '#e2e8f0';
+          ctx.font = 'bold 15px system-ui, -apple-system, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(attendee.registeredEventTitle, 55, 275);
+          ctx.fillStyle = '#64748b';
+          ctx.font = 'bold 9px system-ui, -apple-system, sans-serif';
+          ctx.textAlign = 'right';
+          ctx.fillText('REGISTERED EVENT TRACK', canvas.width - 55, 275);
+
+          // --- 6. QR Code Area with Glowing Neon Border Frame ---
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowColor = '#3b82f6';
+          ctx.shadowBlur = 15;
+          ctx.beginPath();
+          ctx.roundRect(140, 315, 320, 320, 16);
+          ctx.fill();
+          ctx.shadowBlur = 0; // Reset
+
+          ctx.strokeStyle = '#3b82f6';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(138, 313, 324, 324);
+          ctx.drawImage(qrImg, 150, 325, 300, 300);
+
+          // --- 7. Bottom ID Badge Block ---
+          ctx.fillStyle = 'rgba(30, 41, 59, 0.4)';
+          ctx.strokeStyle = 'rgba(59, 130, 246, 0.2)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.roundRect(120, 665, 360, 75, 12);
+          ctx.fill();
+          ctx.stroke();
+
           ctx.fillStyle = '#94a3b8';
-          ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
-          ctx.fillText('PARTICIPANT ID', canvas.width / 2, 660);
+          ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('PARTICIPANT IDENTIFICATION ID', canvas.width / 2, 685);
 
-          ctx.fillStyle = '#3b82f6';
-          ctx.font = 'bold 36px monospace';
-          ctx.fillText(firstId, canvas.width / 2, 710);
+          ctx.fillStyle = '#60a5fa';
+          ctx.font = 'bold 30px monospace';
+          ctx.fillText(firstId, canvas.width / 2, 723);
         }
 
-        // --- Ticket Footer Divider ---
-        const footerDividerY = secondAttendee ? 820 : 750;
+        // --- 8. Ticket Footer Section ---
+        const footerDividerY = secondAttendee ? 840 : 770;
         ctx.strokeStyle = '#1e293b';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
@@ -181,20 +306,21 @@ export async function downloadQrPass(attendee: Attendee, secondAttendee?: Attend
         ctx.lineTo(canvas.width - 40, footerDividerY);
         ctx.stroke();
 
-        // Show instructions
+        // Footer Instructions text
         ctx.fillStyle = '#e2e8f0';
-        ctx.font = 'bold 13px system-ui, -apple-system, sans-serif';
-        ctx.fillText('Keep this QR safe.', canvas.width / 2, footerDividerY + 40);
+        ctx.font = 'bold 12px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Please download and keep this QR Pass safe.', canvas.width / 2, footerDividerY + 35);
 
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = '12px system-ui, -apple-system, sans-serif';
-        ctx.fillText('Show it at the Registration Desk for Check-in.', canvas.width / 2, footerDividerY + 65);
+        ctx.fillStyle = '#64748b';
+        ctx.font = '10px system-ui, -apple-system, sans-serif';
+        ctx.fillText('Must show this QR Code at the entry desk for check-in.', canvas.width / 2, footerDividerY + 58);
 
-        // Timestamp
+        // Issued Timestamp
         const dateStr = attendee.registrationDate ? new Date(attendee.registrationDate).toLocaleString() : new Date().toLocaleString();
         ctx.fillStyle = '#475569';
-        ctx.font = '10px monospace';
-        ctx.fillText(`Issued: ${dateStr}`, canvas.width / 2, footerDividerY + 115);
+        ctx.font = '9px monospace';
+        ctx.fillText(`Issued: ${dateStr}`, canvas.width / 2, footerDividerY + 95);
 
         // 3. Trigger automatic browser download
         const finalDataUrl = canvas.toDataURL('image/png');

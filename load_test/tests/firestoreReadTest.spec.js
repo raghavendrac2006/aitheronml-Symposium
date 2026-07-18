@@ -11,7 +11,7 @@ test('Firestore Read Stress Test', async () => {
     console.log(`Total Searches      : ${config.totalSearches}`);
     console.log(`Concurrent Workers  : ${config.concurrentBrowsers}`);
     console.log(`Target Roster URL   : ${config.registrationDeskURL}`);
-    console.log(`Participant ID Range: SYM-${String(config.minimumParticipantID).padStart(6, '0')} to SYM-${String(config.maximumParticipantID).padStart(6, '0')}`);
+    console.log(`Participant ID Range: CSM-${String(config.minimumParticipantID).padStart(6, '0')} to CSM-${String(config.maximumParticipantID).padStart(6, '0')}`);
     console.log('======================================\n');
 
     let nextSearchIndex = 1;
@@ -42,7 +42,7 @@ test('Firestore Read Stress Test', async () => {
 
                 // Randomly generate sequential participant ID within configured bounds
                 const randomNum = Math.floor(Math.random() * (config.maximumParticipantID - config.minimumParticipantID + 1)) + config.minimumParticipantID;
-                const participantId = `SYM-${String(randomNum).padStart(6, '0')}`;
+                const participantId = `CSM-${String(randomNum).padStart(6, '0')}`;
 
                 console.log(`----------------------------------------`);
                 console.log(`Worker ${workerId} (#${searchIdx})`);

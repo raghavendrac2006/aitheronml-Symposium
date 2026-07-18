@@ -292,7 +292,7 @@ export async function saveParticipantsWithAtomicIds(
           // Prepare documents inside transaction
           for (let i = 0; i < count; i++) {
             const num = currentVal + 1 + i;
-            const baseId = `SYM-${String(num).padStart(6, '0')}`;
+            const baseId = `CSM-${String(num).padStart(6, '0')}`;
             const finalId = isSpot ? `${baseId}-SPOT` : baseId;
             const template = attendeeTemplates[i] as any;
 
@@ -394,7 +394,7 @@ export async function saveParticipantsWithAtomicIds(
       if (cachedAttendees.length > 0) {
         const symIds = cachedAttendees.map(a => {
           const cleanId = (a.participantId || a.id || '').replace('-SPOT', '');
-          const m = cleanId.match(/^SYM-(\d+)$/);
+          const m = cleanId.match(/^(?:SYM|CSM)-(\d+)$/);
           return m ? parseInt(m[1], 10) : 0;
         });
         const maxId = Math.max(...symIds, 0);
@@ -404,7 +404,7 @@ export async function saveParticipantsWithAtomicIds(
       const localAttendees: Attendee[] = [];
       for (let i = 0; i < count; i++) {
         const num = nextNum + i;
-        const baseId = `SYM-${String(num).padStart(6, '0')}`;
+        const baseId = `CSM-${String(num).padStart(6, '0')}`;
         const finalId = isSpot ? `${baseId}-SPOT` : baseId;
         const template = attendeeTemplates[i] as any;
 

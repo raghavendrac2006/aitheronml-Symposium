@@ -5,7 +5,7 @@ const config = require('../config/readTestConfig');
  * Performs realistic character-by-character typing and details card verification.
  * 
  * @param {import('@playwright/test').Page} page - Playwright page instance
- * @param {string} participantId - The ID to search (e.g. "SYM-000123")
+ * @param {string} participantId - The ID to search (e.g. "CSM-000123")
  */
 async function searchParticipant(page, participantId) {
     const result = {

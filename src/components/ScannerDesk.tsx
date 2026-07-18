@@ -79,7 +79,7 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
   function parseParticipantId(text: string): string {
     if (!text) return '';
     const cleanText = text.trim();
-    const match = cleanText.match(/SYM-\d{6}(?:-SPOT)?/i);
+    const match = cleanText.match(/(?:SYM|CSM)-\d{6}(?:-SPOT)?/i);
     return match ? match[0].toUpperCase() : cleanText.toUpperCase();
   }
 
@@ -487,7 +487,7 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
               type="text"
               value={scannedInput}
               onChange={(e) => setScannedInput(e.target.value)}
-              placeholder="Type Participant ID (e.g. SYM-000001)..."
+              placeholder="Type Participant ID (e.g. CSM-000001)..."
               className="w-full h-12 pl-11 pr-4 rounded-xl border border-outline bg-transparent text-on-surface focus:border-primary focus:ring-1 focus:ring-primary transition-all text-xs font-mono tracking-wide"
               disabled={loading}
               autoComplete="off"

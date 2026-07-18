@@ -35,8 +35,8 @@ test('Verify QR Pass Auto-Download', async ({ page }) => {
     const filename = download.suggestedFilename();
     console.log(`PASS DOWNLOADED: ${filename}`);
 
-    // Verify filename format matches SYM-XXXXXX.png
-    expect(filename).toMatch(/^SYM-\d{6}\.png$/);
+    // Verify filename format matches CSM-XXXXXX.png or SYM-XXXXXX.png
+    expect(filename).toMatch(/^(?:SYM|CSM)-\d{6}\.png$/);
 
     // Save the downloaded pass file inside test-results/
     const outputPath = `a:/symposium/load_test/test-results/${filename}`;
