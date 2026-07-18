@@ -6,9 +6,9 @@ test('Verify Super Admin Registration Toggle and Validation', async ({ page }) =
     await page.goto("http://localhost:3000/login");
 
     console.log("Typing super admin credentials...");
-    await page.locator('input[type="email"]').fill("superadmin@aitheronml.in");
-    await page.locator('input[type="password"]').fill("12345678");
-    await page.getByRole('button', { name: /Sign In/i }).click();
+    await page.locator('#email').fill("superadmin@aitheronml.in");
+    await page.locator('#password').fill("12345678");
+    await page.locator('#sign-in-btn').click();
 
     console.log("Waiting for Super Admin Dashboard...");
     await page.getByText("Symposium Control Center").waitFor();
@@ -41,9 +41,9 @@ test('Verify Super Admin Registration Toggle and Validation', async ({ page }) =
     // 5. Go back to login, admin dashboard, and turn registrations back ON
     console.log("Returning to admin login...");
     await page.goto("http://localhost:3000/login");
-    await page.locator('input[type="email"]').fill("superadmin@aitheronml.in");
-    await page.locator('input[type="password"]').fill("12345678");
-    await page.getByRole('button', { name: /Sign In/i }).click();
+    await page.locator('#email').fill("superadmin@aitheronml.in");
+    await page.locator('#password').fill("12345678");
+    await page.locator('#sign-in-btn').click();
 
     console.log("Navigating back to settings to enable registrations...");
     await page.getByRole('button', { name: /Settings/i }).click();
