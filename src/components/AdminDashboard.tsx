@@ -11,6 +11,8 @@ import ParticipantProfile from './ParticipantProfile';
 import PublicRegistration from './PublicRegistration';
 import RegistrationSuccess from './RegistrationSuccess';
 import { clearAllRegistrationsAndReset } from '../firebaseSync';
+import ScannerDesk from './ScannerDesk';
+import { QrCode, Utensils } from 'lucide-react';
 
 interface AdminDashboardProps {
   user: UserSession;
@@ -36,7 +38,7 @@ export default function AdminDashboard({
   onLogout
 }: AdminDashboardProps) {
   
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'symposia' | 'attendees' | 'settings' | 'spot-registration' | 'new-registration' | 'results-batches'>(
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'symposia' | 'attendees' | 'settings' | 'spot-registration' | 'new-registration' | 'results-batches' | 'qr-scanner' | 'food-scanner'>(
     'dashboard'
   );
   const [searchQuery, setSearchQuery] = useState('');
@@ -914,6 +916,38 @@ export default function AdminDashboard({
                 </button>
 
                 <button 
+                  onClick={() => {
+                    setSelectedAttendeeForProfile(null);
+                    setSpotAttendeeSuccess(null);
+                    setActiveTab('qr-scanner');
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all ${
+                    activeTab === 'qr-scanner' 
+                      ? 'bg-secondary-container text-on-secondary-container' 
+                      : 'text-on-surface-variant hover:bg-surface-container'
+                  }`}
+                >
+                  <QrCode className="w-4 h-4 shrink-0" />
+                  <span>Pass Check-in</span>
+                </button>
+
+                <button 
+                  onClick={() => {
+                    setSelectedAttendeeForProfile(null);
+                    setSpotAttendeeSuccess(null);
+                    setActiveTab('food-scanner');
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all ${
+                    activeTab === 'food-scanner' 
+                      ? 'bg-secondary-container text-on-secondary-container' 
+                      : 'text-on-surface-variant hover:bg-surface-container'
+                  }`}
+                >
+                  <Utensils className="w-4 h-4 shrink-0" />
+                  <span>Food Redemption</span>
+                </button>
+
+                <button 
                   onClick={onLogout}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full text-error hover:bg-error/10 transition-all"
                 >
@@ -983,6 +1017,38 @@ export default function AdminDashboard({
                 >
                   <Award className="w-4 h-4 shrink-0" />
                   <span>Results &amp; Batches</span>
+                </button>
+
+                <button 
+                  onClick={() => {
+                    setSelectedAttendeeForProfile(null);
+                    setSpotAttendeeSuccess(null);
+                    setActiveTab('qr-scanner');
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all ${
+                    activeTab === 'qr-scanner' 
+                      ? 'bg-secondary-container text-on-secondary-container' 
+                      : 'text-on-surface-variant hover:bg-surface-container'
+                  }`}
+                >
+                  <QrCode className="w-4 h-4 shrink-0" />
+                  <span>Pass Check-in</span>
+                </button>
+
+                <button 
+                  onClick={() => {
+                    setSelectedAttendeeForProfile(null);
+                    setSpotAttendeeSuccess(null);
+                    setActiveTab('food-scanner');
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all ${
+                    activeTab === 'food-scanner' 
+                      ? 'bg-secondary-container text-on-secondary-container' 
+                      : 'text-on-surface-variant hover:bg-surface-container'
+                  }`}
+                >
+                  <Utensils className="w-4 h-4 shrink-0" />
+                  <span>Food Redemption</span>
                 </button>
 
                 <button 
@@ -2327,6 +2393,20 @@ export default function AdminDashboard({
                   </button>
                 </div>
               </div>
+            </motion.div>
+          )}
+
+          {/* Pass Check-in Scanner Desk Workspace */}
+          {activeTab === 'qr-scanner' && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+              <ScannerDesk mode="checkin" attendees={attendees} />
+            </motion.div>
+          )}
+
+          {/* Food Redemption Scanner Desk Workspace */}
+          {activeTab === 'food-scanner' && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+              <ScannerDesk mode="food" attendees={attendees} />
             </motion.div>
           )}
         </main>

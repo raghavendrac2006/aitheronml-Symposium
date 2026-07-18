@@ -5,7 +5,8 @@ import {
   doc, 
   setDoc, 
   deleteDoc,
-  runTransaction
+  runTransaction,
+  serverTimestamp
 } from 'firebase/firestore';
 import { SymposiumEvent, Attendee, Team, Host, Judge, Result, Batch } from './types';
 import { 
@@ -695,4 +696,133 @@ export async function clearAllRegistrationsAndReset() {
     console.error('Error resetting sequential ID counter:', err);
   }
 }
+
+/**
+ * Executes an atomic transaction to check in a participant (Activate Pass).
+ * If already checked in, aborts the transaction and returns details.
+ */
+export async function checkInParticipantTransaction(participantId: string): Promise<{
+  success: boolean;
+  message: string;
+  name?: string;
+  id?: string;
+  timestamp?: string;
+}> {
+  const docRef = doc(db, 'participants', participantId);
+  try {
+    const result = await runTransaction(db, async (transaction) => {
+      const docSnap = await transaction.get(docRef);
+      if (!docSnap.exists()) {
+        throw new Error(`Participant with ID ${participantId} not found.`);
+      }
+      
+      const data = docSnap.data() as Attendee;
+      if (data.checked_in) {
+        // Abort check-in since they are already checked in
+        const existingTime = data.checked_in_at || data.checkedInAt || new Date().toISOString();
+        return {
+          success: false,
+          message: "Participant already checked in.",
+          name: data.name,
+          id: participantId,
+          timestamp: existingTime
+        };
+      }
+
+      const timestampValue = new Date().toISOString();
+      transaction.update(docRef, {
+        checked_in: true,
+        checked_in_at: serverTimestamp(),
+        checkedInAt: timestampValue, // local sync fallback
+        attendanceStatus: 'Present',
+        lunch_status: 'AVAILABLE'
+      });
+
+      return {
+        success: true,
+        message: "Pass Activated successfully!",
+        name: data.name,
+        id: participantId,
+        timestamp: timestampValue
+      };
+    });
+    return result;
+  } catch (err: any) {
+    console.error("Check-in transaction error:", err);
+    return {
+      success: false,
+      message: err.message || "Transaction failed. Please try again."
+    };
+  }
+}
+
+/**
+ * Executes an atomic transaction to redeem food for a participant.
+ * Aborts if not checked in or already redeemed.
+ */
+export async function redeemFoodTransaction(participantId: string): Promise<{
+  success: boolean;
+  message: string;
+  name?: string;
+  id?: string;
+  timestamp?: string;
+}> {
+  const docRef = doc(db, 'participants', participantId);
+  try {
+    const result = await runTransaction(db, async (transaction) => {
+      const docSnap = await transaction.get(docRef);
+      if (!docSnap.exists()) {
+        throw new Error(`Participant with ID ${participantId} not found.`);
+      }
+
+      const data = docSnap.data() as Attendee;
+      
+      // 1. Must be checked in first
+      if (!data.checked_in && data.attendanceStatus !== 'Present') {
+        return {
+          success: false,
+          message: "Participant has not checked in.",
+          name: data.name,
+          id: participantId
+        };
+      }
+
+      // 2. Can only redeem food once
+      if (data.lunch_status === 'REDEEMED') {
+        const existingTime = data.lunch_redeemed_at || new Date().toISOString();
+        return {
+          success: false,
+          message: "Food Already Redeemed.",
+          name: data.name,
+          id: participantId,
+          timestamp: existingTime
+        };
+      }
+
+      const timestampValue = new Date().toISOString();
+      transaction.update(docRef, {
+        lunch_status: 'REDEEMED',
+        lunch_redeemed_at: serverTimestamp(),
+        // Local timestamp update for reactive client-side rendering
+        remarks: data.remarks ? `${data.remarks} (Food served)` : 'Food served'
+      });
+
+      return {
+        success: true,
+        message: "Food served successfully!",
+        name: data.name,
+        id: participantId,
+        timestamp: timestampValue
+      };
+    });
+    return result;
+  } catch (err: any) {
+    console.error("Food redemption transaction error:", err);
+    return {
+      success: false,
+      message: err.message || "Transaction failed. Please try again."
+    };
+  }
+}
+
 
