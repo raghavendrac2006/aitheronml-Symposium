@@ -13,6 +13,8 @@ import RegistrationSuccess from './RegistrationSuccess';
 import { clearAllRegistrationsAndReset } from '../firebaseSync';
 import ScannerDesk from './ScannerDesk';
 import { QrCode, Utensils } from 'lucide-react';
+import QRCode from 'qrcode';
+
 
 interface AdminDashboardProps {
   user: UserSession;
@@ -105,6 +107,30 @@ export default function AdminDashboard({
     const saved = localStorage.getItem('symposium_registration_base_url');
     return saved || window.location.origin;
   });
+
+  const [registrationQrDataUrl, setRegistrationQrDataUrl] = useState<string>('');
+
+  useEffect(() => {
+    const generateRegQr = async () => {
+      try {
+        const cleanBaseUrl = registrationBaseUrl.replace(/\/+$/, '');
+        const targetUrl = `${cleanBaseUrl}/?mode=register&hideAdminSignIn=true`;
+        const dataUrl = await QRCode.toDataURL(targetUrl, {
+          width: 250,
+          margin: 1.5,
+          color: {
+            dark: '#080c5f', // brand primary color
+            light: '#ffffff'
+          }
+        });
+        setRegistrationQrDataUrl(dataUrl);
+      } catch (err) {
+        console.error("Failed to generate registration QR code", err);
+      }
+    };
+    generateRegQr();
+  }, [registrationBaseUrl]);
+
 
   // Attendee Editing States
   const [isEditingAttendee, setIsEditingAttendee] = useState(false);
@@ -586,6 +612,10 @@ export default function AdminDashboard({
   const todayPrefix = new Date().toISOString().split('T')[0];
   const todaysRegistrations = attendees.filter(a => a.createdAt && a.createdAt.startsWith(todayPrefix)).length;
 
+  const cleanRegistrationBaseUrl = registrationBaseUrl.replace(/\/+$/, '');
+  const registrationUrl = `${cleanRegistrationBaseUrl}/?mode=register&hideAdminSignIn=true`;
+
+
   const handleDownloadAllData = () => {
     // Generate CSV contents
     const headers = [
@@ -671,22 +701,24 @@ export default function AdminDashboard({
 
   const handleDownloadQrHd = async (urlToEncode: string) => {
     try {
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(urlToEncode)}`;
-      const response = await fetch(qrUrl);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
+      const dataUrl = await QRCode.toDataURL(urlToEncode, {
+        width: 1000,
+        margin: 1.5,
+        color: {
+          dark: '#080c5f', // primary brand color
+          light: '#ffffff'
+        }
+      });
       const link = document.createElement('a');
-      link.href = blobUrl;
+      link.href = dataUrl;
       link.download = 'symposium_registration_qr_hd.png';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       setToast({ message: 'HD QR Code downloaded successfully!', type: 'success' });
     } catch (err) {
-      console.error(err);
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(urlToEncode)}`;
-      window.open(qrUrl, '_blank');
-      setToast({ message: 'Opened HD QR Code in new window', type: 'info' });
+      console.error("Failed to generate and download HD QR code locally", err);
+      setToast({ message: 'Failed to download QR code', type: 'error' });
     }
   };
 
@@ -1533,27 +1565,33 @@ export default function AdminDashboard({
                   <div className="pt-2 text-xs font-semibold text-primary flex items-center gap-2 flex-wrap">
                     <span>Registration Link:</span>
                     <a 
-                      href={`${registrationBaseUrl}/?mode=register&hideAdminSignIn=true`} 
+                      href={registrationUrl} 
                       target="_blank" 
                       rel="noopener noreferrer" 
                       className="underline hover:text-primary/80 font-mono break-all"
                     >
-                      {registrationBaseUrl}/?mode=register&hideAdminSignIn=true
+                      {registrationUrl}
                     </a>
                   </div>
                 </div>
                 <div className="flex flex-col items-center gap-3 bg-surface-container-low p-4 rounded-xl border border-outline-variant/30 shrink-0 w-full sm:w-auto">
                   <div className="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-outline-variant shadow-xs">
-                    <img 
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(registrationBaseUrl + '/?mode=register&hideAdminSignIn=true')}`}
-                      alt="Registration QR Code" 
-                      className="w-36 h-36"
-                    />
+                    {registrationQrDataUrl ? (
+                      <img 
+                        src={registrationQrDataUrl}
+                        alt="Registration QR Code" 
+                        className="w-36 h-36"
+                      />
+                    ) : (
+                      <div className="w-36 h-36 flex items-center justify-center bg-surface-container-low">
+                        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                      </div>
+                    )}
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1.5">Scan to Register</span>
                   </div>
                   <div className="flex items-center gap-2 w-full">
                     <button
-                      onClick={() => handleDownloadQrHd(`${registrationBaseUrl}/?mode=register&hideAdminSignIn=true`)}
+                      onClick={() => handleDownloadQrHd(registrationUrl)}
                       title="Download high-definition 1000x1000px QR code"
                       className="flex-1 h-9 px-3 bg-primary text-on-primary font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 hover:bg-primary/95 transition-all cursor-pointer shadow-xs"
                     >
@@ -1561,7 +1599,7 @@ export default function AdminDashboard({
                       <span>Download HD</span>
                     </button>
                     <button
-                      onClick={() => handleCopyLink(`${registrationBaseUrl}/?mode=register&hideAdminSignIn=true`)}
+                      onClick={() => handleCopyLink(registrationUrl)}
                       title="Copy registration link"
                       className="h-9 w-9 bg-surface border border-outline text-on-surface hover:bg-surface-container rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-xs"
                     >
