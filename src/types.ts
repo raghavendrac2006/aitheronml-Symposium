@@ -76,6 +76,10 @@ export interface Attendee {
   batchName?: string;
   paymentStatus?: 'Pending' | 'Paid' | 'Waived';
   checkedInAt?: string;
+  checked_in?: boolean;
+  checked_in_at?: string | null;
+  lunch_status?: string | null;
+  lunch_redeemed_at?: string | null;
   teamMembers?: Array<{
     name: string;
     phone: string;

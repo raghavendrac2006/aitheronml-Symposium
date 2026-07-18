@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Attendee } from '../types';
 import { Clipboard, Check, Download, Home } from 'lucide-react';
+import { downloadQrPass } from '../utils/qrPassGenerator';
 
 interface RegistrationSuccessProps {
   attendee: Attendee;
@@ -17,6 +18,34 @@ export default function RegistrationSuccess({
   isSpotSuccess = false 
 }: RegistrationSuccessProps) {
   const [copied, setCopied] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const autoDownload = async () => {
+      try {
+        await downloadQrPass(attendee);
+        if (secondAttendee) {
+          await downloadQrPass(secondAttendee);
+        }
+      } catch (err) {
+        console.error("Failed to automatically download registration QR pass(es)", err);
+        if (isMounted) {
+          setDownloadError("Registration successful, but QR download failed. Please contact the organizer.");
+        }
+      }
+    };
+    
+    // Tiny delay to ensure browser rendering is stable before triggering download
+    const timer = setTimeout(() => {
+      autoDownload();
+    }, 500);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [attendee, secondAttendee]);
 
   const handleCopyId = () => {
     const pId = secondAttendee 
@@ -27,129 +56,16 @@ export default function RegistrationSuccess({
     setTimeout(() => setCopied(false), 3000);
   };
 
-  const handleDownloadPass = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 600;
-    canvas.height = secondAttendee ? 500 : 400;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Background slate-blue
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Dynamic decorative borders
-    ctx.strokeStyle = '#3b82f6';
-    ctx.lineWidth = 10;
-    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(20, 20, canvas.width - 40, canvas.height - 40);
-
-    // Title Header
-    ctx.fillStyle = '#3b82f6';
-    ctx.font = 'bold 24px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('AItheronML Symposium 2026', canvas.width / 2, 65);
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '13px system-ui, sans-serif';
-    ctx.fillText('OFFICIAL PARTICIPANT PASS', canvas.width / 2, 95);
-
-    // Divider line
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(50, 115);
-    ctx.lineTo(canvas.width - 50, 115);
-    ctx.stroke();
-
-    // Participant Name
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 20px system-ui, sans-serif';
-    ctx.fillText(attendee.teamName ? `Team: ${attendee.teamName}` : attendee.name, canvas.width / 2, 150);
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '10px system-ui, sans-serif';
-    ctx.fillText(attendee.teamName ? `Leader: ${attendee.name}` : 'PARTICIPANT NAME', canvas.width / 2, 172);
-
-    if (secondAttendee) {
-      // Event 1 details (Morning)
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 15px system-ui, sans-serif';
-      ctx.fillText(attendee.registeredEventTitle, canvas.width / 2, 220);
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '10px system-ui, sans-serif';
-      ctx.fillText('MORNING EVENT', canvas.width / 2, 240);
-
-      ctx.fillStyle = '#3b82f6';
-      ctx.font = 'bold 22px monospace';
-      ctx.fillText(attendee.participantId || attendee.id, canvas.width / 2, 275);
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '10px system-ui, sans-serif';
-      ctx.fillText('MORNING PASS ID', canvas.width / 2, 295);
-
-      // Event 2 details (Afternoon)
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 15px system-ui, sans-serif';
-      ctx.fillText(secondAttendee.registeredEventTitle, canvas.width / 2, 340);
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '10px system-ui, sans-serif';
-      ctx.fillText('AFTERNOON EVENT', canvas.width / 2, 360);
-
-      ctx.fillStyle = '#3b82f6';
-      ctx.font = 'bold 22px monospace';
-      ctx.fillText(secondAttendee.participantId || secondAttendee.id, canvas.width / 2, 395);
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '10px system-ui, sans-serif';
-      ctx.fillText('AFTERNOON PASS ID', canvas.width / 2, 415);
-
-      // Registration Date
-      const dateStr = attendee.registrationDate ? new Date(attendee.registrationDate).toLocaleString() : new Date().toLocaleString();
-      ctx.fillStyle = '#64748b';
-      ctx.font = '10px monospace';
-      ctx.fillText(`Issued: ${dateStr}`, canvas.width / 2, 465);
-
-    } else {
-      // Single event details (Original Layout)
-      ctx.fillStyle = '#3b82f6';
-      ctx.font = 'bold 28px monospace';
-      ctx.fillText(attendee.participantId || attendee.id, canvas.width / 2, 240);
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '11px system-ui, sans-serif';
-      ctx.fillText('PARTICIPANT ID', canvas.width / 2, 265);
-
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '600 16px system-ui, sans-serif';
-      ctx.fillText(attendee.registeredEventTitle, canvas.width / 2, 310);
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '11px system-ui, sans-serif';
-      ctx.fillText('REGISTERED EVENT', canvas.width / 2, 330);
-
-      // Registration Date
-      const dateStr = attendee.registrationDate ? new Date(attendee.registrationDate).toLocaleString() : new Date().toLocaleString();
-      ctx.fillStyle = '#64748b';
-      ctx.font = '11px monospace';
-      ctx.fillText(`Issued: ${dateStr}`, canvas.width / 2, 365);
-    }
-
+  const handleDownloadPass = async () => {
     try {
-      const dataUrl = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.href = dataUrl;
-      link.download = secondAttendee ? `Pass_${attendee.id}_${secondAttendee.id}.png` : `Pass_${attendee.id}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      setDownloadError(null);
+      await downloadQrPass(attendee);
+      if (secondAttendee) {
+        await downloadQrPass(secondAttendee);
+      }
     } catch (err) {
-      console.error("Failed to export Canvas to PNG image", err);
+      console.error("Failed to download registration QR pass(es) manually", err);
+      setDownloadError("Registration successful, but QR download failed. Please contact the organizer.");
     }
   };
 
@@ -178,6 +94,14 @@ export default function RegistrationSuccess({
           {/* Clean registration details layout */}
           <div className="bg-surface-container-lowest rounded-2xl p-6 shadow-md border border-outline-variant space-y-6 text-left">
             
+            {/* Download Error Indicator */}
+            {downloadError && (
+              <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-700 text-xs font-semibold rounded-lg flex items-center gap-2">
+                <span className="material-symbols-outlined text-red-600 !text-sm">warning</span>
+                <span>{downloadError}</span>
+              </div>
+            )}
+
             {/* Copy Toast Indicator */}
             {copied && (
               <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-700 text-xs font-semibold rounded-lg flex items-center gap-2">
