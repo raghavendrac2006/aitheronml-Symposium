@@ -43,6 +43,7 @@ export default function AdminDashboard({
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [isResetting, setIsResetting] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const handleResetDatabase = async () => {
     if (window.confirm("ARE YOU ABSOLUTELY SURE? This will permanently delete all student registrations, gate entries, batches, and results, resetting everything back to 0 so you can start testing from the first registration. This action is IRREVERSIBLE.")) {
@@ -784,6 +785,17 @@ export default function AdminDashboard({
               {isSidebarCollapsed ? "menu" : "menu_open"}
             </span>
           </button>
+          
+          {/* Mobile menu toggle button */}
+          <button
+            onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+            title="Open Menu"
+            className="flex lg:hidden items-center justify-center p-2 rounded-full text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer mr-1"
+          >
+            <span className="material-symbols-outlined !text-xl">
+              menu
+            </span>
+          </button>
           <Building className="w-6 h-6 text-primary" />
           <span className="font-bold text-lg md:text-xl text-primary tracking-tight">
             AItheronML Symposium OS
@@ -827,6 +839,308 @@ export default function AdminDashboard({
           </button>
         </div>
       </header>
+
+      {/* Mobile Drawer Navigation Sidebar */}
+      <AnimatePresence>
+        {isMobileSidebarOpen && (
+          <>
+            {/* Backdrop Overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileSidebarOpen(false)}
+              className="fixed inset-0 bg-black/50 z-50 lg:hidden"
+            />
+            {/* Sliding Panel */}
+            <motion.nav
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed left-0 top-0 bottom-0 w-[260px] bg-surface z-55 lg:hidden flex flex-col shadow-2xl p-6"
+            >
+              <div className="flex justify-between items-center pb-4 mb-4 border-b border-outline-variant/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-base shadow-sm">
+                    A
+                  </div>
+                  <div>
+                    <h2 className="font-extrabold text-sm text-primary tracking-tight leading-none">AItheronML</h2>
+                    <p className="text-[10px] text-on-surface-variant uppercase font-semibold mt-0.5 tracking-wider">
+                      Symposium Management
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className="p-1.5 rounded-full hover:bg-surface-container text-on-surface-variant cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Navigation Links inside Drawer */}
+              <div className="flex-1 space-y-1.5 overflow-y-auto">
+                {user.role === 'registration' ? (
+                  <>
+                    <button 
+                      onClick={() => {
+                        setSelectedAttendeeForProfile(null);
+                        setSpotAttendeeSuccess(null);
+                        setActiveTab('dashboard');
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all text-left ${
+                        activeTab === 'dashboard' 
+                          ? 'bg-secondary-container text-on-secondary-container' 
+                          : 'text-on-surface-variant hover:bg-surface-container'
+                      }`}
+                    >
+                      <LayoutDashboard className="w-4 h-4 shrink-0" />
+                      <span>Overview</span>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        setSelectedAttendeeForProfile(null);
+                        setSpotAttendeeSuccess(null);
+                        setActiveTab('new-registration');
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all text-left ${
+                        activeTab === 'new-registration' 
+                          ? 'bg-secondary-container text-on-secondary-container' 
+                          : 'text-on-surface-variant hover:bg-surface-container'
+                      }`}
+                    >
+                      <Plus className="w-4 h-4 shrink-0" />
+                      <span>New Registration</span>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        setSelectedAttendeeForProfile(null);
+                        setSpotAttendeeSuccess(null);
+                        setActiveTab('attendees');
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all text-left ${
+                        activeTab === 'attendees' && !selectedAttendeeForProfile
+                          ? 'bg-secondary-container text-on-secondary-container' 
+                          : 'text-on-surface-variant hover:bg-surface-container'
+                      }`}
+                    >
+                      <Search className="w-4 h-4 shrink-0" />
+                      <span>Search Participants</span>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        setSelectedAttendeeForProfile(null);
+                        setSpotAttendeeSuccess(null);
+                        setActiveTab('spot-registration');
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all text-left ${
+                        activeTab === 'spot-registration' 
+                          ? 'bg-secondary-container text-on-secondary-container' 
+                          : 'text-on-surface-variant hover:bg-surface-container'
+                      }`}
+                    >
+                      <Plus className="w-4 h-4 shrink-0" />
+                      <span>Spot Registration</span>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        setSelectedAttendeeForProfile(null);
+                        setSpotAttendeeSuccess(null);
+                        setActiveTab('qr-scanner');
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all text-left ${
+                        activeTab === 'qr-scanner' 
+                          ? 'bg-secondary-container text-on-secondary-container' 
+                          : 'text-on-surface-variant hover:bg-surface-container'
+                      }`}
+                    >
+                      <QrCode className="w-4 h-4 shrink-0" />
+                      <span>Pass Check-in</span>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        setSelectedAttendeeForProfile(null);
+                        setSpotAttendeeSuccess(null);
+                        setActiveTab('food-scanner');
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all text-left ${
+                        activeTab === 'food-scanner' 
+                          ? 'bg-secondary-container text-on-secondary-container' 
+                          : 'text-on-surface-variant hover:bg-surface-container'
+                      }`}
+                    >
+                      <Utensils className="w-4 h-4 shrink-0" />
+                      <span>Food Redemption</span>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        setIsMobileSidebarOpen(false);
+                        onLogout();
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full text-error hover:bg-error/10 transition-all text-left cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4 shrink-0" />
+                      <span>Logout</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button 
+                      onClick={() => {
+                        setSelectedAttendeeForProfile(null);
+                        setSpotAttendeeSuccess(null);
+                        setActiveTab('dashboard');
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all text-left ${
+                        activeTab === 'dashboard' 
+                          ? 'bg-secondary-container text-on-secondary-container' 
+                          : 'text-on-surface-variant hover:bg-surface-container'
+                      }`}
+                    >
+                      <LayoutDashboard className="w-4 h-4 shrink-0" />
+                      <span>Dashboard</span>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        setSelectedAttendeeForProfile(null);
+                        setSpotAttendeeSuccess(null);
+                        setActiveTab('symposia');
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all text-left ${
+                        activeTab === 'symposia' 
+                          ? 'bg-secondary-container text-on-secondary-container' 
+                          : 'text-on-surface-variant hover:bg-surface-container'
+                      }`}
+                    >
+                      <Calendar className="w-4 h-4 shrink-0" />
+                      <span>Manage Events</span>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        setSelectedAttendeeForProfile(null);
+                        setSpotAttendeeSuccess(null);
+                        setActiveTab('attendees');
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all text-left ${
+                        activeTab === 'attendees' && !selectedAttendeeForProfile
+                          ? 'bg-secondary-container text-on-secondary-container' 
+                          : 'text-on-surface-variant hover:bg-surface-container'
+                      }`}
+                    >
+                      <Users className="w-4 h-4 shrink-0" />
+                      <span>Attendees</span>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        setSelectedAttendeeForProfile(null);
+                        setSpotAttendeeSuccess(null);
+                        setActiveTab('spot-registration');
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all text-left ${
+                        activeTab === 'spot-registration' 
+                          ? 'bg-secondary-container text-on-secondary-container' 
+                          : 'text-on-surface-variant hover:bg-surface-container'
+                      }`}
+                    >
+                      <Plus className="w-4 h-4 shrink-0" />
+                      <span>Spot Registration</span>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        setSelectedAttendeeForProfile(null);
+                        setSpotAttendeeSuccess(null);
+                        setActiveTab('results-batches');
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all text-left ${
+                        activeTab === 'results-batches' 
+                          ? 'bg-secondary-container text-on-secondary-container' 
+                          : 'text-on-surface-variant hover:bg-surface-container'
+                      }`}
+                    >
+                      <Award className="w-4 h-4 shrink-0" />
+                      <span>Results &amp; Batches</span>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        setSelectedAttendeeForProfile(null);
+                        setSpotAttendeeSuccess(null);
+                        setActiveTab('qr-scanner');
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all text-left ${
+                        activeTab === 'qr-scanner' 
+                          ? 'bg-secondary-container text-on-secondary-container' 
+                          : 'text-on-surface-variant hover:bg-surface-container'
+                      }`}
+                    >
+                      <QrCode className="w-4 h-4 shrink-0" />
+                      <span>Pass Check-in</span>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        setSelectedAttendeeForProfile(null);
+                        setSpotAttendeeSuccess(null);
+                        setActiveTab('food-scanner');
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all text-left ${
+                        activeTab === 'food-scanner' 
+                          ? 'bg-secondary-container text-on-secondary-container' 
+                          : 'text-on-surface-variant hover:bg-surface-container'
+                      }`}
+                    >
+                      <Utensils className="w-4 h-4 shrink-0" />
+                      <span>Food Redemption</span>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        setSelectedAttendeeForProfile(null);
+                        setSpotAttendeeSuccess(null);
+                        setActiveTab('settings');
+                        setIsMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold rounded-full transition-all text-left ${
+                        activeTab === 'settings' 
+                          ? 'bg-secondary-container text-on-secondary-container' 
+                          : 'text-on-surface-variant hover:bg-surface-container'
+                      }`}
+                    >
+                      <Settings className="w-4 h-4 shrink-0" />
+                      <span>Settings</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </motion.nav>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Primary Layout Shell Container */}
       <div className="flex pt-16 flex-1">
