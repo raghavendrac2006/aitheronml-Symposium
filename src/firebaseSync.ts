@@ -156,7 +156,9 @@ export async function fetchEventsFromFirestore(): Promise<SymposiumEvent[]> {
     const snap = await getDocs(collection(db, EVENTS_COL));
     const list: SymposiumEvent[] = [];
     snap.forEach(docSnap => {
-      list.push(docSnap.data() as SymposiumEvent);
+      if (docSnap.id !== 'registration_settings') {
+        list.push(docSnap.data() as SymposiumEvent);
+      }
     });
     
     if (list.length > 0) {
@@ -829,7 +831,7 @@ export async function redeemFoodTransaction(participantId: string): Promise<{
  * Saves the global registration status (open/closed) in Firestore
  */
 export async function saveRegistrationStatus(open: boolean): Promise<void> {
-  const docRef = doc(db, 'settings', 'registration');
+  const docRef = doc(db, 'events', 'registration_settings');
   await setDoc(docRef, { registrationOpen: open }, { merge: true });
 }
 
@@ -838,7 +840,7 @@ export async function saveRegistrationStatus(open: boolean): Promise<void> {
  */
 import { onSnapshot } from 'firebase/firestore';
 export function subscribeToRegistrationStatus(callback: (open: boolean) => void): () => void {
-  const docRef = doc(db, 'settings', 'registration');
+  const docRef = doc(db, 'events', 'registration_settings');
   return onSnapshot(docRef, (docSnap) => {
     if (docSnap.exists()) {
       callback(docSnap.data().registrationOpen !== false);

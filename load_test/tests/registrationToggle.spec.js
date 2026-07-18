@@ -11,7 +11,7 @@ test('Verify Super Admin Registration Toggle and Validation', async ({ page }) =
     await page.locator('#sign-in-btn').click();
 
     console.log("Waiting for Super Admin Dashboard...");
-    await page.getByText("Symposium Control Center").waitFor();
+    await page.getByText("Symposium Overview").waitFor();
 
     // 2. Go to Settings tab
     console.log("Navigating to settings panel...");

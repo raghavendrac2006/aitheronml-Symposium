@@ -73,5 +73,11 @@ service cloud.firestore {
       allow read: if true; // Publicly viewable once published
       allow write: if true; // Allow super admins & hosts to submit results
     }
+
+    // SETTINGS COLLECTION
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }
