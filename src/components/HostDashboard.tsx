@@ -9,8 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { SymposiumEvent, Attendee, ParticipantResult, MAP_EMAIL_TO_EVENT_ID, Batch } from '../types';
 import { INITIAL_EVENTS } from '../initialData';
 import ParticipantProfile from './ParticipantProfile';
-import ScannerDesk from './ScannerDesk';
-import { QrCode, Utensils } from 'lucide-react';
+
 
 interface HostDashboardProps {
   user: { email: string; name: string; assignedEventId?: string; role?: string };
@@ -46,8 +45,7 @@ export default function HostDashboard({
   // Confirmation State
   const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
 
-  // hostViewMode toggles between console grids and checkin/food scanner desks
-  const [hostViewMode, setHostViewMode] = useState<'console' | 'checkin-scanner' | 'food-scanner'>('console');
+
 
   // Get the single assigned event for this Host based on permanent IDs or email mapping fallback with triple redundancy
   const fallbackEventId = user.email ? MAP_EMAIL_TO_EVENT_ID[user.email.toLowerCase()] : '';
@@ -879,30 +877,7 @@ export default function HostDashboard({
             <Award className="w-4 h-4" /> Publish Results
           </button>
 
-          {/* View mode toggle controls */}
-          {hostViewMode !== 'console' ? (
-            <button
-              onClick={() => setHostViewMode('console')}
-              className="h-10 px-4 bg-primary text-on-primary font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
-            >
-              <RotateCcw className="w-4 h-4" /> Back to Console
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={() => setHostViewMode('checkin-scanner')}
-                className="h-10 px-4 bg-secondary-container text-on-secondary-container font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer border border-outline-variant/50"
-              >
-                <QrCode className="w-4 h-4 animate-pulse" /> Check-in Scanner
-              </button>
-              <button
-                onClick={() => setHostViewMode('food-scanner')}
-                className="h-10 px-4 bg-secondary-container text-on-secondary-container font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer border border-outline-variant/50"
-              >
-                <Utensils className="w-4 h-4" /> Canteen Scanner
-              </button>
-            </>
-          )}
+
 
           {/* Help Center */}
           <button
@@ -923,16 +898,7 @@ export default function HostDashboard({
       </header>
 
       {/* Main Workspace Layout */}
-      {hostViewMode === 'checkin-scanner' ? (
-        <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-          <ScannerDesk mode="checkin" attendees={attendees} />
-        </main>
-      ) : hostViewMode === 'food-scanner' ? (
-        <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-          <ScannerDesk mode="food" attendees={attendees} />
-        </main>
-      ) : (
-        <div className="flex-1 flex flex-col min-h-0 lg:h-[calc(100vh-80px)]">
+      <div className="flex-1 flex flex-col min-h-0 lg:h-[calc(100vh-80px)]">
           {/* Mobile Navigation Segment Tabs */}
           <div className="lg:hidden flex items-center justify-between bg-surface border-b border-outline-variant/60 p-2 gap-1 sticky top-0 z-30 shrink-0 bg-white">
             <button
@@ -1631,8 +1597,7 @@ export default function HostDashboard({
         </section>
 
       </main>
-        </div>
-      )}
+      </div>
 
       {/* Confirmation Publish Modal */}
       {isPublishConfirmOpen && (

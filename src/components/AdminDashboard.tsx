@@ -10,7 +10,7 @@ import { SymposiumEvent, Attendee, TrackType, EventStatus, UserSession, Batch } 
 import ParticipantProfile from './ParticipantProfile';
 import PublicRegistration from './PublicRegistration';
 import RegistrationSuccess from './RegistrationSuccess';
-import { clearAllRegistrationsAndReset } from '../firebaseSync';
+import { clearAllRegistrationsAndReset, saveRegistrationStatus, subscribeToRegistrationStatus } from '../firebaseSync';
 import ScannerDesk from './ScannerDesk';
 import { QrCode, Utensils } from 'lucide-react';
 import QRCode from 'qrcode';
@@ -46,6 +46,14 @@ export default function AdminDashboard({
   const [searchQuery, setSearchQuery] = useState('');
   const [isResetting, setIsResetting] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isRegistrationOpen, setIsRegistrationOpen] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToRegistrationStatus((open: boolean) => {
+      setIsRegistrationOpen(open);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleResetDatabase = async () => {
     if (window.confirm("ARE YOU ABSOLUTELY SURE? This will permanently delete all student registrations, gate entries, batches, and results, resetting everything back to 0 so you can start testing from the first registration. This action is IRREVERSIBLE.")) {
@@ -1580,18 +1588,30 @@ export default function AdminDashboard({
                 </div>
                 <div className="flex flex-col items-center gap-3 bg-surface-container-low p-4 rounded-xl border border-outline-variant/30 shrink-0 w-full sm:w-auto">
                   <div className="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-outline-variant shadow-xs">
-                    {registrationQrDataUrl ? (
-                      <img 
-                        src={registrationQrDataUrl}
-                        alt="Registration QR Code" 
-                        className="w-36 h-36"
-                      />
-                    ) : (
-                      <div className="w-36 h-36 flex items-center justify-center bg-surface-container-low">
-                        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                      </div>
-                    )}
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1.5">Scan to Register</span>
+                    <div className="relative">
+                      {registrationQrDataUrl ? (
+                        <img 
+                          src={registrationQrDataUrl}
+                          alt="Registration QR Code" 
+                          className={`w-36 h-36 transition-all duration-300 ${!isRegistrationOpen ? 'blur-[2px] opacity-40 grayscale' : ''}`}
+                        />
+                      ) : (
+                        <div className="w-36 h-36 flex items-center justify-center bg-surface-container-low">
+                          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                        </div>
+                      )}
+                      {!isRegistrationOpen && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-rose-500/10 rounded-lg border border-rose-500/20">
+                          <span className="material-symbols-outlined !text-3xl text-rose-600 animate-pulse">lock</span>
+                          <span className="text-[9px] font-black text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-200 mt-1 uppercase tracking-wider">Closed</span>
+                        </div>
+                      )}
+                    </div>
+                    <span className={`text-[10px] font-black uppercase tracking-wider mt-1.5 ${
+                      isRegistrationOpen ? 'text-emerald-600' : 'text-rose-600'
+                    }`}>
+                      {isRegistrationOpen ? '● Scan to Register' : '○ Portal Suspended'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 w-full">
                     <button
@@ -2726,6 +2746,51 @@ export default function AdminDashboard({
                     className="bg-primary text-on-primary h-10 px-6 rounded-lg text-xs font-semibold hover:opacity-90"
                   >
                     Save Changes
+                  </button>
+                </div>
+              </div>
+
+              {/* Registration Control Panel */}
+              <div className="bg-surface border border-outline-variant p-6 rounded-2xl max-w-xl space-y-4 shadow-xs">
+                <div className="flex items-center justify-between border-b border-outline-variant/40 pb-3 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary !text-2xl">event_seat</span>
+                    <h3 className="text-lg font-bold text-on-surface">Public Registration Portal</h3>
+                  </div>
+                  <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full ${
+                    isRegistrationOpen 
+                      ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' 
+                      : 'bg-rose-500/10 text-rose-600 border border-rose-500/20'
+                  }`}>
+                    {isRegistrationOpen ? '● Active' : '○ Suspended'}
+                  </span>
+                </div>
+                
+                <p className="text-xs text-on-surface-variant leading-relaxed">
+                  When suspended, the public registration portal will block all online entries, and any participant scanning the registration QR code will see a "Registrations Closed" notice. You can reactivate registrations at any time.
+                </p>
+
+                <div className="pt-2">
+                  <button
+                    onClick={async () => {
+                      const nextState = !isRegistrationOpen;
+                      try {
+                        await saveRegistrationStatus(nextState);
+                        alert(`Public registrations have been successfully ${nextState ? 'enabled' : 'disabled'}!`);
+                      } catch (err) {
+                        alert('Failed to update registration status: ' + String(err));
+                      }
+                    }}
+                    className={`h-10 px-6 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-xs cursor-pointer ${
+                      isRegistrationOpen 
+                        ? 'bg-rose-600 text-white hover:bg-rose-700' 
+                        : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined !text-sm">
+                      {isRegistrationOpen ? 'pause_circle' : 'pause_circle'}
+                    </span>
+                    <span>{isRegistrationOpen ? 'Stop Public Registrations' : 'Start Public Registrations'}</span>
                   </button>
                 </div>
               </div>

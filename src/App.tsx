@@ -26,7 +26,8 @@ import {
   saveBatchToFirestore,
   deleteBatchFromFirestore,
   triggerPendingSync,
-  clearAllRegistrationsAndReset
+  clearAllRegistrationsAndReset,
+  subscribeToRegistrationStatus
 } from './firebaseSync';
 
 const MAPPED_EVENT_IDS: Record<string, string> = {
@@ -86,8 +87,18 @@ function AppContent() {
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
 
+  // Registration open status (controlled dynamically by super admin)
+  const [isRegistrationOpen, setIsRegistrationOpen] = useState(true);
+
   // Online / Offline state tracking
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToRegistrationStatus((open: boolean) => {
+      setIsRegistrationOpen(open);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -454,7 +465,36 @@ function AppContent() {
       <div id="symposium-app-root" className="min-h-screen bg-background text-on-background selection:bg-primary/20">
         <div className="min-h-screen bg-background text-on-background w-full">
           <React.Suspense fallback={<LoadingFallback />}>
-            {publicRegSuccessAttendee ? (
+            {!isRegistrationOpen ? (
+              <div className="min-h-screen bg-[#020526] text-white flex items-center justify-center p-6 font-sans relative overflow-hidden">
+                {/* Cyberpunk tech grid background */}
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(8,12,95,0.4)_0%,transparent_70%)] pointer-events-none" />
+                <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none" />
+                
+                <div className="relative max-w-md w-full bg-white/5 backdrop-blur-md border border-white/10 p-8 rounded-3xl shadow-2xl text-center space-y-6">
+                  <div className="w-16 h-16 bg-red-500/10 border border-red-500/20 text-red-500 flex items-center justify-center rounded-full mx-auto animate-pulse">
+                    <span className="material-symbols-outlined !text-3xl">block</span>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <h2 className="text-xl font-black uppercase tracking-wider text-red-500">Registrations Closed</h2>
+                    <p className="text-sm text-gray-300 leading-relaxed font-medium">
+                      The online registration portal for the CSM Symposium has been closed by the administrators. 
+                    </p>
+                    <p className="text-xs text-gray-400 leading-relaxed">
+                      If you believe this is in error or need on-spot registration assistance, please contact the coordinator or the registration help desk.
+                    </p>
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 p-4 rounded-2xl space-y-1">
+                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block">Coordinator Hotline</span>
+                    <a href="tel:8121280857" className="text-md font-black text-white hover:text-red-400 transition-colors block">
+                      +91 81212 80857
+                    </a>
+                  </div>
+                </div>
+              </div>
+            ) : publicRegSuccessAttendee ? (
               <RegistrationSuccess
                 attendee={publicRegSuccessAttendee}
                 secondAttendee={publicRegSuccessSecondAttendee || undefined}

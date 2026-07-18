@@ -825,4 +825,30 @@ export async function redeemFoodTransaction(participantId: string): Promise<{
   }
 }
 
+/**
+ * Saves the global registration status (open/closed) in Firestore
+ */
+export async function saveRegistrationStatus(open: boolean): Promise<void> {
+  const docRef = doc(db, 'settings', 'registration');
+  await setDoc(docRef, { registrationOpen: open }, { merge: true });
+}
+
+/**
+ * Subscribes to the global registration status from Firestore
+ */
+import { onSnapshot } from 'firebase/firestore';
+export function subscribeToRegistrationStatus(callback: (open: boolean) => void): () => void {
+  const docRef = doc(db, 'settings', 'registration');
+  return onSnapshot(docRef, (docSnap) => {
+    if (docSnap.exists()) {
+      callback(docSnap.data().registrationOpen !== false);
+    } else {
+      callback(true); // default to open
+    }
+  }, (err) => {
+    console.warn("Failed to subscribe to registration status, defaulting to open", err);
+    callback(true);
+  });
+}
+
 
