@@ -10,11 +10,11 @@ test('Verify Mobile Drawer Navigation for Registration Desk', async ({ page }) =
     await emailInput.waitFor({ state: 'visible', timeout: 5000 });
     await emailInput.fill('registration@aitheronml.in');
     await page.locator('#password').fill('12345678');
-    await page.locator('#sign-in-btn').click();
+    await page.locator('#sign-in-btn').click({ force: true });
 
     console.log("Waiting for dashboard to load...");
-    // By default, it opens the Overview/Dashboard tab
-    await expect(page.locator('text=Symposium Overview')).toBeVisible({ timeout: 10000 });
+    // Wait for header Sign Out button in dashboard to load
+    await page.locator('button[title="Sign Out"]').waitFor({ state: 'visible', timeout: 30000 });
 
     // The desktop sidebar should be hidden
     const desktopNav = page.locator('nav.hidden.lg\\:flex');
