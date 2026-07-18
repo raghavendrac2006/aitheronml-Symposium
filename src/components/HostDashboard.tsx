@@ -124,6 +124,7 @@ export default function HostDashboard({
   const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState(false);
   const [expandedBatchIds, setExpandedBatchIds] = useState<string[]>([]);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<'queue' | 'scoring' | 'standings'>('queue');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
 
   useEffect(() => {
@@ -931,12 +932,52 @@ export default function HostDashboard({
           <ScannerDesk mode="food" attendees={attendees} />
         </main>
       ) : (
-        <main className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6 p-4 md:p-6 overflow-y-auto lg:overflow-hidden lg:h-[calc(100vh-80px)]">
-        
-        {/* ==================================================== */}
-        {/* COLUMN 1 (Left): Batch Control & Participant Queue  */}
-        {/* ==================================================== */}
-        <section className="col-span-1 md:col-span-1 lg:col-span-4 flex flex-col gap-4 lg:h-full lg:overflow-hidden min-w-0">
+        <div className="flex-1 flex flex-col min-h-0 lg:h-[calc(100vh-80px)]">
+          {/* Mobile Navigation Segment Tabs */}
+          <div className="lg:hidden flex items-center justify-between bg-surface border-b border-outline-variant/60 p-2 gap-1 sticky top-0 z-30 shrink-0 bg-white">
+            <button
+              onClick={() => setMobileTab('queue')}
+              className={`flex-1 py-2 text-center text-xs font-black uppercase tracking-wider rounded-xl transition-all border ${
+                mobileTab === 'queue'
+                  ? 'bg-primary border-primary text-on-primary shadow-xs'
+                  : 'bg-surface border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-low'
+              }`}
+            >
+              Queue ({sortedConsoleQueue.length})
+            </button>
+            <button
+              onClick={() => setMobileTab('scoring')}
+              className={`flex-1 py-2 text-center text-xs font-black uppercase tracking-wider rounded-xl transition-all border relative ${
+                mobileTab === 'scoring'
+                  ? 'bg-primary border-primary text-on-primary shadow-xs'
+                  : 'bg-surface border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-low'
+              }`}
+            >
+              Scoring Desk
+              {currentActiveJudgingAttendee && (
+                <span className="absolute top-1.5 right-2 w-1.5 h-1.5 rounded-full bg-amber-500" />
+              )}
+            </button>
+            <button
+              onClick={() => setMobileTab('standings')}
+              className={`flex-1 py-2 text-center text-xs font-black uppercase tracking-wider rounded-xl transition-all border ${
+                mobileTab === 'standings'
+                  ? 'bg-primary border-primary text-on-primary shadow-xs'
+                  : 'bg-surface border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-low'
+              }`}
+            >
+              Standings
+            </button>
+          </div>
+
+          <main className="flex-grow grid grid-cols-1 lg:grid-cols-12 gap-6 p-4 md:p-6 overflow-y-auto lg:overflow-hidden min-h-0">
+          
+          {/* ==================================================== */}
+          {/* COLUMN 1 (Left): Batch Control & Participant Queue  */}
+          {/* ==================================================== */}
+          <section className={`col-span-1 lg:col-span-4 flex flex-col gap-4 lg:h-full lg:overflow-hidden min-w-0 ${
+            mobileTab === 'queue' ? 'flex' : 'hidden lg:flex'
+          }`}>
           
           {/* Batches Collapsible List */}
           <div className="bg-surface border border-outline-variant/60 rounded-2xl p-4 flex flex-col gap-3 shadow-xs shrink-0 max-h-[220px] overflow-y-auto">
@@ -1131,7 +1172,10 @@ export default function HostDashboard({
                     <div
                       key={att.id}
                       id={`queue-row-${att.id}`}
-                      onClick={() => setSelectedAttendeeForJudging(att)}
+                      onClick={() => {
+                        setSelectedAttendeeForJudging(att);
+                        setMobileTab('scoring');
+                      }}
                       className={`p-3 border rounded-xl flex flex-col justify-between gap-2.5 transition-all cursor-pointer ${
                         isActive
                           ? 'border-primary bg-primary/5 ring-1 ring-primary'
@@ -1196,6 +1240,7 @@ export default function HostDashboard({
                             onClick={(e) => {
                               e.stopPropagation();
                               setSelectedAttendeeForJudging(att);
+                              setMobileTab('scoring');
                               setTimeout(() => {
                                 const firstInput = document.getElementById(`score-input-${evaluationCriteria[0]?.id}`);
                                 if (firstInput) {
@@ -1220,7 +1265,9 @@ export default function HostDashboard({
         {/* ==================================================== */}
         {/* COLUMN 2 (Center): Inline Evaluation Panel          */}
         {/* ==================================================== */}
-        <section className="col-span-1 md:col-span-1 lg:col-span-5 flex flex-col gap-4 lg:h-full lg:overflow-hidden min-w-0">
+        <section className={`col-span-1 lg:col-span-5 flex flex-col gap-4 lg:h-full lg:overflow-hidden min-w-0 ${
+          mobileTab === 'scoring' ? 'flex' : 'hidden lg:flex'
+        }`}>
           
           <div className="bg-surface border border-outline-variant/60 rounded-2xl p-5 flex flex-col gap-4 shadow-xs h-full overflow-hidden">
             <div className="flex justify-between items-center border-b border-outline-variant/40 pb-3 shrink-0">
@@ -1440,10 +1487,9 @@ export default function HostDashboard({
           </div>
         </section>
 
-        {/* ==================================================== */}
-        {/* COLUMN 3 (Right): Stats, Leaderboard & Timeline    */}
-        {/* ==================================================== */}
-        <section className="col-span-1 md:col-span-2 lg:col-span-3 flex flex-col gap-4 lg:h-full lg:overflow-hidden min-w-0">
+        <section className={`col-span-1 lg:col-span-3 flex flex-col gap-4 lg:h-full lg:overflow-hidden min-w-0 ${
+          mobileTab === 'standings' ? 'flex' : 'hidden lg:flex'
+        }`}>
           
           {/* Summary Panel */}
           <div className="bg-surface border border-outline-variant/60 rounded-2xl p-4 flex flex-col gap-3 shadow-xs shrink-0">
@@ -1585,6 +1631,7 @@ export default function HostDashboard({
         </section>
 
       </main>
+        </div>
       )}
 
       {/* Confirmation Publish Modal */}
