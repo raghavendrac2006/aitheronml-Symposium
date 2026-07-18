@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Attendee } from '../types';
 import { Clipboard, Check, Download, Home } from 'lucide-react';
 import { downloadQrPass } from '../utils/qrPassGenerator';
+import QRCode from 'qrcode';
 
 interface RegistrationSuccessProps {
   attendee: Attendee;
@@ -19,17 +20,33 @@ export default function RegistrationSuccess({
 }: RegistrationSuccessProps) {
   const [copied, setCopied] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
-    const autoDownload = async () => {
+    const initQrAndDownload = async () => {
       try {
-        await downloadQrPass(attendee);
-        if (secondAttendee) {
-          await downloadQrPass(secondAttendee);
+        // Generate QR code data URL first (for on-screen display)
+        const { formatQrContent } = await import('../utils/qrPassGenerator');
+        const qrContent = formatQrContent(attendee, secondAttendee);
+        const dataUrl = await QRCode.toDataURL(qrContent, {
+          errorCorrectionLevel: 'H',
+          margin: 1,
+          width: 300,
+          color: {
+            dark: '#000000',
+            light: '#ffffff'
+          }
+        });
+        
+        if (isMounted) {
+          setQrDataUrl(dataUrl);
         }
+
+        // Trigger automatic unified pass PNG download
+        await downloadQrPass(attendee, secondAttendee);
       } catch (err) {
-        console.error("Failed to automatically download registration QR pass(es)", err);
+        console.error("Failed to automatically generate or download QR pass", err);
         if (isMounted) {
           setDownloadError("Registration successful, but QR download failed. Please contact the organizer.");
         }
@@ -38,7 +55,7 @@ export default function RegistrationSuccess({
     
     // Tiny delay to ensure browser rendering is stable before triggering download
     const timer = setTimeout(() => {
-      autoDownload();
+      initQrAndDownload();
     }, 500);
 
     return () => {
@@ -59,12 +76,9 @@ export default function RegistrationSuccess({
   const handleDownloadPass = async () => {
     try {
       setDownloadError(null);
-      await downloadQrPass(attendee);
-      if (secondAttendee) {
-        await downloadQrPass(secondAttendee);
-      }
+      await downloadQrPass(attendee, secondAttendee);
     } catch (err) {
-      console.error("Failed to download registration QR pass(es) manually", err);
+      console.error("Failed to download registration QR pass manually", err);
       setDownloadError("Registration successful, but QR download failed. Please contact the organizer.");
     }
   };
@@ -187,6 +201,27 @@ export default function RegistrationSuccess({
                   <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
                   Confirmed (Pending Check-in)
                 </span>
+              </div>
+
+              {/* Centered QR Pass Integration */}
+              <div className="pt-5 border-t border-outline-variant/30 flex flex-col items-center justify-center gap-2.5">
+                <span className="block text-[10px] uppercase font-black tracking-widest text-primary text-center">Your Entry QR Pass</span>
+                {qrDataUrl ? (
+                  <div className="bg-white p-3 rounded-2xl border border-outline-variant shadow-xs">
+                    <img 
+                      src={qrDataUrl} 
+                      alt="Registration QR Pass" 
+                      className="w-44 h-44 block select-none" 
+                    />
+                  </div>
+                ) : (
+                  <div className="w-44 h-44 rounded-2xl bg-surface-container-high animate-pulse flex items-center justify-center">
+                    <span className="text-xs text-on-surface-variant">Generating QR...</span>
+                  </div>
+                )}
+                <p className="text-[10px] text-on-surface-variant font-semibold text-center max-w-[240px] leading-normal mt-1">
+                  Keep this QR safe and show it at the check-in desk on arrival.
+                </p>
               </div>
             </div>
           </div>
