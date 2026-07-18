@@ -143,24 +143,30 @@ export interface UserSession {
 
 export const MAP_EMAIL_TO_EVENT_ID: Record<string, string> = {
   'paperpresentation@aitheronml.in': 'paper_presentation',
-  'posterpresentation@aitheronml.in': 'poster_presentation',
-  'vibecoding@aitheronml.in': 'vibe_coding',
   'projectexpo@aitheronml.in': 'project_expo',
+  'aiagent@aitheronml.in': 'ai_agent_challenge',
+  'aivideo@aitheronml.in': 'ai_video_generation',
+  'dsa@aitheronml.in': 'dsa_challenge',
+  'vibecoding@aitheronml.in': 'vibe_coding',
+  'techquiz@aitheronml.in': 'technical_quiz',
   'photography@aitheronml.in': 'photography',
+  'logo@aitheronml.in': 'logo_identification',
   'treasurehunt@aitheronml.in': 'treasure_hunt',
-  'freefire@aitheronml.in': 'free_fire',
-  'dumbcharades@aitheronml.in': 'dumb_charades',
+  'freefire@aitheronml.in': 'freefire',
 };
 
 export const MAP_EMAIL_TO_NAME: Record<string, string> = {
   'paperpresentation@aitheronml.in': 'Paper Presentation Host',
-  'posterpresentation@aitheronml.in': 'Poster Presentation Host',
-  'vibecoding@aitheronml.in': 'White Coding Host',
   'projectexpo@aitheronml.in': 'Project Expo Host',
+  'aiagent@aitheronml.in': 'AI Agent Challenge Host',
+  'aivideo@aitheronml.in': 'AI Video Generation Host',
+  'dsa@aitheronml.in': 'DSA Challenge Host',
+  'vibecoding@aitheronml.in': 'Vibe Coding Host',
+  'techquiz@aitheronml.in': 'Technical Quiz Host',
   'photography@aitheronml.in': 'Photography Host',
+  'logo@aitheronml.in': 'Logo Identification Host',
   'treasurehunt@aitheronml.in': 'Treasure Hunt Host',
-  'freefire@aitheronml.in': 'Free Fire Host',
-  'dumbcharades@aitheronml.in': 'Dumb Charades Host',
+  'freefire@aitheronml.in': 'Freefire Host',
 };
 
 export function normalizeEmail(emailStr: string): string {
@@ -174,25 +180,31 @@ export function normalizeEmail(emailStr: string): string {
   // Let's normalize common username typos or spaces that were stripped
   let normUsername = username;
   if (username.startsWith('paper')) normUsername = 'paperpresentation';
-  else if (username.startsWith('poster')) normUsername = 'posterpresentation';
-  else if (username.startsWith('vibe')) normUsername = 'vibecoding';
   else if (username.startsWith('project')) normUsername = 'projectexpo';
+  else if (username.startsWith('aiagent') || username.startsWith('agent')) normUsername = 'aiagent';
+  else if (username.startsWith('aivideo') || username.startsWith('video')) normUsername = 'aivideo';
+  else if (username.startsWith('dsa')) normUsername = 'dsa';
+  else if (username.startsWith('vibe')) normUsername = 'vibecoding';
+  else if (username.startsWith('techquiz') || username.startsWith('quiz')) normUsername = 'techquiz';
   else if (username.startsWith('photograph')) normUsername = 'photography';
+  else if (username.startsWith('logo')) normUsername = 'logo';
   else if (username.startsWith('treasure')) normUsername = 'treasurehunt';
   else if (username.startsWith('free')) normUsername = 'freefire';
-  else if (username.startsWith('dumb')) normUsername = 'dumbcharades';
   else if (username.startsWith('registration')) normUsername = 'registration';
   else if (username.startsWith('superadmin')) return 'superadmin@gmail.com';
 
   const knownUsernames = [
     'paperpresentation',
-    'posterpresentation',
-    'vibecoding',
     'projectexpo',
+    'aiagent',
+    'aivideo',
+    'dsa',
+    'vibecoding',
+    'techquiz',
     'photography',
+    'logo',
     'treasurehunt',
     'freefire',
-    'dumbcharades',
     'registration'
   ];
 

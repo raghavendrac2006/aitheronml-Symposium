@@ -421,7 +421,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
             onClick={() => handleFillCredentials('vibecoding@aitheronml.in')}
             className="text-[11px] text-left px-2 py-1 bg-secondary/5 hover:bg-secondary/15 text-secondary rounded font-medium truncate shrink-0"
           >
-            🔑 White Coding Host
+            🔑 Vibe Coding Host
           </button>
           <button 
             onClick={() => handleFillCredentials('treasurehunt@aitheronml.in')}
