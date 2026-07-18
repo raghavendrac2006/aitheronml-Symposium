@@ -177,6 +177,7 @@ export default function AdminDashboard({
     { id: 'afternoon-session', label: 'Afternoon Session' },
     { id: 'technical', label: 'Technical' },
     { id: 'non-technical', label: 'Non-Technical' },
+    ...events.map(e => ({ id: `event-${e.id}`, label: e.title }))
   ];
 
   // Console state selectors
@@ -222,6 +223,9 @@ export default function AdminDashboard({
       if (ev?.track !== 'Technical') return false;
     } else if (activeConsoleFilter === 'non-technical') {
       if (ev?.track !== 'Non-Technical') return false;
+    } else if (activeConsoleFilter.startsWith('event-')) {
+      const targetEventId = activeConsoleFilter.substring(6);
+      if (a.registeredEventId !== targetEventId) return false;
     }
 
     return true;

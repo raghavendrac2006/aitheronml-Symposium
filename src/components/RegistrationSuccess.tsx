@@ -106,11 +106,11 @@ export default function RegistrationSuccess({
           </div>
 
           {/* Action Notice Callout Box */}
-          <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-start gap-3 text-left">
-            <span className="material-symbols-outlined text-amber-600 mt-0.5 shrink-0">warning</span>
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 text-left">
+            <span className="material-symbols-outlined text-red-600 mt-0.5 shrink-0">warning</span>
             <div>
-              <h4 className="text-xs font-black uppercase text-amber-850 dark:text-amber-300 tracking-wider">Pass Download Required</h4>
-              <p className="text-[11px] text-amber-800 dark:text-amber-200 font-semibold leading-relaxed mt-0.5">
+              <h4 className="text-xs font-black uppercase text-red-800 dark:text-red-300 tracking-wider">Pass Download Required</h4>
+              <p className="text-[11px] text-red-750 dark:text-red-200 font-semibold leading-relaxed mt-0.5">
                 Please download this entry pass immediately. You must present this QR Code pass at the symposium registration desk for verification and entry check-in on the event day.
               </p>
             </div>
