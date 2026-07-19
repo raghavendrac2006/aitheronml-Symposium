@@ -62,11 +62,57 @@ export const ROUTE_TO_EVENT_ID: Record<string, string> = {
   '/dumbcharades': 'dumb_charades',
 };
 
+class GlobalErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, errorMsg: string}> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = { hasError: false, errorMsg: '' };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, errorMsg: error.message };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("Global React Crash:", error, errorInfo);
+    
+    // Auto-reload once on ChunkLoadError (usually due to Vercel deploying a new version)
+    if (error.name === 'ChunkLoadError' || error.message.includes('fetch dynamically imported module') || error.message.includes('importing a dynamically imported module')) {
+      if (!sessionStorage.getItem('chunk_load_reloaded')) {
+        sessionStorage.setItem('chunk_load_reloaded', 'true');
+        window.location.reload();
+      }
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ display: 'flex', minHeight: '100vh', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0a', color: '#ff3e6c', fontFamily: 'monospace', padding: '20px', textAlign: 'center' }}>
+          <h2 style={{ fontSize: '24px', marginBottom: '10px' }}>Something went wrong.</h2>
+          <p style={{ marginBottom: '20px', color: '#888' }}>{this.state.errorMsg}</p>
+          <button 
+            onClick={() => {
+              sessionStorage.removeItem('chunk_load_reloaded');
+              window.location.reload();
+            }}
+            style={{ padding: '10px 20px', backgroundColor: '#ff3e6c', color: '#fff', borderRadius: '4px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            Refresh Application
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <BrowserRouter>
-      <AppContent />
-    </BrowserRouter>
+    <GlobalErrorBoundary>
+      <BrowserRouter>
+        <AppContent />
+      </BrowserRouter>
+    </GlobalErrorBoundary>
   );
 }
 
