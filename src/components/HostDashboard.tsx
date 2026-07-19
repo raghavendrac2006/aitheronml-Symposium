@@ -1302,153 +1302,382 @@ export default function HostDashboard({
                 <p className="text-[10px] text-on-surface-variant mt-1">Queue is empty or criteria filters returned 0 entries.</p>
               </div>
             ) : (
-              <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-1 min-h-0">
-                
-                {/* Active participant card header */}
-                <div className="bg-surface-container-low border border-outline-variant/45 p-4 rounded-xl flex justify-between items-start gap-2 shrink-0">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[9px] font-black text-primary bg-primary/10 border border-primary/20 px-2 py-0.2 rounded">
-                        {currentActiveJudgingAttendee.participantId || currentActiveJudgingAttendee.id}
-                      </span>
-                      <h3 className="font-black text-sm text-on-surface">
-                        {currentActiveJudgingAttendee.name}
-                      </h3>
-                    </div>
-                    {currentActiveJudgingAttendee.teamName && (
-                      <p className="text-xs font-black text-amber-600 mt-1">
-                        👥 Team Leader: {currentActiveJudgingAttendee.teamName}
-                      </p>
-                    )}
-                    <div className="text-[10px] text-on-surface-variant mt-1.5 font-bold space-y-0.5">
-                      <p>🏫 College: <span className="text-on-surface">{currentActiveJudgingAttendee.college}</span></p>
-                      <p>📧 Email: {currentActiveJudgingAttendee.email} • 📞 Mobile: {(currentActiveJudgingAttendee as any).mobile || currentActiveJudgingAttendee.phone || 'N/A'}</p>
-                      {currentActiveJudgingAttendee.teamMembers && currentActiveJudgingAttendee.teamMembers.length > 0 && (
-                        <p className="text-amber-800 dark:text-amber-300 font-bold">
-                          👥 Members: {currentActiveJudgingAttendee.teamMembers.join(', ')}
+              <>
+                {/* Desktop Judging Panel */}
+                <div className="hidden lg:flex flex-1 flex-col gap-4 overflow-y-auto pr-1 min-h-0">
+                  
+                  {/* Active participant card header */}
+                  <div className="bg-surface-container-low border border-outline-variant/45 p-4 rounded-xl flex justify-between items-start gap-2 shrink-0">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[9px] font-black text-primary bg-primary/10 border border-primary/20 px-2 py-0.2 rounded">
+                          {currentActiveJudgingAttendee.participantId || currentActiveJudgingAttendee.id}
+                        </span>
+                        <h3 className="font-black text-sm text-on-surface">
+                          {currentActiveJudgingAttendee.name}
+                        </h3>
+                      </div>
+                      {currentActiveJudgingAttendee.teamName && (
+                        <p className="text-xs font-black text-amber-600 mt-1">
+                          👥 Team Leader: {currentActiveJudgingAttendee.teamName}
                         </p>
                       )}
+                      <div className="text-[10px] text-on-surface-variant mt-1.5 font-bold space-y-0.5">
+                        <p>🏫 College: <span className="text-on-surface">{currentActiveJudgingAttendee.college}</span></p>
+                        <p>📧 Email: {currentActiveJudgingAttendee.email} • 📞 Mobile: {(currentActiveJudgingAttendee as any).mobile || currentActiveJudgingAttendee.phone || 'N/A'}</p>
+                        {currentActiveJudgingAttendee.teamMembers && currentActiveJudgingAttendee.teamMembers.length > 0 && (
+                          <p className="text-amber-800 dark:text-amber-300 font-bold">
+                            👥 Members: {currentActiveJudgingAttendee.teamMembers.join(', ')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Attendance check box directly inline */}
+                    <div className="flex flex-col items-end gap-1.5">
+                      <label className="flex items-center gap-1.5 cursor-pointer bg-surface border border-outline-variant px-2.5 py-1.5 rounded-lg text-[10px] font-bold">
+                        <input
+                          type="checkbox"
+                          checked={currentActiveJudgingAttendee.attendanceStatus === 'Present'}
+                          onChange={(e) => {
+                            const status = e.target.checked ? 'Present' : 'Absent';
+                            handleMarkAttendance(currentActiveJudgingAttendee.id, status);
+                            setToast({ 
+                              message: `Marked ${currentActiveJudgingAttendee.name} ${status}`, 
+                              type: 'info' 
+                            });
+                          }}
+                          disabled={isResultsPublished}
+                          className="rounded border-outline-variant text-primary focus:ring-0 cursor-pointer"
+                        />
+                        <span>Checked In</span>
+                      </label>
+                      <span className="text-[9px] text-on-surface-variant font-bold">
+                        Batch: {currentActiveJudgingAttendee.batchName || 'Unassigned'}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Attendance check box directly inline */}
-                  <div className="flex flex-col items-end gap-1.5">
-                    <label className="flex items-center gap-1.5 cursor-pointer bg-surface border border-outline-variant px-2.5 py-1.5 rounded-lg text-[10px] font-bold">
-                      <input
-                        type="checkbox"
-                        checked={currentActiveJudgingAttendee.attendanceStatus === 'Present'}
-                        onChange={(e) => {
-                          const status = e.target.checked ? 'Present' : 'Absent';
-                          handleMarkAttendance(currentActiveJudgingAttendee.id, status);
-                          setToast({ 
-                            message: `Marked ${currentActiveJudgingAttendee.name} ${status}`, 
-                            type: 'info' 
-                          });
-                        }}
-                        disabled={isResultsPublished}
-                        className="rounded border-outline-variant text-primary focus:ring-0 cursor-pointer"
-                      />
-                      <span>Checked In</span>
-                    </label>
-                    <span className="text-[9px] text-on-surface-variant font-bold">
-                      Batch: {currentActiveJudgingAttendee.batchName || 'Unassigned'}
-                    </span>
-                  </div>
-                </div>
+                  {/* Score Input Matrix */}
+                  <div className="space-y-3">
+                    <span className="text-[9px] font-black text-on-surface-variant uppercase tracking-wider block">Evaluation Metrics</span>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {evaluationCriteria.map(crit => {
+                        const currentVal = criteriaScores[crit.id] || '';
+                        const parsedVal = parseFloat(currentVal);
+                        const isErr = currentVal !== '' && (isNaN(parsedVal) || parsedVal < 0 || parsedVal > crit.maxScore);
 
-                {/* Score Input Matrix */}
-                <div className="space-y-3">
-                  <span className="text-[9px] font-black text-on-surface-variant uppercase tracking-wider block">Evaluation Metrics</span>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {evaluationCriteria.map(crit => {
-                      const currentVal = criteriaScores[crit.id] || '';
-                      const parsedVal = parseFloat(currentVal);
-                      const isErr = currentVal !== '' && (isNaN(parsedVal) || parsedVal < 0 || parsedVal > crit.maxScore);
-
-                      return (
-                        <div key={crit.id} className="bg-surface-container-low border border-outline-variant/40 p-3 rounded-xl space-y-1">
-                          <div className="flex justify-between items-center text-[10px] font-bold">
-                            <span className="text-on-surface">{crit.name}</span>
-                            <span className="text-on-surface-variant font-semibold">Max: {crit.maxScore}</span>
+                        return (
+                          <div key={crit.id} className="bg-surface-container-low border border-outline-variant/40 p-3 rounded-xl space-y-1">
+                            <div className="flex justify-between items-center text-[10px] font-bold">
+                              <span className="text-on-surface">{crit.name}</span>
+                              <span className="text-on-surface-variant font-semibold">Max: {crit.maxScore}</span>
+                            </div>
+                            
+                            <input
+                              type="number"
+                              id={`score-input-${crit.id}`}
+                              value={currentVal}
+                              placeholder=""
+                              onChange={(e) => handleCriteriaScoreChange(crit.id, e.target.value)}
+                              disabled={isResultsPublished}
+                              className={`w-full h-8 px-2.5 bg-surface border rounded-lg text-xs outline-none ${
+                                isErr ? 'border-error focus:ring-error' : 'border-outline focus:border-primary'
+                              }`}
+                            />
+                            {isErr && (
+                              <span className="text-[8px] text-error font-bold block">
+                                Out of range (0-{crit.maxScore})
+                              </span>
+                            )}
                           </div>
-                          
-                          <input
-                            type="number"
-                            id={`score-input-${crit.id}`}
-                            value={currentVal}
-                            placeholder=""
-                            onChange={(e) => handleCriteriaScoreChange(crit.id, e.target.value)}
-                            disabled={isResultsPublished}
-                            className={`w-full h-8 px-2.5 bg-surface border rounded-lg text-xs outline-none ${
-                              isErr ? 'border-error focus:ring-error' : 'border-outline focus:border-primary'
-                            }`}
-                          />
-                          {isErr && (
-                            <span className="text-[8px] text-error font-bold block">
-                              Out of range (0-{crit.maxScore})
-                            </span>
-                          )}
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Assessor Remarks */}
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-black text-on-surface-variant uppercase tracking-wider">Evaluation Remarks</label>
+                    <textarea
+                      rows={2}
+                      placeholder="Enter judging remarks, notes, or critique feedback..."
+                      value={judgingRemarks}
+                      onChange={(e) => setJudgingRemarks(e.target.value)}
+                      disabled={isResultsPublished}
+                      className="w-full p-2.5 bg-surface border border-outline-variant rounded-xl text-xs outline-none focus:border-primary placeholder:text-outline-variant/80"
+                    />
+                  </div>
+
+                  {criterionError && (
+                    <div className="bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg text-[10px] font-bold text-rose-600 flex items-center gap-1.5">
+                      <span>⚠️ {criterionError}</span>
+                    </div>
+                  )}
+
+                  {/* Score lock notification if results are published */}
+                  {isResultsPublished && (
+                    <div className="bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-lg text-[9px] font-bold text-amber-700 flex items-center gap-1.5 shrink-0">
+                      <span>🔒 Official standings have been compiled and published. Scores are locked in read-only mode.</span>
+                    </div>
+                  )}
+
+                  {/* Panel Action Buttons */}
+                  {!isResultsPublished && (
+                    <div className="flex items-center gap-3 pt-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleSkipEvaluation}
+                        className="h-10 px-4 border border-outline-variant hover:bg-surface-container text-on-surface-variant font-semibold rounded-xl text-xs transition-all cursor-pointer"
+                      >
+                        Skip
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveEvaluationInline(currentActiveJudgingAttendee, 'In Progress')}
+                        className="flex-1 h-10 border border-outline-variant hover:bg-surface-container text-on-surface-variant font-semibold rounded-xl text-xs transition-all cursor-pointer"
+                      >
+                        Save Draft
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveEvaluationInline(currentActiveJudgingAttendee, 'Completed')}
+                        className="flex-1 h-10 bg-primary hover:bg-primary/95 text-on-primary font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
+                      >
+                        Save & Next
+                      </button>
+                    </div>
+                  )}
+
+                </div>
+
+                {/* Mobile-only Judging Panel */}
+                <div className="lg:hidden flex flex-col gap-4 flex-grow min-h-0 overflow-y-auto">
+                  
+                  {/* Batch & Queue Progress Header */}
+                  {(() => {
+                    const batchAttendees = myAttendees.filter(a => a.batchId === currentActiveJudgingAttendee.batchId);
+                    const presentAttendees = batchAttendees.filter(a => a.attendanceStatus === 'Present');
+                    const judgedCount = presentAttendees.filter(a => a.judgingStatus === 'Completed').length;
+                    const totalCount = presentAttendees.length;
+                    const progressPercentage = totalCount > 0 ? (judgedCount / totalCount) * 100 : 0;
+
+                    return (
+                      <div className="bg-surface-container-low border border-outline-variant/40 p-4 rounded-2xl space-y-3 shrink-0">
+                        <div className="flex justify-between items-center text-[10px] font-black uppercase text-on-surface-variant tracking-wider">
+                          <span>Batch: {currentActiveJudgingAttendee.batchName || 'Unassigned'}</span>
+                          <span>Progress: {judgedCount}/{totalCount} Judged</span>
                         </div>
-                      );
-                    })}
+                        {/* Progress Bar */}
+                        <div className="w-full h-2 bg-surface-container-high rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-emerald-500 transition-all duration-500 rounded-full"
+                            style={{ width: `${progressPercentage}%` }}
+                          />
+                        </div>
+                        
+                        {/* Judged, Current and Pending indicator badges list */}
+                        <div className="space-y-1">
+                          <span className="text-[8px] font-bold text-on-surface-variant uppercase tracking-widest block">Roster Overview</span>
+                          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                            {presentAttendees.map(a => {
+                              const isCurrent = a.id === currentActiveJudgingAttendee.id;
+                              const isJudged = a.judgingStatus === 'Completed';
+                              
+                              return (
+                                <div 
+                                  key={a.id}
+                                  onClick={() => {
+                                    setSelectedAttendeeForJudging(a);
+                                    setMobileTab('scoring');
+                                  }}
+                                  className={`px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider shrink-0 transition-all cursor-pointer ${
+                                    isCurrent 
+                                      ? 'bg-amber-500 border-amber-600 text-white font-extrabold shadow-sm' 
+                                      : isJudged 
+                                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                                      : 'bg-surface border-outline-variant/30 text-on-surface-variant'
+                                  }`}
+                                >
+                                  <span className="mr-1">{isJudged ? '✓' : isCurrent ? '▶' : '○'}</span>
+                                  {a.teamName || a.name}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Large Team Info Card */}
+                  <div className="bg-surface-container-low border border-outline-variant/40 p-5 rounded-2xl space-y-4">
+                    <div className="border-b border-outline-variant/30 pb-3 flex justify-between items-start gap-2">
+                      <div className="min-w-0">
+                        <span className="font-mono text-[9px] font-black text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded leading-none shrink-0 inline-block mb-1.5">
+                          {currentActiveJudgingAttendee.participantId || currentActiveJudgingAttendee.id}
+                        </span>
+                        <h2 className="font-black text-base text-on-surface leading-tight">
+                          {currentActiveJudgingAttendee.name}
+                        </h2>
+                        {currentActiveJudgingAttendee.teamName && (
+                          <p className="text-xs font-black text-amber-600 mt-1">
+                            👥 Team Name: {currentActiveJudgingAttendee.teamName}
+                          </p>
+                        )}
+                        {currentActiveJudgingAttendee.teamMembers && currentActiveJudgingAttendee.teamMembers.length > 0 && (
+                          <p className="text-[10px] text-amber-700 font-bold mt-1">
+                            👥 Members: {currentActiveJudgingAttendee.teamMembers.join(', ')}
+                          </p>
+                        )}
+                      </div>
+
+                      <label className="flex items-center gap-1.5 cursor-pointer bg-surface border border-outline-variant px-3 py-2 rounded-xl text-xs font-bold shrink-0 shadow-sm">
+                        <input
+                          type="checkbox"
+                          checked={currentActiveJudgingAttendee.attendanceStatus === 'Present'}
+                          onChange={(e) => {
+                            const status = e.target.checked ? 'Present' : 'Absent';
+                            handleMarkAttendance(currentActiveJudgingAttendee.id, status);
+                            setToast({ 
+                              message: `Marked ${currentActiveJudgingAttendee.name} ${status}`, 
+                              type: 'info' 
+                            });
+                          }}
+                          disabled={isResultsPublished}
+                          className="rounded border-outline-variant text-primary focus:ring-0 cursor-pointer w-4 h-4"
+                        />
+                        <span>Present</span>
+                      </label>
+                    </div>
+                    
+                    <div className="text-[10px] text-on-surface-variant font-medium space-y-1">
+                      <p>🏫 College: <span className="text-on-surface font-semibold">{currentActiveJudgingAttendee.college}</span></p>
+                      <p>📧 Email: {currentActiveJudgingAttendee.email} <span className="opacity-40">•</span> 📞 Phone: {(currentActiveJudgingAttendee as any).mobile || currentActiveJudgingAttendee.phone || 'N/A'}</p>
+                    </div>
                   </div>
+
+                  {/* Large Score Controls */}
+                  <div className="space-y-4">
+                    <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest block pl-1">Metrics Judging Form</span>
+                    
+                    <div className="space-y-3">
+                      {evaluationCriteria.map(crit => {
+                        const currentVal = criteriaScores[crit.id] || '';
+                        const parsedVal = parseFloat(currentVal);
+                        const scoreNum = isNaN(parsedVal) ? 0 : parsedVal;
+                        const isErr = currentVal !== '' && (isNaN(parsedVal) || parsedVal < 0 || parsedVal > crit.maxScore);
+
+                        const adjustScore = (delta: number) => {
+                          if (isResultsPublished) return;
+                          const nextScore = Math.max(0, Math.min(crit.maxScore, scoreNum + delta));
+                          handleCriteriaScoreChange(crit.id, String(nextScore));
+                        };
+
+                        return (
+                          <div key={crit.id} className="bg-surface-container-low border border-outline-variant/40 p-4 rounded-2xl space-y-3 shadow-xs">
+                            <div className="flex justify-between items-center text-xs font-bold">
+                              <span className="text-on-surface text-sm">{crit.name}</span>
+                              <span className="text-on-surface-variant">Max Score: {crit.maxScore}</span>
+                            </div>
+                            
+                            {/* Big Touch-Friendly Controls */}
+                            <div className="flex items-center gap-3">
+                              <button
+                                type="button"
+                                disabled={isResultsPublished}
+                                onClick={() => adjustScore(-1)}
+                                className="w-12 h-12 bg-surface-container border border-outline-variant hover:bg-surface-container-high text-on-surface text-lg font-black rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0 shadow-sm"
+                              >
+                                -
+                              </button>
+                              
+                              <div className="flex-1 relative">
+                                <input
+                                  type="number"
+                                  id={`mobile-score-input-${crit.id}`}
+                                  value={currentVal}
+                                  placeholder="0"
+                                  onChange={(e) => handleCriteriaScoreChange(crit.id, e.target.value)}
+                                  disabled={isResultsPublished}
+                                  className={`w-full h-12 text-center text-base font-black bg-surface border rounded-xl outline-none focus:ring-2 focus:ring-primary/20 ${
+                                    isErr ? 'border-error text-error' : 'border-outline text-primary'
+                                  }`}
+                                />
+                              </div>
+
+                              <button
+                                type="button"
+                                disabled={isResultsPublished}
+                                onClick={() => adjustScore(1)}
+                                className="w-12 h-12 bg-surface-container border border-outline-variant hover:bg-surface-container-high text-on-surface text-lg font-black rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0 shadow-sm"
+                              >
+                                +
+                              </button>
+                            </div>
+                            
+                            {isErr && (
+                              <span className="text-[9px] text-error font-black block text-center animate-pulse">
+                                Out of range (0 - {crit.maxScore})
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Large Comments/Remarks Field */}
+                  <div className="space-y-1.5 bg-surface-container-low border border-outline-variant/40 p-4 rounded-2xl shadow-xs">
+                    <label className="block text-[10px] font-black text-on-surface-variant uppercase tracking-widest">Judges Remarks / Feedback</label>
+                    <textarea
+                      rows={3}
+                      placeholder="Type feedback notes, strengths, or questions answered..."
+                      value={judgingRemarks}
+                      onChange={(e) => setJudgingRemarks(e.target.value)}
+                      disabled={isResultsPublished}
+                      className="w-full p-3 bg-surface border border-outline-variant rounded-xl text-sm outline-none focus:border-primary placeholder:text-outline-variant/70 min-h-[90px]"
+                    />
+                  </div>
+
+                  {criterionError && (
+                    <div className="bg-rose-500/10 border border-rose-500/20 p-3 rounded-xl text-xs font-bold text-rose-600 flex items-center gap-1.5 animate-pulse">
+                      <span>⚠️ {criterionError}</span>
+                    </div>
+                  )}
+
+                  {/* Large Action Buttons */}
+                  {!isResultsPublished && (
+                    <div className="flex flex-col gap-2.5 pt-2 shrink-0">
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSkipEvaluation}
+                          className="flex-1 h-12 border border-outline hover:bg-surface-container text-on-surface-variant font-black rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-xs"
+                        >
+                          Skip
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEvaluationInline(currentActiveJudgingAttendee, 'In Progress')}
+                          className="flex-1 h-12 border border-outline hover:bg-surface-container text-on-surface-variant font-black rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-xs"
+                        >
+                          Save Draft
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveEvaluationInline(currentActiveJudgingAttendee, 'Completed')}
+                        className="w-full h-14 bg-primary hover:bg-primary/95 text-on-primary font-black rounded-xl text-sm uppercase tracking-wider transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        Submit Score & Next Team
+                      </button>
+                    </div>
+                  )}
+
                 </div>
-
-                {/* Assessor Remarks */}
-                <div className="space-y-1">
-                  <label className="block text-[9px] font-black text-on-surface-variant uppercase tracking-wider">Evaluation Remarks</label>
-                  <textarea
-                    rows={2}
-                    placeholder="Enter judging remarks, notes, or critique feedback..."
-                    value={judgingRemarks}
-                    onChange={(e) => setJudgingRemarks(e.target.value)}
-                    disabled={isResultsPublished}
-                    className="w-full p-2.5 bg-surface border border-outline-variant rounded-xl text-xs outline-none focus:border-primary placeholder:text-outline-variant/80"
-                  />
-                </div>
-
-                {criterionError && (
-                  <div className="bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg text-[10px] font-bold text-rose-600 flex items-center gap-1.5">
-                    <span>⚠️ {criterionError}</span>
-                  </div>
-                )}
-
-                {/* Score lock notification if results are published */}
-                {isResultsPublished && (
-                  <div className="bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-lg text-[9px] font-bold text-amber-700 flex items-center gap-1.5 shrink-0">
-                    <span>🔒 Official standings have been compiled and published. Scores are locked in read-only mode.</span>
-                  </div>
-                )}
-
-                {/* Panel Action Buttons */}
-                {!isResultsPublished && (
-                  <div className="flex items-center gap-3 pt-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={handleSkipEvaluation}
-                      className="h-10 px-4 border border-outline-variant hover:bg-surface-container text-on-surface-variant font-semibold rounded-xl text-xs transition-all cursor-pointer"
-                    >
-                      Skip
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSaveEvaluationInline(currentActiveJudgingAttendee, 'In Progress')}
-                      className="flex-1 h-10 border border-outline-variant hover:bg-surface-container text-on-surface-variant font-semibold rounded-xl text-xs transition-all cursor-pointer"
-                    >
-                      Save Draft
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSaveEvaluationInline(currentActiveJudgingAttendee, 'Completed')}
-                      className="flex-1 h-10 bg-primary hover:bg-primary/95 text-on-primary font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
-                    >
-                      Save & Next
-                    </button>
-                  </div>
-                )}
-
-              </div>
+              </>
             )}
           </div>
         </section>

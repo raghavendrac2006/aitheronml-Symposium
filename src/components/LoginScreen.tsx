@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, ArrowRight, ShieldCheck, UserCheck, AlertCircle } from 'lucide-react';
+import { Lock, ArrowRight, ShieldCheck, UserCheck, AlertCircle, Key, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { auth, db } from '../firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -346,7 +346,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
                   <button 
                     type="button"
                     onClick={() => {
-                      alert('Demo Credentials:\n\nSuper Admin:\nEmail: superadmin@gmail.com\nPassword: 12345678\n\nEvent Hosts:\nUse any official host email, e.g. paperpresentation@aitheronml.in\nPassword: 12345678');
+                      alert('Please contact the super admin to reset your password.');
                     }}
                     className="text-xs text-[#080c5f] hover:underline font-medium"
                   >
@@ -393,44 +393,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         <p className="text-[11px] text-white/60 font-medium">Authorized University Personnel Only</p>
       </footer>
 
-      {/* Account Pre-fill floating bubble helper */}
-      <div className="fixed bottom-4 right-4 z-40 bg-surface border border-outline-variant p-3 rounded-xl shadow-lg max-w-xs transition-all hover:scale-105">
-        <h4 className="text-xs font-bold text-primary mb-2 flex items-center gap-1">
-          <UserCheck className="w-3.5 h-3.5" /> Quick Demo Login
-        </h4>
-        <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
-          <button 
-            onClick={() => handleFillCredentials('superadmin@gmail.com')}
-            className="text-[11px] text-left px-2 py-1 bg-primary/5 hover:bg-primary/15 text-primary rounded font-semibold truncate shrink-0"
-          >
-            🔑 Admin (superadmin@gmail.com)
-          </button>
-          <button 
-            onClick={() => handleFillCredentials('registration@aitheronml.in')}
-            className="text-[11px] text-left px-2 py-1 bg-green-500/10 hover:bg-green-500/20 text-green-700 rounded font-bold truncate shrink-0 animate-pulse"
-          >
-            📋 Registration Team (12345678)
-          </button>
-          <button 
-            onClick={() => handleFillCredentials('paperpresentation@aitheronml.in')}
-            className="text-[11px] text-left px-2 py-1 bg-secondary/5 hover:bg-secondary/15 text-secondary rounded font-medium truncate shrink-0"
-          >
-            🔑 Paper Pres. Host
-          </button>
-          <button 
-            onClick={() => handleFillCredentials('vibecoding@aitheronml.in')}
-            className="text-[11px] text-left px-2 py-1 bg-secondary/5 hover:bg-secondary/15 text-secondary rounded font-medium truncate shrink-0"
-          >
-            🔑 Vibe Coding Host
-          </button>
-          <button 
-            onClick={() => handleFillCredentials('treasurehunt@aitheronml.in')}
-            className="text-[11px] text-left px-2 py-1 bg-secondary/5 hover:bg-secondary/15 text-secondary rounded font-medium truncate shrink-0"
-          >
-            🔑 Treasure Hunt Host
-          </button>
-        </div>
-      </div>
+
 
     </div>
   );

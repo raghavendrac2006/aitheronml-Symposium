@@ -3,7 +3,8 @@ import { motion } from 'motion/react';
 import { SymposiumEvent, Attendee } from '../types';
 import { saveAttendeeToFirestore, saveParticipantsWithAtomicIds } from '../firebaseSync';
 import { 
-  FileText, Layers, Brain, Award, Camera, Map, Gamepad2, Users, Check, AlertCircle, HelpCircle, Info, Clock, MapPin
+  FileText, Layers, Brain, Award, Camera, Map, Gamepad2, Users, Check, AlertCircle, HelpCircle, Info, Clock, MapPin,
+  Plus, Trash2, Send
 } from 'lucide-react';
 
 const EventSkeletonCard = () => (
@@ -686,10 +687,10 @@ export default function PublicRegistration({
                         type="button"
                         onClick={handleAddMember}
                         disabled={teamMembersInput.length >= 3}
-                        className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer self-start sm:self-auto bg-primary/10 text-primary hover:bg-primary/20 disabled:bg-surface-container-high disabled:text-on-surface-variant/40 disabled:cursor-not-allowed"
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-auto bg-primary/10 text-primary hover:bg-primary/20 disabled:bg-surface-container-high disabled:text-on-surface-variant/40 disabled:cursor-not-allowed shadow-sm"
                       >
-                        <span className="material-symbols-outlined !text-sm">add</span>
-                        Add Member
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Member</span>
                       </button>
                     </div>
 
@@ -701,10 +702,10 @@ export default function PublicRegistration({
                             <button
                               type="button"
                               onClick={() => handleRemoveMember(index)}
-                              className="p-1 text-on-surface-variant hover:text-error transition-colors cursor-pointer"
+                              className="p-1.5 rounded-full hover:bg-surface-container-high text-on-surface-variant hover:text-error transition-all cursor-pointer"
                               title="Remove member"
                             >
-                              <span className="material-symbols-outlined !text-base">delete</span>
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           )}
                         </div>
@@ -757,7 +758,7 @@ export default function PublicRegistration({
                   className="w-full h-12 bg-primary text-white font-semibold rounded-lg shadow-md hover:opacity-95 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>{isSpotRegistration ? 'Instantly Register & Generate ID' : 'Submit Registration'}</span>
-                  <span className="material-symbols-outlined !text-lg">send</span>
+                  <Send className="w-4 h-4" />
                 </button>
               </div>
             </form>

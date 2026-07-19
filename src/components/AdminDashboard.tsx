@@ -3,7 +3,8 @@ import {
   LayoutDashboard, Calendar, Mic, Users, Settings, HelpCircle, 
   Search, Bell, User, Plus, FileText, Layers, HelpCircle as QuizIcon, 
   Camera, Map, Brain, Image as ImageIcon, Check, X, LogOut, ArrowUpRight, 
-  MapPin, Clock, Edit3, Trash2, CheckCircle2, AlertCircle, Building, Award, Unlock
+  MapPin, Clock, Edit3, Trash2, CheckCircle2, AlertCircle, Building, Award, Unlock,
+  Menu, ChevronLeft, ChevronRight, QrCode, Utensils
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SymposiumEvent, Attendee, TrackType, EventStatus, UserSession, Batch } from '../types';
@@ -12,7 +13,6 @@ import PublicRegistration from './PublicRegistration';
 import RegistrationSuccess from './RegistrationSuccess';
 import { clearAllRegistrationsAndReset, saveRegistrationStatus, subscribeToRegistrationStatus } from '../firebaseSync';
 import ScannerDesk from './ScannerDesk';
-import { QrCode, Utensils } from 'lucide-react';
 import QRCode from 'qrcode';
 
 
@@ -825,9 +825,7 @@ export default function AdminDashboard({
             title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
             className="hidden lg:flex items-center justify-center p-2 rounded-full text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer mr-1"
           >
-            <span className="material-symbols-outlined !text-xl">
-              {isSidebarCollapsed ? "menu" : "menu_open"}
-            </span>
+            {isSidebarCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
           </button>
           
           {/* Mobile menu toggle button */}
@@ -836,9 +834,7 @@ export default function AdminDashboard({
             title="Open Menu"
             className="flex lg:hidden items-center justify-center p-2 rounded-full text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer mr-1"
           >
-            <span className="material-symbols-outlined !text-xl">
-              menu
-            </span>
+            <Menu className="w-5 h-5" />
           </button>
           <Building className="w-6 h-6 text-primary" />
           <span className="font-bold text-lg md:text-xl text-primary tracking-tight">
@@ -1943,65 +1939,156 @@ export default function AdminDashboard({
                   {/* Participant List */}
                   <div className="bg-surface rounded-2xl border border-outline-variant/60 overflow-hidden shadow-xs">
                     <div className="max-h-[600px] overflow-y-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-surface-container-low border-b border-outline-variant/50 sticky top-0 z-10">
-                            <th className="p-3 w-10 text-center">
-                              <input 
-                                type="checkbox"
-                                checked={filteredConsoleAttendees.length > 0 && selectedConsoleIds.length === filteredConsoleAttendees.length}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedConsoleIds(filteredConsoleAttendees.map(a => a.id));
-                                  } else {
-                                    setSelectedConsoleIds([]);
-                                  }
-                                }}
-                                className="w-3.5 h-3.5 text-primary border-outline rounded focus:ring-primary"
-                              />
-                            </th>
-                            <th className="p-3 font-bold text-on-surface uppercase tracking-wider text-[10px]">Participant</th>
-                            <th className="p-3 font-bold text-on-surface uppercase tracking-wider text-[10px]">Registered Event</th>
-                            <th className="p-3 font-bold text-on-surface uppercase tracking-wider text-[10px]">Payment</th>
-                            <th className="p-3 font-bold text-on-surface uppercase tracking-wider text-[10px]">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredConsoleAttendees.length === 0 ? (
-                            <tr>
-                              <td colSpan={5} className="p-8 text-center text-on-surface-variant font-medium">
-                                No participants matched the current search / filters.
-                              </td>
-                            </tr>
-                          ) : (
-                            filteredConsoleAttendees.map(att => {
-                              const isSelected = currentActiveAttendee?.id === att.id;
-                              const isChecked = selectedConsoleIds.includes(att.id);
-                              
-                              const paymentColorClass = att.paymentStatus === 'Paid' 
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' 
-                                : 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20';
-
-                              const attendanceColorClass = att.attendanceStatus === 'Present'
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20';
-
-                              return (
-                                <tr 
-                                  key={att.id} 
-                                  id={`row-${att.id}`}
-                                  onClick={(e) => {
-                                    if ((e.target as HTMLElement).tagName === 'INPUT') return;
-                                    setSelectedAttendeeForProfile(att);
+                      {/* Desktop View Table */}
+                      <div className="hidden lg:block">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-surface-container-low border-b border-outline-variant/50 sticky top-0 z-10">
+                              <th className="p-3 w-10 text-center">
+                                <input 
+                                  type="checkbox"
+                                  checked={filteredConsoleAttendees.length > 0 && selectedConsoleIds.length === filteredConsoleAttendees.length}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedConsoleIds(filteredConsoleAttendees.map(a => a.id));
+                                    } else {
+                                      setSelectedConsoleIds([]);
+                                    }
                                   }}
-                                  className={`border-b border-outline-variant/20 hover:bg-surface-container-low transition-colors cursor-pointer select-none ${
-                                    isSelected ? 'bg-primary/5 border-l-4 border-l-primary font-bold' : ''
-                                  }`}
-                                >
-                                  <td className="p-3 text-center">
+                                  className="w-3.5 h-3.5 text-primary border-outline rounded focus:ring-primary"
+                                />
+                              </th>
+                              <th className="p-3 font-bold text-on-surface uppercase tracking-wider text-[10px]">Participant</th>
+                              <th className="p-3 font-bold text-on-surface uppercase tracking-wider text-[10px]">Registered Event</th>
+                              <th className="p-3 font-bold text-on-surface uppercase tracking-wider text-[10px]">Payment</th>
+                              <th className="p-3 font-bold text-on-surface uppercase tracking-wider text-[10px]">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredConsoleAttendees.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="p-8 text-center text-on-surface-variant font-medium">
+                                  No participants matched the current search / filters.
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredConsoleAttendees.map(att => {
+                                const isSelected = currentActiveAttendee?.id === att.id;
+                                const isChecked = selectedConsoleIds.includes(att.id);
+                                
+                                const paymentColorClass = att.paymentStatus === 'Paid' 
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' 
+                                  : 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20';
+
+                                const attendanceColorClass = att.attendanceStatus === 'Present'
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20';
+
+                                return (
+                                  <tr 
+                                    key={att.id} 
+                                    id={`row-${att.id}`}
+                                    onClick={(e) => {
+                                      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+                                      setSelectedAttendeeForProfile(att);
+                                    }}
+                                    className={`border-b border-outline-variant/20 hover:bg-surface-container-low transition-colors cursor-pointer select-none ${
+                                      isSelected ? 'bg-primary/5 border-l-4 border-l-primary font-bold' : ''
+                                    }`}
+                                  >
+                                    <td className="p-3 text-center">
+                                      <input 
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setSelectedConsoleIds([...selectedConsoleIds, att.id]);
+                                          } else {
+                                            setSelectedConsoleIds(selectedConsoleIds.filter(id => id !== att.id));
+                                          }
+                                        }}
+                                        className="w-3.5 h-3.5 text-primary border-outline rounded focus:ring-primary"
+                                      />
+                                    </td>
+                                    <td className="p-3 space-y-0.5">
+                                      <div className="font-bold text-on-surface text-sm flex items-center gap-1.5">
+                                        {att.teamName ? (
+                                          <span className="truncate">Team: {att.teamName}</span>
+                                        ) : (
+                                          <span className="truncate">{att.name}</span>
+                                        )}
+                                        <span className="text-[10px] text-primary/75 bg-primary/5 px-1.5 py-0.25 rounded-md font-semibold">
+                                          {att.id}
+                                        </span>
+                                      </div>
+                                      {att.teamName && (
+                                        <div className="text-[10px] text-on-surface-variant font-medium">Leader: {att.name}</div>
+                                      )}
+                                      <div className="text-[10px] text-on-surface-variant">
+                                        {att.phone} • {att.email}
+                                      </div>
+                                    </td>
+                                    <td className="p-3">
+                                      <div className="font-semibold text-on-surface">{att.registeredEventTitle}</div>
+                                      <div className="flex items-center gap-1.5 mt-0.5">
+                                        <span className={`text-[9px] font-black uppercase px-1.5 py-0.25 rounded ${
+                                          att.regType === 'team' ? 'bg-tertiary-fixed text-on-tertiary-fixed' : 'bg-primary-fixed text-on-primary-fixed'
+                                        }`}>
+                                          {att.regType || 'individual'}
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="p-3">
+                                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${paymentColorClass}`}>
+                                        {att.paymentStatus === 'Paid' ? 'Paid' : 'Pending'}
+                                      </span>
+                                    </td>
+                                    <td className="p-3">
+                                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${attendanceColorClass}`}>
+                                        {att.attendanceStatus === 'Present' ? 'Checked In' : 'Absent'}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Mobile View Cards */}
+                      <div className="block lg:hidden divide-y divide-outline-variant/30">
+                        {filteredConsoleAttendees.length === 0 ? (
+                          <div className="p-8 text-center text-on-surface-variant font-medium text-xs">
+                            No participants matched the current search / filters.
+                          </div>
+                        ) : (
+                          filteredConsoleAttendees.map(att => {
+                            const isSelected = currentActiveAttendee?.id === att.id;
+                            const isChecked = selectedConsoleIds.includes(att.id);
+                            
+                            const paymentColorClass = att.paymentStatus === 'Paid' 
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' 
+                              : 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20';
+
+                            const attendanceColorClass = att.attendanceStatus === 'Present'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20';
+
+                            return (
+                              <div 
+                                key={att.id}
+                                onClick={() => setSelectedAttendeeForProfile(att)}
+                                className={`p-4 flex flex-col gap-3 transition-colors ${
+                                  isSelected ? 'bg-primary/5 border-l-4 border-l-primary' : 'bg-surface'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex items-start gap-2.5">
                                     <input 
                                       type="checkbox"
                                       checked={isChecked}
+                                      onClick={(e) => e.stopPropagation()}
                                       onChange={(e) => {
                                         if (e.target.checked) {
                                           setSelectedConsoleIds([...selectedConsoleIds, att.id]);
@@ -2009,370 +2096,551 @@ export default function AdminDashboard({
                                           setSelectedConsoleIds(selectedConsoleIds.filter(id => id !== att.id));
                                         }
                                       }}
-                                      className="w-3.5 h-3.5 text-primary border-outline rounded focus:ring-primary"
+                                      className="w-4 h-4 mt-0.5 text-primary border-outline rounded focus:ring-primary shrink-0"
                                     />
-                                  </td>
-                                  <td className="p-3 space-y-0.5">
-                                    <div className="font-bold text-on-surface text-sm flex items-center gap-1.5">
-                                      {att.teamName ? (
-                                        <span className="truncate">Team: {att.teamName}</span>
-                                      ) : (
-                                        <span className="truncate">{att.name}</span>
+                                    <div className="min-w-0">
+                                      <div className="font-black text-on-surface text-sm flex flex-wrap items-center gap-1.5 leading-tight">
+                                        {att.teamName ? (
+                                          <span className="truncate">Team: {att.teamName}</span>
+                                        ) : (
+                                          <span className="truncate">{att.name}</span>
+                                        )}
+                                        <span className="text-[9px] text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.25 rounded font-black tracking-wide">
+                                          {att.id}
+                                        </span>
+                                      </div>
+                                      {att.teamName && (
+                                        <div className="text-[10px] text-on-surface-variant font-bold mt-0.5">Leader: {att.name}</div>
                                       )}
-                                      <span className="text-[10px] text-primary/75 bg-primary/5 px-1.5 py-0.25 rounded-md font-semibold">
-                                        {att.id}
+                                      <div className="text-[10px] text-on-surface-variant mt-1">
+                                        📞 {att.phone} <span className="opacity-40">•</span> 📧 {att.email}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-outline-variant/20">
+                                  <div>
+                                    <span className="text-[10px] text-on-surface-variant block font-bold">Registered Event</span>
+                                    <span className="text-xs font-extrabold text-on-surface block mt-0.5">{att.registeredEventTitle}</span>
+                                    <span className={`inline-block text-[8px] font-black uppercase px-1.5 py-0.25 rounded mt-1 ${
+                                      att.regType === 'team' ? 'bg-tertiary-fixed text-on-tertiary-fixed' : 'bg-primary-fixed text-on-primary-fixed'
+                                    }`}>
+                                      {att.regType || 'individual'}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-right">
+                                      <span className="text-[8px] text-on-surface-variant block uppercase font-bold">Payment</span>
+                                      <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider mt-0.5 ${paymentColorClass}`}>
+                                        {att.paymentStatus === 'Paid' ? 'Paid' : 'Pending'}
                                       </span>
                                     </div>
-                                    {att.teamName && (
-                                      <div className="text-[10px] text-on-surface-variant font-medium">Leader: {att.name}</div>
-                                    )}
-                                    <div className="text-[10px] text-on-surface-variant">
-                                      {att.phone} • {att.email}
-                                    </div>
-                                  </td>
-                                  <td className="p-3">
-                                    <div className="font-semibold text-on-surface">{att.registeredEventTitle}</div>
-                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                      <span className={`text-[9px] font-black uppercase px-1.5 py-0.25 rounded ${
-                                        att.regType === 'team' ? 'bg-tertiary-fixed text-on-tertiary-fixed' : 'bg-primary-fixed text-on-primary-fixed'
-                                      }`}>
-                                        {att.regType || 'individual'}
+                                    <div className="text-right">
+                                      <span className="text-[8px] text-on-surface-variant block uppercase font-bold">Attendance</span>
+                                      <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider mt-0.5 ${attendanceColorClass}`}>
+                                        {att.attendanceStatus === 'Present' ? 'Checked In' : 'Absent'}
                                       </span>
                                     </div>
-                                  </td>
-                                  <td className="p-3">
-                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${paymentColorClass}`}>
-                                      {att.paymentStatus === 'Paid' ? 'Paid' : 'Pending'}
-                                    </span>
-                                  </td>
-                                  <td className="p-3">
-                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${attendanceColorClass}`}>
-                                      {att.attendanceStatus === 'Present' ? 'Checked In' : 'Absent'}
-                                    </span>
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
 
 {/* RIGHT PANEL: Quick Action Panel (col-span-5) */}
                  {!isRightPanelCollapsed && (
-                   <div className="lg:col-span-5">
-                     {currentActiveAttendee ? (
-                       <div className="bg-surface rounded-2xl border border-outline-variant/60 p-6 space-y-6 shadow-md sticky top-6">
-                         
-                         {/* Title / Action Header */}
-                         <div className="border-b border-outline-variant/40 pb-4 flex justify-between items-start">
-                           <div>
-                             <div className="text-[10px] font-black uppercase text-primary tracking-widest">Selected Participant</div>
-                             <h2 className="text-lg font-black text-on-surface mt-0.5 leading-tight">
-                               {currentActiveAttendee.teamName ? `Team: ${currentActiveAttendee.teamName}` : currentActiveAttendee.name}
-                             </h2>
-                             <div className="text-xs text-on-surface-variant font-medium mt-1">
-                               ID: <strong className="text-primary font-bold">{currentActiveAttendee.id}</strong>
+                   <>
+                     {/* Desktop Panel */}
+                     <div className="hidden lg:block lg:col-span-5">
+                       {currentActiveAttendee ? (
+                         <div className="bg-surface rounded-2xl border border-outline-variant/60 p-6 space-y-6 shadow-md sticky top-6">
+                           
+                           {/* Title / Action Header */}
+                           <div className="border-b border-outline-variant/40 pb-4 flex justify-between items-start">
+                             <div>
+                               <div className="text-[10px] font-black uppercase text-primary tracking-widest">Selected Participant</div>
+                               <h2 className="text-lg font-black text-on-surface mt-0.5 leading-tight">
+                                 {currentActiveAttendee.teamName ? `Team: ${currentActiveAttendee.teamName}` : currentActiveAttendee.name}
+                               </h2>
+                               <div className="text-xs text-on-surface-variant font-medium mt-1">
+                                 ID: <strong className="text-primary font-bold">{currentActiveAttendee.id}</strong>
+                               </div>
                              </div>
+                             <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold capitalize ${
+                               currentActiveAttendee.regType === 'team' ? 'bg-tertiary-fixed text-on-tertiary-fixed' : 'bg-primary-fixed text-on-primary-fixed'
+                             }`}>
+                               {currentActiveAttendee.regType || 'individual'}
+                             </span>
                            </div>
-                           <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold capitalize ${
-                             currentActiveAttendee.regType === 'team' ? 'bg-tertiary-fixed text-on-tertiary-fixed' : 'bg-primary-fixed text-on-primary-fixed'
-                           }`}>
-                             {currentActiveAttendee.regType || 'individual'}
-                           </span>
-                         </div>
 
-                         {/* Participant Fields (Editable or Static) */}
-                         {isEditingAttendee ? (
-                           <div className="space-y-4 text-xs font-semibold text-on-surface-variant">
-                             <div className="grid grid-cols-2 gap-3">
-                               <div>
-                                 <label className="block text-[10px] font-bold text-primary uppercase mb-1">Leader / Name</label>
-                                 <input
-                                   type="text"
-                                   value={editAttName}
-                                   onChange={(e) => setEditAttName(e.target.value)}
-                                   className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
-                                 />
-                               </div>
-                               <div>
-                                 <label className="block text-[10px] font-bold text-primary uppercase mb-1">College</label>
-                                 <input
-                                   type="text"
-                                   value={editAttCollege}
-                                   onChange={(e) => setEditAttCollege(e.target.value)}
-                                   className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
-                                 />
-                               </div>
-                               <div>
-                                 <label className="block text-[10px] font-bold text-primary uppercase mb-1">Year</label>
-                                 <input
-                                   type="text"
-                                   value={editAttYear}
-                                   onChange={(e) => setEditAttYear(e.target.value)}
-                                   className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
-                                 />
-                               </div>
-                               <div>
-                                 <label className="block text-[10px] font-bold text-primary uppercase mb-1">Branch</label>
-                                 <input
-                                   type="text"
-                                   value={editAttBranch}
-                                   onChange={(e) => setEditAttBranch(e.target.value)}
-                                   className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
-                                 />
-                               </div>
-                               <div>
-                                 <label className="block text-[10px] font-bold text-primary uppercase mb-1">Phone</label>
-                                 <input
-                                   type="text"
-                                   value={editAttPhone}
-                                   onChange={(e) => setEditAttPhone(e.target.value)}
-                                   className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
-                                 />
-                               </div>
-                               <div>
-                                 <label className="block text-[10px] font-bold text-primary uppercase mb-1">Email</label>
-                                 <input
-                                   type="email"
-                                   value={editAttEmail}
-                                   onChange={(e) => setEditAttEmail(e.target.value)}
-                                   className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
-                                 />
-                               </div>
-                               {currentActiveAttendee.regType === 'team' && (
-                                 <div className="col-span-2">
-                                   <label className="block text-[10px] font-bold text-primary uppercase mb-1">Team Name</label>
+                           {/* Participant Fields (Editable or Static) */}
+                           {isEditingAttendee ? (
+                             <div className="space-y-4 text-xs font-semibold text-on-surface-variant">
+                               <div className="grid grid-cols-2 gap-3">
+                                 <div>
+                                   <label className="block text-[10px] font-bold text-primary uppercase mb-1">Leader / Name</label>
                                    <input
                                      type="text"
-                                     value={editAttTeamName}
-                                     onChange={(e) => setEditAttTeamName(e.target.value)}
+                                     value={editAttName}
+                                     onChange={(e) => setEditAttName(e.target.value)}
                                      className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
                                    />
                                  </div>
-                               )}
-                             </div>
+                                 <div>
+                                   <label className="block text-[10px] font-bold text-primary uppercase mb-1">College</label>
+                                   <input
+                                     type="text"
+                                     value={editAttCollege}
+                                     onChange={(e) => setEditAttCollege(e.target.value)}
+                                     className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                                   />
+                                 </div>
+                                 <div>
+                                   <label className="block text-[10px] font-bold text-primary uppercase mb-1">Year</label>
+                                   <input
+                                     type="text"
+                                     value={editAttYear}
+                                     onChange={(e) => setEditAttYear(e.target.value)}
+                                     className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                                   />
+                                 </div>
+                                 <div>
+                                   <label className="block text-[10px] font-bold text-primary uppercase mb-1">Branch</label>
+                                   <input
+                                     type="text"
+                                     value={editAttBranch}
+                                     onChange={(e) => setEditAttBranch(e.target.value)}
+                                     className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                                   />
+                                 </div>
+                                 <div>
+                                   <label className="block text-[10px] font-bold text-primary uppercase mb-1">Phone</label>
+                                   <input
+                                     type="text"
+                                     value={editAttPhone}
+                                     onChange={(e) => setEditAttPhone(e.target.value)}
+                                     className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                                   />
+                                 </div>
+                                 <div>
+                                   <label className="block text-[10px] font-bold text-primary uppercase mb-1">Email</label>
+                                   <input
+                                     type="email"
+                                     value={editAttEmail}
+                                     onChange={(e) => setEditAttEmail(e.target.value)}
+                                     className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                                   />
+                                 </div>
+                                 {currentActiveAttendee.regType === 'team' && (
+                                   <div className="col-span-2">
+                                     <label className="block text-[10px] font-bold text-primary uppercase mb-1">Team Name</label>
+                                     <input
+                                       type="text"
+                                       value={editAttTeamName}
+                                       onChange={(e) => setEditAttTeamName(e.target.value)}
+                                       className="w-full h-9 px-2 bg-surface border border-outline rounded-lg text-xs outline-none focus:border-primary text-on-surface"
+                                     />
+                                   </div>
+                                 )}
+                               </div>
 
-                             {/* Editable Team Members */}
-                             {currentActiveAttendee.regType === 'team' && editAttTeamMembers.length > 0 && (
-                               <div className="space-y-3 pt-2 border-t border-outline-variant/20">
-                                 <span className="text-[10px] font-bold text-primary uppercase block">Team Members Details</span>
-                                 <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
-                                   {editAttTeamMembers.map((m, idx) => (
-                                     <div key={idx} className="bg-surface-container-low border border-outline-variant/30 rounded-lg p-2.5 space-y-2">
-                                       <span className="text-[9px] text-on-surface-variant font-bold uppercase block">Member {idx + 1}</span>
-                                       <input
-                                         type="text"
-                                         value={m.name}
-                                         onChange={(e) => {
-                                           const newMembers = [...editAttTeamMembers];
-                                           newMembers[idx].name = e.target.value;
-                                           setEditAttTeamMembers(newMembers);
-                                         }}
-                                         placeholder="Name"
-                                         className="w-full h-8 px-2 bg-surface border border-outline-variant rounded-md text-xs outline-none focus:border-primary text-on-surface"
-                                       />
-                                       <div className="grid grid-cols-2 gap-2">
+                               {/* Editable Team Members */}
+                               {currentActiveAttendee.regType === 'team' && editAttTeamMembers.length > 0 && (
+                                 <div className="space-y-3 pt-2 border-t border-outline-variant/20">
+                                   <span className="text-[10px] font-bold text-primary uppercase block">Team Members Details</span>
+                                   <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
+                                     {editAttTeamMembers.map((m, idx) => (
+                                       <div key={idx} className="bg-surface-container-low border border-outline-variant/30 rounded-lg p-2.5 space-y-2">
+                                         <span className="text-[9px] text-on-surface-variant font-bold uppercase block">Member {idx + 1}</span>
                                          <input
                                            type="text"
-                                           value={m.phone}
+                                           value={m.name}
                                            onChange={(e) => {
                                              const newMembers = [...editAttTeamMembers];
-                                             newMembers[idx].phone = e.target.value;
+                                             newMembers[idx].name = e.target.value;
                                              setEditAttTeamMembers(newMembers);
                                            }}
-                                           placeholder="Phone"
+                                           placeholder="Name"
                                            className="w-full h-8 px-2 bg-surface border border-outline-variant rounded-md text-xs outline-none focus:border-primary text-on-surface"
                                          />
-                                         <input
-                                           type="email"
-                                           value={m.email}
-                                           onChange={(e) => {
-                                             const newMembers = [...editAttTeamMembers];
-                                             newMembers[idx].email = e.target.value;
-                                             setEditAttTeamMembers(newMembers);
-                                           }}
-                                           placeholder="Email"
-                                           className="w-full h-8 px-2 bg-surface border border-outline-variant rounded-md text-xs outline-none focus:border-primary text-on-surface"
-                                         />
+                                         <div className="grid grid-cols-2 gap-2">
+                                           <input
+                                             type="text"
+                                             value={m.phone}
+                                             onChange={(e) => {
+                                               const newMembers = [...editAttTeamMembers];
+                                               newMembers[idx].phone = e.target.value;
+                                               setEditAttTeamMembers(newMembers);
+                                             }}
+                                             placeholder="Phone"
+                                             className="w-full h-8 px-2 bg-surface border border-outline-variant rounded-md text-xs outline-none focus:border-primary text-on-surface"
+                                           />
+                                           <input
+                                             type="email"
+                                             value={m.email}
+                                             onChange={(e) => {
+                                               const newMembers = [...editAttTeamMembers];
+                                               newMembers[idx].email = e.target.value;
+                                               setEditAttTeamMembers(newMembers);
+                                             }}
+                                             placeholder="Email"
+                                             className="w-full h-8 px-2 bg-surface border border-outline-variant rounded-md text-xs outline-none focus:border-primary text-on-surface"
+                                           />
+                                         </div>
+                                       </div>
+                                     ))}
+                                   </div>
+                                 </div>
+                               )}
+
+                               <div className="flex gap-2 pt-2">
+                                 <button
+                                   onClick={handleSaveAttendeeEdits}
+                                   className="flex-1 h-10 bg-primary text-on-primary rounded-xl text-xs font-bold hover:bg-primary/95 transition-all cursor-pointer shadow-sm flex items-center justify-center gap-1"
+                                 >
+                                   <span className="material-symbols-outlined !text-sm">save</span>
+                                   <span>Save Participant</span>
+                                 </button>
+                                 <button
+                                   onClick={() => setIsEditingAttendee(false)}
+                                   className="flex-1 h-10 bg-surface border border-outline text-on-surface-variant hover:bg-surface-container-low rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                                 >
+                                   Cancel
+                                 </button>
+                               </div>
+                             </div>
+                           ) : (
+                             <>
+                               {/* Participant Fields Grid */}
+                               <div className="grid grid-cols-2 gap-4 text-xs font-semibold text-on-surface-variant">
+                                 <div>
+                                   <span className="text-[10px] font-bold text-primary uppercase block">Leader / Name</span>
+                                   <span className="text-on-surface block mt-0.5 truncate">{currentActiveAttendee.name}</span>
+                                 </div>
+                                 <div>
+                                   <span className="text-[10px] font-bold text-primary uppercase block">College</span>
+                                   <span className="text-on-surface block mt-0.5 truncate" title={currentActiveAttendee.college}>
+                                     {currentActiveAttendee.college || 'N/A'}
+                                   </span>
+                                 </div>
+                                 <div>
+                                   <span className="text-[10px] font-bold text-primary uppercase block">Academic Info</span>
+                                   <span className="text-on-surface block mt-0.5 truncate">
+                                     {currentActiveAttendee.year || 'N/A'} • {currentActiveAttendee.branch || 'N/A'}
+                                   </span>
+                                 </div>
+                                 <div>
+                                   <span className="text-[10px] font-bold text-primary uppercase block">Contact</span>
+                                   <span className="text-on-surface block mt-0.5 truncate">
+                                     {currentActiveAttendee.phone}
+                                   </span>
+                                 </div>
+                                 <div className="col-span-2">
+                                   <span className="text-[10px] font-bold text-primary uppercase block">Email Address</span>
+                                   <span className="text-on-surface block mt-0.5 truncate">{currentActiveAttendee.email}</span>
+                                 </div>
+                                 <div className="col-span-2 border-t border-outline-variant/20 pt-3">
+                                   <span className="text-[10px] font-bold text-primary uppercase block">Registered Event</span>
+                                   <span className="text-on-surface block mt-0.5 font-bold text-sm">
+                                     {currentActiveAttendee.registeredEventTitle}
+                                   </span>
+                                 </div>
+                               </div>
+
+                               {/* Quick Action Switches */}
+                               <div className="grid grid-cols-2 gap-4 border-t border-b border-outline-variant/35 py-4">
+                                 <label className="flex items-center gap-3 p-3 rounded-xl border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer select-none">
+                                   <input 
+                                     type="checkbox"
+                                     checked={currentActiveAttendee.paymentStatus === 'Paid'}
+                                     onChange={() => handleTogglePayment(currentActiveAttendee)}
+                                     className="w-5 h-5 text-primary border-outline rounded focus:ring-primary cursor-pointer"
+                                   />
+                                   <div className="flex flex-col">
+                                     <span className="text-xs font-bold text-on-surface">Paid</span>
+                                     <span className="text-[9px] text-on-surface-variant">Verify Payment</span>
+                                   </div>
+                                 </label>
+
+                                 <label className="flex items-center gap-3 p-3 rounded-xl border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer select-none">
+                                   <input 
+                                     type="checkbox"
+                                     checked={currentActiveAttendee.attendanceStatus === 'Present'}
+                                     onChange={() => handleToggleAttendance(currentActiveAttendee)}
+                                     className="w-5 h-5 text-primary border-outline rounded focus:ring-primary cursor-pointer"
+                                   />
+                                   <div className="flex flex-col">
+                                     <span className="text-xs font-bold text-on-surface">Checked In</span>
+                                     <span className="text-[9px] text-on-surface-variant">Mark Present</span>
+                                   </div>
+                                 </label>
+                               </div>
+
+                               {/* Team Members List (If applicable) */}
+                               {currentActiveAttendee.regType === 'team' && currentActiveAttendee.teamMembers && currentActiveAttendee.teamMembers.length > 0 && (
+                                 <div className="space-y-2 border-b border-outline-variant/35 pb-4">
+                                   <span className="text-[10px] font-bold text-primary uppercase block">Additional Team Members</span>
+                                   <div className="space-y-2 max-h-36 overflow-y-auto">
+                                     {currentActiveAttendee.teamMembers.map((m, idx) => (
+                                       <div key={idx} className="bg-surface-container-low border border-outline-variant/30 rounded-lg p-2.5 text-[11px] font-semibold text-on-surface">
+                                         <div className="flex justify-between">
+                                           <span>{m.name}</span>
+                                           <span className="text-[9px] text-on-surface-variant">Member {idx + 1}</span>
+                                         </div>
+                                         <div className="text-[10px] text-on-surface-variant font-medium mt-0.5">
+                                           {m.phone} • {m.email}
+                                         </div>
+                                       </div>
+                                     ))}
+                                   </div>
+                                 </div>
+                               )}
+
+                               {/* Remarks TextArea (Auto-save) */}
+                               <div className="space-y-1">
+                                 <span className="text-[10px] font-bold text-primary uppercase block">Remarks</span>
+                                 <textarea
+                                   placeholder="Add operational notes or remarks (auto-saves)..."
+                                   value={currentActiveAttendee.remarks || ''}
+                                   onChange={(e) => handleRemarksChange(currentActiveAttendee, e.target.value)}
+                                   className="w-full h-20 p-3 bg-surface-container-low border border-outline rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all resize-none"
+                                 />
+                               </div>
+
+                               {/* Control Panel Action Buttons */}
+                               <div className="flex items-center gap-3 pt-2">
+                                 <button
+                                   onClick={() => {
+                                     setEditAttName(currentActiveAttendee.name || '');
+                                     setEditAttCollege(currentActiveAttendee.college || '');
+                                     setEditAttYear(currentActiveAttendee.year || '');
+                                     setEditAttBranch(currentActiveAttendee.branch || '');
+                                     setEditAttPhone(currentActiveAttendee.phone || '');
+                                     setEditAttEmail(currentActiveAttendee.email || '');
+                                     setEditAttTeamName(currentActiveAttendee.teamName || '');
+                                     setEditAttTeamMembers(currentActiveAttendee.teamMembers || []);
+                                     setIsEditingAttendee(true);
+                                   }}
+                                   className="flex-1 h-11 bg-surface border border-outline text-on-surface hover:bg-surface-container-low rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                                 >
+                                   <span className="material-symbols-outlined !text-sm">edit</span>
+                                   <span>Edit Details</span>
+                                 </button>
+                                 <button
+                                   onClick={handleSaveAndNext}
+                                   className="flex-1 h-11 bg-primary text-on-primary hover:bg-primary/95 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+                                 >
+                                   <span>Next Entry</span>
+                                   <span className="material-symbols-outlined !text-sm">arrow_forward</span>
+                                 </button>
+                               </div>
+                             </>
+                           )}
+
+                           {/* Revoke Registration Button */}
+                           <button
+                             onClick={() => {
+                               if (confirm(`Are you sure you want to revoke/delete registration for ${currentActiveAttendee.name}?`)) {
+                                 onUpdateAttendees(attendees.filter(a => a.id !== currentActiveAttendee.id));
+                                 onUpdateEvents(events.map(ev => ev.id === currentActiveAttendee.registeredEventId ? { ...ev, registeredCount: Math.max(0, ev.registeredCount - 1) } : ev));
+                                 setToast({ message: 'Registration successfully revoked.', type: 'info' });
+                               }
+                             }}
+                             className="w-full py-2 bg-error/5 text-error hover:bg-error/10 border border-error/15 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer transition-all"
+                           >
+                             <Trash2 className="w-3.5 h-3.5" /> Revoke Registration Entry
+                           </button>
+
+                         </div>
+                       ) : (
+                         <div className="bg-surface rounded-2xl border border-outline-variant/60 p-12 text-center text-on-surface-variant font-semibold shadow-xs sticky top-6">
+                           <span className="material-symbols-outlined !text-4xl text-outline mb-3">account_box</span>
+                           <p className="text-xs font-bold">No active selection</p>
+                           <p className="text-[11px] text-on-surface-variant/75 mt-1 leading-relaxed">
+                             Select any participant from the roster list on the left to show the quick actions console.
+                           </p>
+                         </div>
+                       )}
+                     </div>
+
+                     {/* Mobile slide-up modal overlay */}
+                     <AnimatePresence>
+                       {selectedAttendeeForProfile && (
+                         <div className="fixed inset-0 z-50 flex items-end justify-center lg:hidden">
+                           {/* Backdrop */}
+                           <motion.div 
+                             initial={{ opacity: 0 }}
+                             animate={{ opacity: 1 }}
+                             exit={{ opacity: 0 }}
+                             onClick={() => setSelectedAttendeeForProfile(null)}
+                             className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+                           />
+                           
+                           {/* Content Box */}
+                           <motion.div 
+                             initial={{ y: '100%' }}
+                             animate={{ y: 0 }}
+                             exit={{ y: '100%' }}
+                             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                             className="relative bg-surface w-full max-h-[85vh] overflow-y-auto rounded-t-3xl border-t border-outline-variant/60 p-5 pb-8 space-y-5 shadow-2xl z-10 text-on-surface"
+                           >
+                             <div className="absolute top-4 right-4 z-20">
+                               <button 
+                                 onClick={() => setSelectedAttendeeForProfile(null)}
+                                 className="p-1.5 rounded-full bg-surface-container hover:bg-surface-container-high border border-outline-variant/35 text-on-surface-variant transition-colors cursor-pointer"
+                                 title="Close"
+                               >
+                                 <X className="w-4 h-4" />
+                               </button>
+                             </div>
+
+                             {/* Render Profile Content here */}
+                             {(() => {
+                               const modalAtt = filteredConsoleAttendees.find(a => a.id === selectedAttendeeForProfile.id) || selectedAttendeeForProfile;
+                               return (
+                                 <div className="space-y-4">
+                                   <div className="border-b border-outline-variant/40 pb-3 pr-8 flex justify-between items-start gap-2">
+                                     <div>
+                                       <span className="text-[9px] font-black uppercase text-primary tracking-widest">Selected Participant</span>
+                                       <h2 className="text-base font-black text-on-surface mt-0.5 leading-tight">
+                                         {modalAtt.teamName ? `Team: ${modalAtt.teamName}` : modalAtt.name}
+                                       </h2>
+                                       <div className="text-[10px] text-on-surface-variant font-medium mt-1">
+                                         ID: <strong className="text-primary font-bold">{modalAtt.id}</strong>
                                        </div>
                                      </div>
-                                   ))}
-                                 </div>
-                               </div>
-                             )}
+                                     <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold capitalize shrink-0 ${
+                                       modalAtt.regType === 'team' ? 'bg-tertiary-fixed text-on-tertiary-fixed' : 'bg-primary-fixed text-on-primary-fixed'
+                                     }`}>
+                                       {modalAtt.regType || 'individual'}
+                                     </span>
+                                   </div>
 
-                             <div className="flex gap-2 pt-2">
-                               <button
-                                 onClick={handleSaveAttendeeEdits}
-                                 className="flex-1 h-10 bg-primary text-on-primary rounded-xl text-xs font-bold hover:bg-primary/95 transition-all cursor-pointer shadow-sm flex items-center justify-center gap-1"
-                               >
-                                 <span className="material-symbols-outlined !text-sm">save</span>
-                                 <span>Save Participant</span>
-                               </button>
-                               <button
-                                 onClick={() => setIsEditingAttendee(false)}
-                                 className="flex-1 h-10 bg-surface border border-outline text-on-surface-variant hover:bg-surface-container-low rounded-xl text-xs font-semibold transition-all cursor-pointer"
-                               >
-                                 Cancel
-                               </button>
-                             </div>
-                           </div>
-                         ) : (
-                           <>
-                             {/* Participant Fields Grid */}
-                             <div className="grid grid-cols-2 gap-4 text-xs font-semibold text-on-surface-variant">
-                               <div>
-                                 <span className="text-[10px] font-bold text-primary uppercase block">Leader / Name</span>
-                                 <span className="text-on-surface block mt-0.5 truncate">{currentActiveAttendee.name}</span>
-                               </div>
-                               <div>
-                                 <span className="text-[10px] font-bold text-primary uppercase block">College</span>
-                                 <span className="text-on-surface block mt-0.5 truncate" title={currentActiveAttendee.college}>
-                                   {currentActiveAttendee.college || 'N/A'}
-                                 </span>
-                               </div>
-                               <div>
-                                 <span className="text-[10px] font-bold text-primary uppercase block">Academic Info</span>
-                                 <span className="text-on-surface block mt-0.5 truncate">
-                                   {currentActiveAttendee.year || 'N/A'} • {currentActiveAttendee.branch || 'N/A'}
-                                 </span>
-                               </div>
-                               <div>
-                                 <span className="text-[10px] font-bold text-primary uppercase block">Contact</span>
-                                 <span className="text-on-surface block mt-0.5 truncate">
-                                   {currentActiveAttendee.phone}
-                                 </span>
-                               </div>
-                               <div className="col-span-2">
-                                 <span className="text-[10px] font-bold text-primary uppercase block">Email Address</span>
-                                 <span className="text-on-surface block mt-0.5 truncate">{currentActiveAttendee.email}</span>
-                               </div>
-                               <div className="col-span-2 border-t border-outline-variant/20 pt-3">
-                                 <span className="text-[10px] font-bold text-primary uppercase block">Registered Event</span>
-                                 <span className="text-on-surface block mt-0.5 font-bold text-sm">
-                                   {currentActiveAttendee.registeredEventTitle}
-                                 </span>
-                               </div>
-                             </div>
-
-                             {/* Quick Action Switches */}
-                             <div className="grid grid-cols-2 gap-4 border-t border-b border-outline-variant/35 py-4">
-                               <label className="flex items-center gap-3 p-3 rounded-xl border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer select-none">
-                                 <input 
-                                   type="checkbox"
-                                   checked={currentActiveAttendee.paymentStatus === 'Paid'}
-                                   onChange={() => handleTogglePayment(currentActiveAttendee)}
-                                   className="w-5 h-5 text-primary border-outline rounded focus:ring-primary cursor-pointer"
-                                 />
-                                 <div className="flex flex-col">
-                                   <span className="text-xs font-bold text-on-surface">Paid</span>
-                                   <span className="text-[9px] text-on-surface-variant">Verify Payment</span>
-                                 </div>
-                               </label>
-
-                               <label className="flex items-center gap-3 p-3 rounded-xl border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer select-none">
-                                 <input 
-                                   type="checkbox"
-                                   checked={currentActiveAttendee.attendanceStatus === 'Present'}
-                                   onChange={() => handleToggleAttendance(currentActiveAttendee)}
-                                   className="w-5 h-5 text-primary border-outline rounded focus:ring-primary cursor-pointer"
-                                 />
-                                 <div className="flex flex-col">
-                                   <span className="text-xs font-bold text-on-surface">Checked In</span>
-                                   <span className="text-[9px] text-on-surface-variant">Mark Present</span>
-                                 </div>
-                               </label>
-                             </div>
-
-                             {/* Team Members List (If applicable) */}
-                             {currentActiveAttendee.regType === 'team' && currentActiveAttendee.teamMembers && currentActiveAttendee.teamMembers.length > 0 && (
-                               <div className="space-y-2 border-b border-outline-variant/35 pb-4">
-                                 <span className="text-[10px] font-bold text-primary uppercase block">Additional Team Members</span>
-                                 <div className="space-y-2 max-h-36 overflow-y-auto">
-                                   {currentActiveAttendee.teamMembers.map((m, idx) => (
-                                     <div key={idx} className="bg-surface-container-low border border-outline-variant/30 rounded-lg p-2.5 text-[11px] font-semibold text-on-surface">
-                                       <div className="flex justify-between">
-                                         <span>{m.name}</span>
-                                         <span className="text-[9px] text-on-surface-variant">Member {idx + 1}</span>
+                                   {/* Quick Action Switches */}
+                                   <div className="grid grid-cols-2 gap-3 border-b border-outline-variant/20 pb-3">
+                                     <label className="flex items-center gap-2.5 p-2.5 rounded-xl border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer select-none">
+                                       <input 
+                                         type="checkbox"
+                                         checked={modalAtt.paymentStatus === 'Paid'}
+                                         onChange={() => handleTogglePayment(modalAtt)}
+                                         className="w-4.5 h-4.5 text-primary border-outline rounded focus:ring-primary cursor-pointer"
+                                       />
+                                       <div className="flex flex-col">
+                                         <span className="text-xs font-bold text-on-surface">Paid</span>
+                                         <span className="text-[8px] text-on-surface-variant leading-none mt-0.5">Payment</span>
                                        </div>
-                                       <div className="text-[10px] text-on-surface-variant font-medium mt-0.5">
-                                         {m.phone} • {m.email}
+                                     </label>
+
+                                     <label className="flex items-center gap-2.5 p-2.5 rounded-xl border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer select-none">
+                                       <input 
+                                         type="checkbox"
+                                         checked={modalAtt.attendanceStatus === 'Present'}
+                                         onChange={() => handleToggleAttendance(modalAtt)}
+                                         className="w-4.5 h-4.5 text-primary border-outline rounded focus:ring-primary cursor-pointer"
+                                       />
+                                       <div className="flex flex-col">
+                                         <span className="text-xs font-bold text-on-surface">Checked In</span>
+                                         <span className="text-[8px] text-on-surface-variant leading-none mt-0.5">Attendance</span>
+                                       </div>
+                                     </label>
+                                   </div>
+
+                                   {/* Fields */}
+                                   <div className="grid grid-cols-2 gap-3 text-xs font-semibold text-on-surface-variant">
+                                     <div>
+                                       <span className="text-[9px] font-bold text-primary uppercase block">Leader / Name</span>
+                                       <span className="text-on-surface block mt-0.5 truncate">{modalAtt.name}</span>
+                                     </div>
+                                     <div>
+                                       <span className="text-[9px] font-bold text-primary uppercase block">College</span>
+                                       <span className="text-on-surface block mt-0.5 truncate" title={modalAtt.college}>
+                                         {modalAtt.college || 'N/A'}
+                                       </span>
+                                     </div>
+                                     <div>
+                                       <span className="text-[9px] font-bold text-primary uppercase block">Academic Info</span>
+                                       <span className="text-on-surface block mt-0.5 truncate">
+                                         {modalAtt.year || 'N/A'} • {modalAtt.branch || 'N/A'}
+                                       </span>
+                                     </div>
+                                     <div>
+                                       <span className="text-[9px] font-bold text-primary uppercase block">Contact</span>
+                                       <span className="text-on-surface block mt-0.5 truncate">
+                                         {modalAtt.phone}
+                                       </span>
+                                     </div>
+                                     <div className="col-span-2">
+                                       <span className="text-[9px] font-bold text-primary uppercase block">Email Address</span>
+                                       <span className="text-on-surface block mt-0.5 truncate">{modalAtt.email}</span>
+                                     </div>
+                                     <div className="col-span-2 border-t border-outline-variant/15 pt-2.5">
+                                       <span className="text-[9px] font-bold text-primary uppercase block">Registered Event</span>
+                                       <span className="text-on-surface block mt-0.5 font-bold text-xs">
+                                         {modalAtt.registeredEventTitle}
+                                       </span>
+                                     </div>
+                                   </div>
+
+                                   {/* Team Members List */}
+                                   {modalAtt.regType === 'team' && modalAtt.teamMembers && modalAtt.teamMembers.length > 0 && (
+                                     <div className="space-y-2 border-t border-outline-variant/15 pt-2.5">
+                                       <span className="text-[9px] font-bold text-primary uppercase block">Team Members ({modalAtt.teamMembers.length})</span>
+                                       <div className="space-y-1.5 max-h-28 overflow-y-auto">
+                                         {modalAtt.teamMembers.map((m, idx) => (
+                                           <div key={idx} className="bg-surface-container-low border border-outline-variant/30 rounded-lg p-2 text-[10px] font-semibold text-on-surface">
+                                             <div className="flex justify-between">
+                                               <span>{m.name}</span>
+                                               <span className="text-[8px] text-on-surface-variant">Member {idx + 1}</span>
+                                             </div>
+                                             <div className="text-[9px] text-on-surface-variant font-medium mt-0.5">
+                                               {m.phone} • {m.email}
+                                             </div>
+                                           </div>
+                                         ))}
                                        </div>
                                      </div>
-                                   ))}
+                                   )}
+
+                                   {/* Close / Next buttons */}
+                                   <div className="flex gap-2 pt-2 border-t border-outline-variant/15">
+                                     <button
+                                       onClick={() => setSelectedAttendeeForProfile(null)}
+                                       className="flex-grow h-11 bg-surface border border-outline text-on-surface hover:bg-surface-container rounded-xl text-xs font-bold transition-all cursor-pointer"
+                                     >
+                                       Done
+                                     </button>
+                                     <button
+                                       onClick={() => {
+                                         const currentIndex = filteredConsoleAttendees.findIndex(a => a.id === modalAtt.id);
+                                         const nextIndex = currentIndex + 1;
+                                         if (nextIndex < filteredConsoleAttendees.length) {
+                                           setSelectedAttendeeForProfile(filteredConsoleAttendees[nextIndex]);
+                                         } else {
+                                           setSelectedAttendeeForProfile(null);
+                                           setToast({ message: 'Reached the end of the roster.', type: 'info' });
+                                         }
+                                       }}
+                                       className="flex-grow h-11 bg-primary text-on-primary hover:bg-primary/95 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md flex items-center justify-center gap-1"
+                                     >
+                                       <span>Next</span>
+                                       <ChevronRight className="w-3.5 h-3.5" />
+                                     </button>
+                                   </div>
                                  </div>
-                               </div>
-                             )}
-
-                             {/* Remarks TextArea (Auto-save) */}
-                             <div className="space-y-1">
-                               <span className="text-[10px] font-bold text-primary uppercase block">Remarks</span>
-                               <textarea
-                                 placeholder="Add operational notes or remarks (auto-saves)..."
-                                 value={currentActiveAttendee.remarks || ''}
-                                 onChange={(e) => handleRemarksChange(currentActiveAttendee, e.target.value)}
-                                 className="w-full h-20 p-3 bg-surface-container-low border border-outline rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all resize-none"
-                               />
-                             </div>
-
-                             {/* Control Panel Action Buttons */}
-                             <div className="flex items-center gap-3 pt-2">
-                               <button
-                                 onClick={() => {
-                                   setEditAttName(currentActiveAttendee.name || '');
-                                   setEditAttCollege(currentActiveAttendee.college || '');
-                                   setEditAttYear(currentActiveAttendee.year || '');
-                                   setEditAttBranch(currentActiveAttendee.branch || '');
-                                   setEditAttPhone(currentActiveAttendee.phone || '');
-                                   setEditAttEmail(currentActiveAttendee.email || '');
-                                   setEditAttTeamName(currentActiveAttendee.teamName || '');
-                                   setEditAttTeamMembers(currentActiveAttendee.teamMembers || []);
-                                   setIsEditingAttendee(true);
-                                 }}
-                                 className="flex-1 h-11 bg-surface border border-outline text-on-surface hover:bg-surface-container-low rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-                               >
-                                 <span className="material-symbols-outlined !text-sm">edit</span>
-                                 <span>Edit Details</span>
-                               </button>
-                               <button
-                                 onClick={handleSaveAndNext}
-                                 className="flex-1 h-11 bg-primary text-on-primary hover:bg-primary/95 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
-                               >
-                                 <span>Next Entry</span>
-                                 <span className="material-symbols-outlined !text-sm">arrow_forward</span>
-                               </button>
-                             </div>
-                           </>
-                         )}
-
-                         {/* Revoke Registration Button */}
-                         <button
-                           onClick={() => {
-                             if (confirm(`Are you sure you want to revoke/delete registration for ${currentActiveAttendee.name}?`)) {
-                               onUpdateAttendees(attendees.filter(a => a.id !== currentActiveAttendee.id));
-                               onUpdateEvents(events.map(ev => ev.id === currentActiveAttendee.registeredEventId ? { ...ev, registeredCount: Math.max(0, ev.registeredCount - 1) } : ev));
-                               setToast({ message: 'Registration successfully revoked.', type: 'info' });
-                             }
-                           }}
-                           className="w-full py-2 bg-error/5 text-error hover:bg-error/10 border border-error/15 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer transition-all"
-                         >
-                           <Trash2 className="w-3.5 h-3.5" /> Revoke Registration Entry
-                         </button>
-
-                       </div>
-                     ) : (
-                       <div className="bg-surface rounded-2xl border border-outline-variant/60 p-12 text-center text-on-surface-variant font-semibold shadow-xs sticky top-6">
-                         <span className="material-symbols-outlined !text-4xl text-outline mb-3">account_box</span>
-                         <p className="text-xs font-bold">No active selection</p>
-                         <p className="text-[11px] text-on-surface-variant/75 mt-1 leading-relaxed">
-                           Select any participant from the roster list on the left to show the quick actions console.
-                         </p>
-                       </div>
-                     )}
-                   </div>
+                               );
+                             })()}
+                           </motion.div>
+                         </div>
+                       )}
+                     </AnimatePresence>
+                   </>
                  )}
 
               </div>

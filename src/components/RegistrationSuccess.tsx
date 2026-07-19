@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Attendee } from '../types';
-import { Clipboard, Check, Download, Home } from 'lucide-react';
+import { Clipboard, Check, Download, Home, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { downloadQrPass } from '../utils/qrPassGenerator';
 import QRCode from 'qrcode';
 
@@ -95,7 +95,7 @@ export default function RegistrationSuccess({
           {/* Success Banner */}
           <div className="mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-secondary-container text-primary mb-4 shadow-sm">
-              <span className="material-symbols-outlined !text-3xl">check_circle</span>
+              <CheckCircle2 className="w-8 h-8 text-primary" />
             </div>
             <h1 className="text-2xl font-bold text-primary mb-1">
               {isSpotSuccess ? 'Spot Registration Active' : 'Registration Successful'}
@@ -104,25 +104,25 @@ export default function RegistrationSuccess({
               Your entry record for Kuppam Engineering College "AItheronML Symposium" has been logged and secured.
             </p>
           </div>
-
+ 
           {/* Action Notice Callout Box */}
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 text-left">
-            <span className="material-symbols-outlined text-red-600 mt-0.5 shrink-0">warning</span>
+          <div className="mb-6 p-4 rounded-2xl flex items-start gap-3 text-left shadow-md border text-white" style={{ backgroundColor: '#8B0000', borderColor: '#8B0000' }}>
+            <AlertTriangle className="w-5 h-5 text-white shrink-0 mt-0.5" />
             <div>
-              <h4 className="text-xs font-black uppercase text-red-800 dark:text-red-300 tracking-wider">Pass Download Required</h4>
-              <p className="text-[11px] text-red-750 dark:text-red-200 font-semibold leading-relaxed mt-0.5">
+              <h4 className="text-xs font-black uppercase text-white tracking-wider">Pass Download Required</h4>
+              <p className="text-[11px] text-white font-semibold leading-relaxed mt-0.5 opacity-95">
                 Please download this entry pass immediately. You must present this QR Code pass at the symposium registration desk for verification and entry check-in on the event day.
               </p>
             </div>
           </div>
-
+ 
           {/* Clean registration details layout */}
           <div className="bg-surface-container-lowest rounded-2xl p-6 shadow-md border border-outline-variant space-y-6 text-left">
             
             {/* Download Error Indicator */}
             {downloadError && (
               <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-700 text-xs font-semibold rounded-lg flex items-center gap-2">
-                <span className="material-symbols-outlined text-red-600 !text-sm">warning</span>
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
                 <span>{downloadError}</span>
               </div>
             )}

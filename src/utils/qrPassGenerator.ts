@@ -15,11 +15,17 @@ export function formatQrContent(attendee: Attendee, secondAttendee?: Attendee): 
   const displayPrefix = isTeam ? 'team' : 'name';
   const displayName = isTeam ? (attendee.teamName || attendee.name) : attendee.name;
 
+  let teamMembersSuffix = '';
+  if (isTeam && attendee.teamMembers && attendee.teamMembers.length > 0) {
+    const memberNames = attendee.teamMembers.map(m => m.name).join(', ');
+    teamMembersSuffix = `, members: ${memberNames}`;
+  }
+
   if (secondAttendee) {
     const secondId = secondAttendee.participantId || secondAttendee.id;
-    return `${firstId} & ${secondId}, ${displayPrefix} : ${displayName},${attendee.registeredEventTitle} & ${secondAttendee.registeredEventTitle}`;
+    return `${firstId} & ${secondId}, ${displayPrefix} : ${displayName}${teamMembersSuffix},${attendee.registeredEventTitle} & ${secondAttendee.registeredEventTitle}`;
   } else {
-    return `${firstId}, ${displayPrefix} : ${displayName},${attendee.registeredEventTitle}`;
+    return `${firstId}, ${displayPrefix} : ${displayName}${teamMembersSuffix},${attendee.registeredEventTitle}`;
   }
 }
 
@@ -168,7 +174,14 @@ export async function downloadQrPass(attendee: Attendee, secondAttendee?: Attend
         ctx.fillStyle = '#64748b';
         ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(isTeam ? `LEADER: ${attendee.name}` : 'OFFICIAL PARTICIPANT', 60, 208);
+        ctx.fillText(isTeam ? `LEADER: ${attendee.name}` : 'OFFICIAL PARTICIPANT', 60, 204);
+
+        if (isTeam && attendee.teamMembers && attendee.teamMembers.length > 0) {
+          const names = attendee.teamMembers.map(m => m.name).join(', ');
+          ctx.fillStyle = '#475569';
+          ctx.font = '500 9px system-ui, -apple-system, sans-serif';
+          ctx.fillText(`MEMBERS: ${names}`, 60, 218);
+        }
 
         // --- 5. Event Info Cards ---
         if (secondAttendee) {
@@ -233,7 +246,7 @@ export async function downloadQrPass(attendee: Attendee, secondAttendee?: Attend
           ctx.strokeStyle = 'rgba(59, 130, 246, 0.2)';
           ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.roundRect(100, 735, 400, 75, 12);
+          ctx.roundRect(100, 735, 400, 85, 12);
           ctx.fill();
           ctx.stroke();
 
@@ -244,7 +257,12 @@ export async function downloadQrPass(attendee: Attendee, secondAttendee?: Attend
 
           ctx.fillStyle = '#60a5fa';
           ctx.font = 'bold 24px monospace';
-          ctx.fillText(`${firstId}  •  ${secondId}`, canvas.width / 2, 792);
+          ctx.fillText(`${firstId}  •  ${secondId}`, canvas.width / 2, 784);
+
+          const memberCount = isTeam ? 1 + (attendee.teamMembers || []).length : 1;
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
+          ctx.fillText(`TOTAL MEMBERS: ${memberCount}`, canvas.width / 2, 804);
 
         } else {
           // --- Single Event Layout ---
@@ -283,7 +301,7 @@ export async function downloadQrPass(attendee: Attendee, secondAttendee?: Attend
           ctx.strokeStyle = 'rgba(59, 130, 246, 0.2)';
           ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.roundRect(120, 665, 360, 75, 12);
+          ctx.roundRect(120, 665, 360, 85, 12);
           ctx.fill();
           ctx.stroke();
 
@@ -293,8 +311,13 @@ export async function downloadQrPass(attendee: Attendee, secondAttendee?: Attend
           ctx.fillText('PARTICIPANT IDENTIFICATION ID', canvas.width / 2, 685);
 
           ctx.fillStyle = '#60a5fa';
-          ctx.font = 'bold 30px monospace';
-          ctx.fillText(firstId, canvas.width / 2, 723);
+          ctx.font = 'bold 28px monospace';
+          ctx.fillText(firstId, canvas.width / 2, 712);
+
+          const memberCount = isTeam ? 1 + (attendee.teamMembers || []).length : 1;
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
+          ctx.fillText(`TOTAL MEMBERS: ${memberCount}`, canvas.width / 2, 735);
         }
 
         // --- 8. Ticket Footer Section ---
