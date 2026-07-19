@@ -57,6 +57,12 @@ service cloud.firestore {
       allow update, delete: if isSuperAdmin() || isHost();
     }
     
+    // COUNTERS COLLECTION
+    match /counters/{counterId} {
+      allow read: if true;
+      allow write: if isRegistrationOpen() || isSuperAdmin() || isHost();
+    }
+    
     // BATCHES COLLECTION
     match /batches/{batchId} {
       allow read: if true;
