@@ -56,9 +56,14 @@ export const ROUTE_TO_EVENT_ID: Record<string, string> = {
   '/posterpresentation': 'poster_presentation',
   '/vibecoding': 'vibe_coding',
   '/projectexpo': 'project_expo',
+  '/aiagent': 'ai_agent_challenge',
+  '/aivideo': 'ai_video_generation',
+  '/dsa': 'dsa_challenge',
+  '/techquiz': 'technical_quiz',
   '/photography': 'photography',
+  '/logo': 'logo_identification',
   '/treasurehunt': 'treasure_hunt',
-  '/freefire': 'free_fire',
+  '/freefire': 'freefire',
   '/dumbcharades': 'dumb_charades',
 };
 
@@ -651,6 +656,81 @@ function AppContent() {
             />
           ))} />
 
+          <Route path="/aiagent" element={requireHost('ai_agent_challenge', (
+            <HostDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          ))} />
+
+          <Route path="/aivideo" element={requireHost('ai_video_generation', (
+            <HostDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          ))} />
+
+          <Route path="/dsa" element={requireHost('dsa_challenge', (
+            <HostDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          ))} />
+
+          <Route path="/techquiz" element={requireHost('technical_quiz', (
+            <HostDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          ))} />
+
+          <Route path="/logo" element={requireHost('logo_identification', (
+            <HostDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          ))} />
+
           <Route path="/vibecoding" element={requireHost('vibe_coding', (
             <HostDashboard 
               user={session!}
@@ -711,7 +791,7 @@ function AppContent() {
             />
           ))} />
 
-          <Route path="/freefire" element={requireHost('free_fire', (
+          <Route path="/freefire" element={requireHost('freefire', (
             <HostDashboard 
               user={session!}
               events={events}
