@@ -106,7 +106,7 @@ export default function RegistrationSuccess({
           </div>
  
           {/* Action Notice Callout Box */}
-          <div className="mb-6 p-4 rounded-2xl flex items-start gap-3 text-left shadow-md border text-white" style={{ backgroundColor: '#8B0000', borderColor: '#8B0000' }}>
+          <div className="mb-6 p-4 rounded-2xl flex items-start gap-3 text-left shadow-md border text-white" style={{ backgroundColor: '#600000', borderColor: '#400000' }}>
             <AlertTriangle className="w-5 h-5 text-white shrink-0 mt-0.5" />
             <div>
               <h4 className="text-xs font-black uppercase text-white tracking-wider">Pass Download Required</h4>
@@ -154,7 +154,7 @@ export default function RegistrationSuccess({
 
               {attendee.teamName && attendee.teamMembers && attendee.teamMembers.length > 0 && (
                 <div>
-                  <span className="block text-[10px] uppercase font-bold text-on-surface-variant mb-0.5">Team Members</span>
+                  <span className="block text-[10px] uppercase font-bold text-on-surface-variant mb-0.5">Team Members (Total: {attendee.teamMembers.length + 1})</span>
                   <span className="text-sm font-semibold text-on-surface">
                     {attendee.teamMembers.map(m => m.name).join(', ')}
                   </span>

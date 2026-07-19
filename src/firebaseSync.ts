@@ -849,8 +849,107 @@ export function subscribeToRegistrationStatus(callback: (open: boolean) => void)
     }
   }, (err) => {
     console.warn("Failed to subscribe to registration status, defaulting to open", err);
-    callback(true);
   });
 }
 
+/**
+ * Executes an atomic transaction to check in a participant by an Event Host.
+ * Validates that the participant belongs to the host's event.
+ */
+export async function hostCheckInParticipantTransaction(participantId: string, hostEventId: string): Promise<{
+  success: boolean;
+  message: string;
+  name?: string;
+  id?: string;
+  timestamp?: string;
+}> {
+  const docRef = doc(db, 'participants', participantId);
+  try {
+    const result = await runTransaction(db, async (transaction) => {
+      const docSnap = await transaction.get(docRef);
+      if (!docSnap.exists()) {
+        throw new Error(`Participant with ID ${participantId} not found.`);
+      }
+      
+      const data = docSnap.data() as Attendee;
+      
+      // Verify Event Match
+      const participantEventId = data.registeredEventId || data.eventId;
+      if (participantEventId !== hostEventId) {
+        throw new Error("EVENT_MISMATCH");
+      }
 
+      if (data.checked_in) {
+        const existingTime = data.checked_in_at || data.checkedInAt || new Date().toISOString();
+        return {
+          success: false,
+          message: "Participant Already Checked In.",
+          name: data.name,
+          id: participantId,
+          timestamp: existingTime
+        };
+      }
+
+      const timestampValue = new Date().toISOString();
+      transaction.update(docRef, {
+        checked_in: true,
+        checked_in_at: serverTimestamp(),
+        checkedInAt: timestampValue,
+        attendanceStatus: 'Present'
+      });
+
+      return {
+        success: true,
+        message: "Participant checked in successfully!",
+        name: data.name,
+        id: participantId,
+        timestamp: timestampValue
+      };
+    });
+    return result;
+  } catch (err: any) {
+    if (err.message === "EVENT_MISMATCH") {
+      return {
+        success: false,
+        message: "This participant is not registered for this event."
+      };
+    }
+    console.error("Host Check-in transaction error:", err);
+    return {
+      success: false,
+      message: err.message || "Transaction failed. Please try again."
+    };
+  }
+}
+
+/**
+ * Executes an atomic transaction to manually update payment status.
+ */
+export async function updatePaymentStatusTransaction(participantId: string, status: 'Paid' | 'Pending' | 'Waived'): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  const docRef = doc(db, 'participants', participantId);
+  try {
+    await runTransaction(db, async (transaction) => {
+      const docSnap = await transaction.get(docRef);
+      if (!docSnap.exists()) {
+        throw new Error(`Participant with ID ${participantId} not found.`);
+      }
+      
+      transaction.update(docRef, {
+        paymentStatus: status
+      });
+    });
+    return {
+      success: true,
+      message: `Payment status updated to ${status}`
+    };
+  } catch (err: any) {
+    console.error("Payment status transaction error:", err);
+    return {
+      success: false,
+      message: err.message || "Failed to update payment status."
+    };
+  }
+}

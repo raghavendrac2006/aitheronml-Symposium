@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { SymposiumEvent, Attendee, ParticipantResult, MAP_EMAIL_TO_EVENT_ID, Batch } from '../types';
 import { INITIAL_EVENTS } from '../initialData';
 import ParticipantProfile from './ParticipantProfile';
+import HostRegistrationTab from './HostRegistrationTab';
 
 
 interface HostDashboardProps {
@@ -37,7 +38,7 @@ export default function HostDashboard({
   onLogout
 }: HostDashboardProps) {
   // Navigation active tab (kept for state compatibility, not used for rendering tabs)
-  const [activeTab, setActiveTab] = useState<'overview' | 'participants' | 'batches' | 'attendance' | 'judging' | 'results'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'participants' | 'batches' | 'attendance' | 'judging' | 'results' | 'registration'>('overview');
   
   // Selected Profile State (for detail modal)
   const [selectedAttendeeForProfile, setSelectedAttendeeForProfile] = useState<Attendee | null>(null);
@@ -879,6 +880,18 @@ export default function HostDashboard({
 
 
 
+          {/* Registration Tab Toggle */}
+          <button
+            onClick={() => setActiveTab(activeTab === 'registration' ? 'overview' : 'registration')}
+            className={`h-10 px-4 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer ${
+              activeTab === 'registration' 
+                ? 'bg-primary text-on-primary' 
+                : 'bg-surface-container border border-outline-variant hover:bg-surface-container-high text-on-surface-variant'
+            }`}
+          >
+            <UserCheck className="w-4 h-4" /> Registration Module
+          </button>
+
           {/* Help Center */}
           <button
             onClick={() => setIsHelpModalOpen(true)}
@@ -898,6 +911,14 @@ export default function HostDashboard({
       </header>
 
       {/* Main Workspace Layout */}
+      {activeTab === 'registration' ? (
+        <div className="flex-1 overflow-y-auto bg-surface relative z-10">
+          <HostRegistrationTab 
+            hostAssignedEventId={myAssignedEvent?.id || ''} 
+            attendees={attendees} 
+          />
+        </div>
+      ) : (
       <div className="flex-1 flex flex-col min-h-0 lg:h-[calc(100vh-80px)]">
           {/* Mobile Navigation Segment Tabs */}
           <div className="lg:hidden flex items-center justify-between bg-surface border-b border-outline-variant/60 p-2 gap-1 sticky top-0 z-30 shrink-0 bg-white">
@@ -1827,6 +1848,7 @@ export default function HostDashboard({
 
       </main>
       </div>
+      )}
 
       {/* Confirmation Publish Modal */}
       {isPublishConfirmOpen && (
