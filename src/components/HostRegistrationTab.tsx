@@ -72,11 +72,15 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
     }
   }, [scannedInput, attendees]);
 
-  function parseParticipantId(text: string): string {
-    if (!text) return '';
+  function parseParticipantQR(text: string): { id: string, token: string | null } {
+    if (!text) return { id: '', token: null };
     const cleanText = text.trim();
-    const match = cleanText.match(/(?:SYM|CSM)-\d{6}(?:-SPOT)?/i);
-    return match ? match[0].toUpperCase() : cleanText.toUpperCase();
+    const idMatch = cleanText.match(/CSM-\d{6}(?:-SPOT)?/i);
+    const tokenMatch = cleanText.match(/\[T:([a-zA-Z0-9-]+)\]/i);
+    return {
+      id: idMatch ? idMatch[0].toUpperCase() : cleanText.toUpperCase(),
+      token: tokenMatch ? tokenMatch[1] : null
+    };
   }
 
   // Camera scanning initialization
@@ -151,7 +155,8 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
   const [verificationMode, setVerificationMode] = useState<boolean>(false);
 
   const handleScanTrigger = async (text: string) => {
-    const participantId = parseParticipantId(text);
+    const parsedQR = parseParticipantQR(text);
+    const participantId = parsedQR.id;
     if (!participantId) {
       setStatus('error');
       setStatusDetails({
@@ -188,7 +193,7 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
       setStatus('success');
       setStatusDetails({
         message: "Participant Verified for Event",
-        attendee: match
+        attendee: { ...match, scannedToken: parsedQR.token }
       });
       setVerificationMode(true); // Wait for proceed
     } catch (err: any) {
@@ -209,7 +214,12 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
     const participantId = statusDetails.attendee.participantId || statusDetails.attendee.id;
     
     try {
-      const res = await hostCheckInParticipantTransaction(participantId, hostAssignedEventId);
+      const res = await hostCheckInParticipantTransaction(
+        participantId, 
+        hostAssignedEventId, 
+        statusDetails.attendee.scannedToken || null,
+        scanMethod === 'manual'
+      );
       
       if (res.success) {
         setVerificationMode(false); // Finished verification, now show true success briefly
@@ -351,7 +361,7 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
                               handleScanTrigger(scannedInput.trim());
                             }
                           }}
-                          placeholder="e.g. SYM-123456"
+                          placeholder="e.g. CSM-000001"
                           className="w-full bg-surface-container border-2 border-outline focus:border-primary focus:ring-0 rounded-xl py-4 pl-12 pr-4 text-lg font-black tracking-widest text-on-surface"
                         />
                       </div>

@@ -76,11 +76,15 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
   }, [scannedInput, attendees]);
 
   // Helper to extract Participant ID from scanned QR data
-  function parseParticipantId(text: string): string {
-    if (!text) return '';
+  function parseParticipantQR(text: string): { id: string, token: string | null } {
+    if (!text) return { id: '', token: null };
     const cleanText = text.trim();
-    const match = cleanText.match(/(?:SYM|CSM)-\d{6}(?:-SPOT)?/i);
-    return match ? match[0].toUpperCase() : cleanText.toUpperCase();
+    const idMatch = cleanText.match(/CSM-\d{6}(?:-SPOT)?/i);
+    const tokenMatch = cleanText.match(/\[T:([a-zA-Z0-9-]+)\]/i);
+    return {
+      id: idMatch ? idMatch[0].toUpperCase() : cleanText.toUpperCase(),
+      token: tokenMatch ? tokenMatch[1] : null
+    };
   }
 
   // Camera scanning initialization
@@ -165,7 +169,8 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
   };
 
   const handleScanTrigger = async (text: string) => {
-    const participantId = parseParticipantId(text);
+    const parsedQR = parseParticipantQR(text);
+    const participantId = parsedQR.id;
     if (!participantId) {
       setStatus('error');
       setStatusDetails({
@@ -178,7 +183,11 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
 
     try {
       if (mode === 'checkin') {
-        const res = await checkInParticipantTransaction(participantId);
+        const res = await checkInParticipantTransaction(
+          participantId,
+          parsedQR.token,
+          scanMethod === 'manual'
+        );
         
         // Find matching local payment status as fallback
         const localMatch = attendees.find(a => a.participantId === participantId || a.id === participantId);
@@ -204,9 +213,13 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
             paymentStatus: initialPaymentStatus
           });
         }
-      } else {
+      } else if (mode === 'food') {
         // Canteen Food redemption mode
-        const res = await redeemFoodTransaction(participantId);
+        const res = await redeemFoodTransaction(
+          participantId,
+          parsedQR.token,
+          scanMethod === 'manual'
+        );
         const localMatch = attendees.find(a => a.participantId === participantId || a.id === participantId);
         
         if (res.success) {

@@ -21,11 +21,13 @@ export function formatQrContent(attendee: Attendee, secondAttendee?: Attendee): 
     teamMembersSuffix = `, members: ${memberNames}`;
   }
 
+  const firstToken = attendee.secureToken || '';
   if (secondAttendee) {
     const secondId = secondAttendee.participantId || secondAttendee.id;
-    return `${firstId} & ${secondId}, ${displayPrefix} : ${displayName}${teamMembersSuffix},${attendee.registeredEventTitle} & ${secondAttendee.registeredEventTitle}`;
+    const secondToken = secondAttendee.secureToken || '';
+    return `${firstId} [T:${firstToken}] & ${secondId} [T:${secondToken}], ${displayPrefix} : ${displayName}${teamMembersSuffix},${attendee.registeredEventTitle} & ${secondAttendee.registeredEventTitle}`;
   } else {
-    return `${firstId}, ${displayPrefix} : ${displayName}${teamMembersSuffix},${attendee.registeredEventTitle}`;
+    return `${firstId} [T:${firstToken}], ${displayPrefix} : ${displayName}${teamMembersSuffix},${attendee.registeredEventTitle}`;
   }
 }
 

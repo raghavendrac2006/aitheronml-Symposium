@@ -26,58 +26,65 @@ service cloud.firestore {
       );
     }
 
+    function isRegistrationOpen() {
+      return exists(/databases/$(database)/documents/events/registration_settings) == false ||
+             get(/databases/$(database)/documents/events/registration_settings).data.registrationOpen == true;
+    }
+
     // USERS COLLECTION
     match /users/{email} {
-      allow read, write: if true; // Profiles need to be readable for session lookup and writable for auto-setup
+      allow read: if true;
+      allow write: if isSuperAdmin() || (isSignedIn() && request.auth.token.email == email);
     }
     
     // PARTICIPANTS COLLECTION
     match /participants/{participantId} {
-      // Super admin / Host can read all. Participants can read their own registration.
-      allow read: if true; // Let everyone view profiles to lookup QR details
-      allow write: if true; // Let anyone submit public registration, update attendance, and check-in
+      allow read: if true;
+      allow create: if isRegistrationOpen() || isSuperAdmin() || isHost();
+      allow update, delete: if isSuperAdmin() || isHost();
     }
     
     // EVENTS COLLECTION
     match /events/{eventId} {
-      allow read: if true; // Publicly readable so students can view tracks
-      allow write: if true; // Allow hosts, registration team, and admins to create/edit events
+      allow read: if true;
+      allow write: if isSuperAdmin() || isHost();
     }
     
     // TEAMS COLLECTION
     match /teams/{teamId} {
       allow read: if true;
-      allow write: if true; // Allow anyone to register as a team
+      allow create: if isRegistrationOpen() || isSuperAdmin() || isHost();
+      allow update, delete: if isSuperAdmin() || isHost();
     }
     
     // BATCHES COLLECTION
     match /batches/{batchId} {
       allow read: if true;
-      allow write: if true; // Allow hosts and admins to manage batches
+      allow write: if isSuperAdmin() || isHost();
     }
     
     // HOSTS COLLECTION
     match /hosts/{hostId} {
       allow read: if true;
-      allow write: if isSuperAdmin(); // Managed by Super Admin
+      allow write: if isSuperAdmin();
     }
     
     // JUDGES COLLECTION
     match /judges/{judgeId} {
       allow read: if true;
-      allow write: if isSuperAdmin(); // Managed by Super Admin
+      allow write: if isSuperAdmin();
     }
     
     // RESULTS COLLECTION
     match /results/{resultId} {
-      allow read: if true; // Publicly viewable once published
-      allow write: if true; // Allow super admins & hosts to submit results
+      allow read: if true;
+      allow write: if isSuperAdmin() || isHost();
     }
 
     // SETTINGS COLLECTION
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if isSuperAdmin();
     }
   }
 }

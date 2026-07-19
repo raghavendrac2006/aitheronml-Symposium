@@ -6,7 +6,8 @@ import {
   setDoc, 
   deleteDoc,
   runTransaction,
-  serverTimestamp
+  serverTimestamp,
+  increment
 } from 'firebase/firestore';
 import { SymposiumEvent, Attendee, Team, Host, Judge, Result, Batch } from './types';
 import { 
@@ -101,7 +102,7 @@ export async function triggerPendingSync() {
   for (const op of ops) {
     try {
       if (op.type === 'save') {
-        await setDoc(doc(db, op.collection, op.id), sanitizeForFirestore(op.data));
+        await setDoc(doc(db, op.collection, op.id), sanitizeForFirestore(op.data), { merge: true });
       } else if (op.type === 'delete') {
         await deleteDoc(doc(db, op.collection, op.id));
       }
@@ -223,11 +224,13 @@ export async function saveEventToFirestore(event: SymposiumEvent) {
 
   // Write to Firestore and handle connection failure
   try {
-    await setDoc(doc(db, EVENTS_COL, event.id), sanitizeForFirestore(event));
+    const { registeredCount, checkedInCount, ...eventWithoutCounters } = event;
+    await setDoc(doc(db, EVENTS_COL, event.id), sanitizeForFirestore(eventWithoutCounters), { merge: true });
     syncStatus.lastSyncTime = new Date().toLocaleTimeString();
   } catch (e) {
     console.warn(`Firestore save failed for event ${event.id}, queuing offline operation`, e);
-    queueSyncOperation('save', EVENTS_COL, event.id, event);
+    const { registeredCount, checkedInCount, ...eventWithoutCounters } = event;
+    queueSyncOperation('save', EVENTS_COL, event.id, eventWithoutCounters);
   }
 }
 
@@ -339,6 +342,21 @@ export async function saveParticipantsWithAtomicIds(
           for (const att of createdAttendees) {
             const participantRef = doc(db, PARTICIPANTS_COL, att.id);
             transaction.set(participantRef, sanitizeForFirestore(att));
+          }
+
+          // 3. Increment registeredCount for the respective events
+          const eventCounts: Record<string, number> = {};
+          for (const att of createdAttendees) {
+            const eId = att.registeredEventId || att.eventId;
+            if (eId) {
+              eventCounts[eId] = (eventCounts[eId] || 0) + 1;
+            }
+          }
+          for (const eId of Object.keys(eventCounts)) {
+            const eventRef = doc(db, EVENTS_COL, eId);
+            transaction.update(eventRef, {
+              registeredCount: increment(eventCounts[eId])
+            });
           }
         });
         
@@ -703,7 +721,11 @@ export async function clearAllRegistrationsAndReset() {
  * Executes an atomic transaction to check in a participant (Activate Pass).
  * If already checked in, aborts the transaction and returns details.
  */
-export async function checkInParticipantTransaction(participantId: string): Promise<{
+export async function checkInParticipantTransaction(
+  participantId: string,
+  providedToken: string | null = null,
+  isManual: boolean = false
+): Promise<{
   success: boolean;
   message: string;
   name?: string;
@@ -719,6 +741,14 @@ export async function checkInParticipantTransaction(participantId: string): Prom
       }
       
       const data = docSnap.data() as Attendee;
+
+      // Verify Secure Token for QR Scans
+      if (!isManual) {
+        if (!providedToken || providedToken !== data.secureToken) {
+          throw new Error("INVALID_TOKEN");
+        }
+      }
+
       if (data.checked_in) {
         // Abort check-in since they are already checked in
         const existingTime = data.checked_in_at || data.checkedInAt || new Date().toISOString();
@@ -750,6 +780,12 @@ export async function checkInParticipantTransaction(participantId: string): Prom
     });
     return result;
   } catch (err: any) {
+    if (err.message === "INVALID_TOKEN") {
+      return {
+        success: false,
+        message: "Security Token mismatch. This QR code is invalid or tampered."
+      };
+    }
     console.error("Check-in transaction error:", err);
     return {
       success: false,
@@ -762,7 +798,11 @@ export async function checkInParticipantTransaction(participantId: string): Prom
  * Executes an atomic transaction to redeem food for a participant.
  * Aborts if not checked in or already redeemed.
  */
-export async function redeemFoodTransaction(participantId: string): Promise<{
+export async function redeemFoodTransaction(
+  participantId: string,
+  providedToken: string | null = null,
+  isManual: boolean = false
+): Promise<{
   success: boolean;
   message: string;
   name?: string;
@@ -779,6 +819,13 @@ export async function redeemFoodTransaction(participantId: string): Promise<{
 
       const data = docSnap.data() as Attendee;
       
+      // Verify Secure Token for QR Scans
+      if (!isManual) {
+        if (!providedToken || providedToken !== data.secureToken) {
+          throw new Error("INVALID_TOKEN");
+        }
+      }
+
       // 1. Must be checked in first
       if (!data.checked_in && data.attendanceStatus !== 'Present') {
         return {
@@ -819,6 +866,12 @@ export async function redeemFoodTransaction(participantId: string): Promise<{
     });
     return result;
   } catch (err: any) {
+    if (err.message === "INVALID_TOKEN") {
+      return {
+        success: false,
+        message: "Security Token mismatch. This QR code is invalid or tampered."
+      };
+    }
     console.error("Food redemption transaction error:", err);
     return {
       success: false,
@@ -856,7 +909,12 @@ export function subscribeToRegistrationStatus(callback: (open: boolean) => void)
  * Executes an atomic transaction to check in a participant by an Event Host.
  * Validates that the participant belongs to the host's event.
  */
-export async function hostCheckInParticipantTransaction(participantId: string, hostEventId: string): Promise<{
+export async function hostCheckInParticipantTransaction(
+  participantId: string, 
+  hostEventId: string,
+  providedToken: string | null = null,
+  isManual: boolean = false
+): Promise<{
   success: boolean;
   message: string;
   name?: string;
@@ -879,6 +937,13 @@ export async function hostCheckInParticipantTransaction(participantId: string, h
         throw new Error("EVENT_MISMATCH");
       }
 
+      // Verify Secure Token for QR Scans
+      if (!isManual) {
+        if (!providedToken || providedToken !== data.secureToken) {
+          throw new Error("INVALID_TOKEN");
+        }
+      }
+
       if (data.checked_in) {
         const existingTime = data.checked_in_at || data.checkedInAt || new Date().toISOString();
         return {
@@ -898,6 +963,14 @@ export async function hostCheckInParticipantTransaction(participantId: string, h
         attendanceStatus: 'Present'
       });
 
+      // Increment checkedInCount for the event
+      if (participantEventId) {
+        const eventRef = doc(db, EVENTS_COL, participantEventId);
+        transaction.update(eventRef, {
+          checkedInCount: increment(1)
+        });
+      }
+
       return {
         success: true,
         message: "Participant checked in successfully!",
@@ -912,6 +985,12 @@ export async function hostCheckInParticipantTransaction(participantId: string, h
       return {
         success: false,
         message: "This participant is not registered for this event."
+      };
+    }
+    if (err.message === "INVALID_TOKEN") {
+      return {
+        success: false,
+        message: "Security Token mismatch. This QR code is invalid or tampered."
       };
     }
     console.error("Host Check-in transaction error:", err);

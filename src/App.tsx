@@ -516,11 +516,8 @@ function AppContent() {
                   const allNew = [newAtt, ...(extra || [])];
                   updateAttendeesState([...attendees, ...allNew]);
                   
-                  let updatedEvents = [...events];
-                  allNew.forEach(att => {
-                    updatedEvents = updatedEvents.map(ev => ev.id === att.registeredEventId ? { ...ev, registeredCount: ev.registeredCount + 1 } : ev);
-                  });
-                  updateEventsState(updatedEvents);
+                  // Events are automatically updated via Firestore listeners.
+                  // We do not manually mutate registeredCount to avoid overwriting backend increments.
 
                   setPublicRegSuccessAttendee(newAtt);
                   if (extra && extra.length > 0) {
