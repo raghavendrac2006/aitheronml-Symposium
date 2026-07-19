@@ -17,7 +17,9 @@ import {
   signInWithEmailAndPassword, 
   signOut, 
   onAuthStateChanged,
-  createUserWithEmailAndPassword
+  createUserWithEmailAndPassword,
+  setPersistence,
+  inMemoryPersistence
 } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -35,6 +37,7 @@ export const db = initializeFirestore(app, {
   experimentalAutoDetectLongPolling: true
 });
 export const auth = getAuth(app);
+setPersistence(auth, inMemoryPersistence).catch(console.error);
 
 // Helper functions for common collection operations
 export { 

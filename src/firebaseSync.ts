@@ -7,7 +7,8 @@ import {
   deleteDoc,
   runTransaction,
   serverTimestamp,
-  increment
+  increment,
+  onSnapshot
 } from 'firebase/firestore';
 import { SymposiumEvent, Attendee, Team, Host, Judge, Result, Batch } from './types';
 import { 
@@ -897,7 +898,6 @@ export async function saveRegistrationStatus(open: boolean): Promise<void> {
 /**
  * Subscribes to the global registration status from Firestore
  */
-import { onSnapshot } from 'firebase/firestore';
 export function subscribeToRegistrationStatus(callback: (open: boolean) => void): () => void {
   const docRef = doc(db, 'events', 'registration_settings');
   return onSnapshot(docRef, (docSnap) => {
