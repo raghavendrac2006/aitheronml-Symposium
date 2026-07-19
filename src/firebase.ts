@@ -21,20 +21,19 @@ import {
 } from 'firebase/auth';
 
 const firebaseConfig = {
-  projectId: "regal-symbol-zln7n",
-  appId: "1:146657456007:web:8a5154ad6f4b202fba6d22",
-  apiKey: "AIzaSyBr0ekxxfn9246t11w_ZNMx75adXgceEvo",
-  authDomain: "regal-symbol-zln7n.firebaseapp.com",
-  firestoreDatabaseId: "ai-studio-aitheronmlsympos-02d73f86-c145-4802-9be1-143df0e7fcbd",
-  storageBucket: "regal-symbol-zln7n.firebasestorage.app",
-  messagingSenderId: "146657456007"
+  apiKey: "AIzaSyCgNmG5ow8j1QCXrPbrVH9bWpQ2Y29NBCU",
+  authDomain: "aitheronml-symposium.firebaseapp.com",
+  projectId: "aitheronml-symposium",
+  storageBucket: "aitheronml-symposium.firebasestorage.app",
+  messagingSenderId: "1062987952781",
+  appId: "1:1062987952781:web:a0d4adc7fe11d6c90ee8c4"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const db = initializeFirestore(app, {
   experimentalAutoDetectLongPolling: true
-}, firebaseConfig.firestoreDatabaseId);
+});
 export const auth = getAuth(app);
 
 // Helper functions for common collection operations
