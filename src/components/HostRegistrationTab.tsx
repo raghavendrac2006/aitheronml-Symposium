@@ -58,7 +58,7 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
 
   // Search local state for visual confirmation in manual mode
   useEffect(() => {
-    const parsedId = parseParticipantId(scannedInput);
+    const parsedId = parseParticipantQR(scannedInput).id;
     if (!parsedId) {
       setMatchedAttendee(null);
       return;

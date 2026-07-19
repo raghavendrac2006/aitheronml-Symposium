@@ -61,7 +61,7 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
 
   // Search local state for visual confirmation in manual mode
   useEffect(() => {
-    const parsedId = parseParticipantId(scannedInput);
+    const parsedId = parseParticipantQR(scannedInput).id;
     if (!parsedId) {
       setMatchedAttendee(null);
       return;
@@ -561,7 +561,7 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
           ) : (
             scannedInput.trim() && (
               <div className="text-[10px] text-on-surface-variant italic px-1">
-                Looking up participant record for "{parseParticipantId(scannedInput)}"...
+                Looking up participant record for "{parseParticipantQR(scannedInput).id}"...
               </div>
             )
           )}
