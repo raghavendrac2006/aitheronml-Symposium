@@ -162,11 +162,11 @@ export async function fetchEventsFromFirestore(): Promise<SymposiumEvent[]> {
       }
     });
     
-    if (list.length > 0) {
+    if (list.length >= 0) {
       localStorage.setItem('ai_symposium_events', JSON.stringify(list));
       syncStatus.lastSyncTime = new Date().toLocaleTimeString();
     }
-    return list.length > 0 ? list : getCachedEvents();
+    return list;
   } catch (e) {
     console.warn('Failed to load events from Firestore, using offline cache', e);
     return getCachedEvents();
@@ -190,11 +190,11 @@ export async function fetchAttendeesFromFirestore(): Promise<Attendee[]> {
       list.push(docSnap.data() as Attendee);
     });
     
-    if (list.length > 0) {
+    if (list.length >= 0) {
       localStorage.setItem('ai_symposium_attendees', JSON.stringify(list));
       syncStatus.lastSyncTime = new Date().toLocaleTimeString();
     }
-    return list.length > 0 ? list : getCachedAttendees();
+    return list;
   } catch (e) {
     console.warn('Failed to load participants from Firestore, using offline cache', e);
     return getCachedAttendees();
