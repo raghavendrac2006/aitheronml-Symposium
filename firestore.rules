@@ -47,7 +47,8 @@ service cloud.firestore {
     // EVENTS COLLECTION
     match /events/{eventId} {
       allow read: if true;
-      allow write: if isSuperAdmin() || isHost();
+      allow create, delete: if isSuperAdmin() || isHost();
+      allow update: if isSuperAdmin() || isHost() || (isRegistrationOpen() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['registeredCount']));
     }
     
     // TEAMS COLLECTION
