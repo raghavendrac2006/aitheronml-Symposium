@@ -70,37 +70,8 @@ export default function HostDashboard({
   const myEventIds = myEvents.map(e => e.id);
   const myAttendees = attendees.filter(a => myEventIds.includes(a.registeredEventId) || myEventIds.includes(a.eventId));
 
-  // Configurable Evaluation Criteria (Stored in component state, with localstorage sync fallback)
-  const [evaluationCriteria, setEvaluationCriteria] = useState<Array<{ id: string; name: string; maxScore: number }>>(() => {
-    const saved = localStorage.getItem(`criteria_${myAssignedEvent?.id || 'default'}`);
-    return saved ? JSON.parse(saved) : [
-      { id: 'innovation', name: 'Innovation', maxScore: 20 },
-      { id: 'presentation', name: 'Presentation', maxScore: 20 },
-      { id: 'techKnowledge', name: 'Technical Knowledge', maxScore: 20 },
-      { id: 'implementation', name: 'Implementation', maxScore: 20 },
-      { id: 'qa', name: 'Questions & Answers', maxScore: 20 }
-    ];
-  });
-
-  // Save criteria changes to localStorage
-  useEffect(() => {
-    if (myAssignedEvent) {
-      localStorage.setItem(`criteria_${myAssignedEvent.id}`, JSON.stringify(evaluationCriteria));
-    }
-  }, [evaluationCriteria, myAssignedEvent]);
-
-  // Selected Participant for Evaluation
+  // Selected Participant for Detailed View
   const [selectedAttendeeForJudging, setSelectedAttendeeForJudging] = useState<Attendee | null>(null);
-  
-  // Score Form state for criteria
-  const [criteriaScores, setCriteriaScores] = useState<Record<string, string>>({});
-  const [judgingRemarks, setJudgingRemarks] = useState('');
-  const [criterionError, setCriterionError] = useState<string | null>(null);
-
-  // New Criterion Creator state
-  const [newCriterionName, setNewCriterionName] = useState('');
-  const [newCriterionMax, setNewCriterionMax] = useState('20');
-  const [showCriteriaConfig, setShowCriteriaConfig] = useState(false);
 
   // Batch states
   const [selectedBatchId, setSelectedBatchId] = useState<string>('');
@@ -165,36 +136,8 @@ export default function HostDashboard({
   });
 
   const latestSelectedAttendee = selectedAttendeeForJudging ? attendees.find(a => a.id === selectedAttendeeForJudging.id) || null : null;
-  const currentActiveJudgingAttendee = latestSelectedAttendee || sortedConsoleQueue.find(a => a.judgingStatus !== 'Completed') || sortedConsoleQueue[0] || null;
+  const currentActiveJudgingAttendee = latestSelectedAttendee || sortedConsoleQueue[0] || null;
   const currentActiveJudgingAttendeeId = currentActiveJudgingAttendee?.id;
-
-  // Sync criteriaScores when current active attendee changes
-  useEffect(() => {
-    if (currentActiveJudgingAttendee) {
-      setJudgingRemarks(currentActiveJudgingAttendee.remarks || '');
-      
-      const loadedScores: Record<string, string> = {};
-      const attendeeScores = (currentActiveJudgingAttendee as any).criteriaScores || {};
-      
-      evaluationCriteria.forEach(crit => {
-        if (attendeeScores[crit.id] !== undefined) {
-          loadedScores[crit.id] = String(attendeeScores[crit.id]);
-        } else {
-          if (currentActiveJudgingAttendee.score !== undefined && currentActiveJudgingAttendee.score > 0) {
-            const evenDist = Math.min(crit.maxScore, Math.round(currentActiveJudgingAttendee.score / evaluationCriteria.length));
-            loadedScores[crit.id] = String(evenDist);
-          } else {
-            loadedScores[crit.id] = '';
-          }
-        }
-      });
-      setCriteriaScores(loadedScores);
-      setCriterionError(null);
-    } else {
-      setCriteriaScores({});
-      setJudgingRemarks('');
-    }
-  }, [currentActiveJudgingAttendeeId, evaluationCriteria]);
 
   const handleExportParticipants = () => {
     if (!myAssignedEvent) return;
@@ -250,73 +193,6 @@ export default function HostDashboard({
     }
   };
 
-  const handleSaveEvaluationInline = async (att: Attendee, status: 'Completed' | 'In Progress') => {
-    let total = 0;
-    for (const crit of evaluationCriteria) {
-      const valStr = criteriaScores[crit.id];
-      const val = (valStr === undefined || valStr === '') ? 0 : parseFloat(valStr);
-      if (isNaN(val) || val < 0 || val > crit.maxScore) {
-        setCriterionError(`Invalid entry for ${crit.name}. Score must be between 0 and ${crit.maxScore}`);
-        setToast({ message: `Score error: ${crit.name}`, type: 'error' });
-        return;
-      }
-      total += val;
-    }
-
-    const updatedAttendee = {
-      ...att,
-      score: total,
-      remarks: judgingRemarks,
-      judgingStatus: status,
-      criteriaScores: criteriaScores
-    } as Attendee;
-
-    const updatedList = attendees.map(a => a.id === att.id ? updatedAttendee : a);
-    onUpdateAttendees(updatedList);
-
-    const { saveAttendeeToFirestore: saveFn } = await import('../firebaseSync');
-    await saveFn(updatedAttendee);
-
-    if (status === 'Completed') {
-      setToast({ message: `Evaluation Submitted for ${att.name}`, type: 'success' });
-    } else {
-      setToast({ message: `Draft saved for ${att.name}`, type: 'info' });
-    }
-
-    if (status === 'Completed' && att.batchId) {
-      const batchAttendees = updatedList.filter(a => 
-        (a.registeredEventId === myAssignedEvent.id || a.eventId === myAssignedEvent.id) && 
-        a.batchId === att.batchId
-      );
-      const presentAttendees = batchAttendees.filter(a => a.attendanceStatus === 'Present');
-      const allScored = presentAttendees.length > 0 && presentAttendees.every(a => a.judgingStatus === 'Completed');
-      
-      if (allScored) {
-        handleUpdateBatchStatus(att.batchId, 'Completed');
-        setToast({ message: `Batch ${att.batchName || ''} completed & closed!`, type: 'success' });
-      }
-    }
-
-    if (status === 'Completed') {
-      const currentIndex = sortedConsoleQueue.findIndex(a => a.id === att.id);
-      const nextIndex = currentIndex + 1;
-      if (nextIndex < sortedConsoleQueue.length) {
-        const nextAtt = sortedConsoleQueue[nextIndex];
-        setSelectedAttendeeForJudging(nextAtt);
-        setTimeout(() => {
-          const rowEl = document.getElementById(`queue-row-${nextAtt.id}`);
-          if (rowEl) {
-            rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-          }
-        }, 50);
-      } else {
-        setToast({ message: 'All queue participants evaluated!', type: 'success' });
-      }
-    } else {
-      setSelectedAttendeeForJudging(updatedAttendee);
-    }
-  };
-
   const moveConsoleSelection = (dir: number) => {
     if (sortedConsoleQueue.length === 0) return;
     const active = currentActiveJudgingAttendee;
@@ -344,22 +220,6 @@ export default function HostDashboard({
         active.getAttribute('contenteditable') === 'true'
       );
 
-      if (e.ctrlKey && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        if (currentActiveJudgingAttendee) {
-          handleSaveEvaluationInline(currentActiveJudgingAttendee, 'In Progress');
-        }
-        return;
-      }
-
-      if (e.ctrlKey && e.key === 'Enter') {
-        e.preventDefault();
-        if (currentActiveJudgingAttendee) {
-          handleSaveEvaluationInline(currentActiveJudgingAttendee, 'Completed');
-        }
-        return;
-      }
-
       if (isEditing) return;
 
       if (e.key === 'ArrowUp') {
@@ -368,24 +228,12 @@ export default function HostDashboard({
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         moveConsoleSelection(1);
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        if (currentActiveJudgingAttendee) {
-          setSelectedAttendeeForJudging(currentActiveJudgingAttendee);
-          setTimeout(() => {
-            const firstInput = document.getElementById(`score-input-${evaluationCriteria[0]?.id}`);
-            if (firstInput) {
-              (firstInput as HTMLInputElement).focus();
-              (firstInput as HTMLInputElement).select();
-            }
-          }, 50);
-        }
       }
     };
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [sortedConsoleQueue, currentActiveJudgingAttendee, criteriaScores, judgingRemarks]);
+  }, [sortedConsoleQueue, currentActiveJudgingAttendee]);
 
   // Batch helper functions
   const handleAssignToBatch = (attendeeId: string, batchId: string) => {
@@ -682,102 +530,7 @@ export default function HostDashboard({
     }
   };
 
-  // Scoring / Evaluation functions
-  const handleCriteriaScoreChange = (critId: string, val: string) => {
-    setCriteriaScores(prev => ({ ...prev, [critId]: val }));
-    setCriterionError(null);
-  };
-
-  // Add customized criteria
-  const handleAddCriterion = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCriterionName.trim()) return;
-    const maxVal = parseInt(newCriterionMax);
-    if (isNaN(maxVal) || maxVal <= 0) return;
-
-    const newId = 'custom_' + Date.now();
-    setEvaluationCriteria(prev => [
-      ...prev,
-      { id: newId, name: newCriterionName.trim(), maxScore: maxVal }
-    ]);
-    
-    setNewCriterionName('');
-    setNewCriterionMax('20');
-  };
-
-  // Remove criterion
-  const handleRemoveCriterion = (id: string) => {
-    if (evaluationCriteria.length <= 1) {
-      alert('You must have at least one evaluation criterion.');
-      return;
-    }
-    setEvaluationCriteria(prev => prev.filter(c => c.id !== id));
-  };
-
-  // Publish Results compiling and locking
-  const handlePublishResults = () => {
-    const presentEvaluated = myAttendees
-      .filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed')
-      .sort((a, b) => (b.score || 0) - (a.score || 0));
-
-    const rank1 = presentEvaluated[0];
-    const rank2 = presentEvaluated[1];
-    const rank3 = presentEvaluated[2];
-
-    const resultsList: ParticipantResult[] = [
-      { 
-        rank: 1, 
-        participantName: rank1?.teamName ? rank1.teamName : (rank1?.name || 'Unassigned'), 
-        college: rank1?.college || 'N/A', 
-        score: String(rank1?.score || 0) 
-      },
-      { 
-        rank: 2, 
-        participantName: rank2?.teamName ? rank2.teamName : (rank2?.name || 'Unassigned'), 
-        college: rank2?.college || 'N/A', 
-        score: String(rank2?.score || 0) 
-      },
-      { 
-        rank: 3, 
-        participantName: rank3?.teamName ? rank3.teamName : (rank3?.name || 'Unassigned'), 
-        college: rank3?.college || 'N/A', 
-        score: String(rank3?.score || 0) 
-      },
-    ];
-
-    const updatedEvents = events.map(ev => {
-      if (ev.id === myAssignedEvent.id) {
-        return {
-          ...ev,
-          status: 'Completed' as const,
-          resultsSubmitted: true,
-          resultsPublished: true, 
-          results: resultsList
-        } as SymposiumEvent;
-      }
-      return ev;
-    });
-    onUpdateEvents(updatedEvents);
-
-    const resultDoc = {
-      resultId: `RES-${myAssignedEvent.id}`,
-      eventId: myAssignedEvent.id,
-      rank1: rank1 ? (rank1.teamName ? `${rank1.teamName} (Leader: ${rank1.name}) [ID: ${rank1.id}] (${rank1.college})` : `${rank1.name} [ID: ${rank1.id}] (${rank1.college})`) : 'Unassigned',
-      rank2: rank2 ? (rank2.teamName ? `${rank2.teamName} (Leader: ${rank2.name}) [ID: ${rank2.id}] (${rank2.college})` : `${rank2.name} [ID: ${rank2.id}] (${rank2.college})`) : 'Unassigned',
-      rank3: rank3 ? (rank3.teamName ? `${rank3.teamName} (Leader: ${rank3.name}) [ID: ${rank3.id}] (${rank3.college})` : `${rank3.name} [ID: ${rank3.id}] (${rank3.college})`) : 'Unassigned',
-      judgeRemarks: `Ranks automatically compiled and certified by Host for ${myAssignedEvent.title} on ${new Date().toLocaleDateString()}`,
-      published: true,
-      publishedAt: new Date().toISOString(),
-      publishedBy: user.email
-    };
-
-    import('../firebaseSync').then(m => {
-      m.saveResult(resultDoc);
-    });
-
-    setConfirmationMessage('Results Compiled and Published successfully');
-    setTimeout(() => setConfirmationMessage(null), 5000);
-  };
+  // Evaluation functionality removed for pen-and-paper mode
 
   // Consolidated Event status updater
   const updateEventStatus = (status: 'Upcoming' | 'Live' | 'Paused' | 'Completed') => {
@@ -822,24 +575,7 @@ export default function HostDashboard({
 
   const activeStageIndex = timelineStages.findIndex(s => s.id === activeTimelineStage);
 
-  const handleSkipEvaluation = () => {
-    if (!currentActiveJudgingAttendee) return;
-    const currentIndex = sortedConsoleQueue.findIndex(a => a.id === currentActiveJudgingAttendee.id);
-    const nextIndex = currentIndex + 1;
-    if (nextIndex < sortedConsoleQueue.length) {
-      const nextAtt = sortedConsoleQueue[nextIndex];
-      setSelectedAttendeeForJudging(nextAtt);
-      setToast({ message: `Skipped to ${nextAtt.name}`, type: 'info' });
-      setTimeout(() => {
-        const rowEl = document.getElementById(`queue-row-${nextAtt.id}`);
-        if (rowEl) {
-          rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        }
-      }, 50);
-    } else {
-      setToast({ message: 'End of queue reached', type: 'info' });
-    }
-  };
+
 
   return (
     <div id="host-console" className="min-h-screen bg-background text-on-background flex flex-col font-sans overflow-x-hidden">
@@ -1207,9 +943,7 @@ export default function HostDashboard({
               {[
                 { id: 'all', label: 'All' },
                 { id: 'waiting', label: 'Waiting' },
-                { id: 'checked-in', label: 'Checked In' },
-                { id: 'evaluating', label: 'Evaluating' },
-                { id: 'evaluated', label: 'Evaluated' }
+                { id: 'checked-in', label: 'Checked In' }
               ].map(opt => (
                 <button
                   key={opt.id}
@@ -1235,8 +969,6 @@ export default function HostDashboard({
               ) : (
                 sortedConsoleQueue.map(att => {
                   const isActive = currentActiveJudgingAttendee?.id === att.id;
-                  const isEvaluated = att.judgingStatus === 'Completed';
-                  const isEvaluating = att.judgingStatus === 'In Progress';
 
                   return (
                     <div
@@ -1249,8 +981,6 @@ export default function HostDashboard({
                       className={`p-3 border rounded-xl flex flex-col justify-between gap-2.5 transition-all cursor-pointer ${
                         isActive
                           ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                          : isEvaluated
-                          ? 'border-outline-variant/40 bg-surface-container-low/40 opacity-70 hover:opacity-100'
                           : 'border-outline-variant/60 bg-surface hover:border-outline-variant'
                       }`}
                     >
@@ -1277,16 +1007,6 @@ export default function HostDashboard({
                         {/* Status badges */}
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           <span className={`text-[8px] font-bold px-1.5 py-0.2 rounded uppercase ${
-                            isEvaluated
-                              ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
-                              : isEvaluating
-                              ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
-                              : 'bg-outline-variant/20 text-on-surface-variant border border-outline-variant/30'
-                          }`}>
-                            {isEvaluated ? 'Evaluated' : isEvaluating ? 'Evaluating' : 'Not Started'}
-                          </span>
-                          
-                          <span className={`text-[8px] font-bold px-1.5 py-0.2 rounded uppercase ${
                             att.attendanceStatus === 'Present'
                               ? 'bg-teal-500/10 text-teal-600'
                               : 'bg-rose-500/10 text-rose-600'
@@ -1297,13 +1017,7 @@ export default function HostDashboard({
                       </div>
 
                       <div className="flex items-center justify-between border-t border-outline-variant/30 pt-2 shrink-0">
-                        {isEvaluated ? (
-                          <span className="text-[10px] font-extrabold text-primary">
-                            Score: {att.score || 0} pts
-                          </span>
-                        ) : (
-                          <span className="text-[9px] text-on-surface-variant italic">Waiting score</span>
-                        )}
+                        <span className="text-[9px] text-on-surface-variant italic">Click to view details</span>
 
                         <div className="flex items-center gap-1.5">
                           <button
@@ -1311,16 +1025,10 @@ export default function HostDashboard({
                               e.stopPropagation();
                               setSelectedAttendeeForJudging(att);
                               setMobileTab('scoring');
-                              setTimeout(() => {
-                                const firstInput = document.getElementById(`score-input-${evaluationCriteria[0]?.id}`);
-                                if (firstInput) {
-                                  (firstInput as HTMLInputElement).focus();
-                                }
-                              }, 50);
                             }}
                             className="text-[9px] font-extrabold text-primary bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-lg transition-all"
                           >
-                            Evaluate
+                            View
                           </button>
                         </div>
                       </div>
@@ -1333,7 +1041,7 @@ export default function HostDashboard({
         </section>
 
         {/* ==================================================== */}
-        {/* COLUMN 2 (Center): Inline Evaluation Panel          */}
+        {/* COLUMN 2 (Center): Participant Details Panel        */}
         {/* ==================================================== */}
         <section className={`col-span-1 lg:col-span-5 flex flex-col gap-4 lg:h-full lg:overflow-hidden min-w-0 ${
           mobileTab === 'scoring' ? 'flex' : 'hidden lg:flex'
@@ -1342,302 +1050,47 @@ export default function HostDashboard({
           <div className="bg-surface border border-outline-variant/60 rounded-2xl p-5 flex flex-col gap-4 shadow-xs h-full overflow-hidden">
             <div className="flex justify-between items-center border-b border-outline-variant/40 pb-3 shrink-0">
               <div>
-                <span className="text-[10px] font-black text-primary uppercase tracking-wider block">Judge Panel (Inline)</span>
-                <h2 className="font-extrabold text-sm text-on-surface mt-0.5">Assessor Evaluation Desk</h2>
+                <span className="text-[10px] font-black text-primary uppercase tracking-wider block">Participant Details</span>
+                <h2 className="font-extrabold text-sm text-on-surface mt-0.5">Read-Only View</h2>
               </div>
-              
-              <button
-                onClick={() => setShowCriteriaConfig(!showCriteriaConfig)}
-                className="p-1 text-on-surface-variant hover:text-on-surface"
-                title="Configure criteria"
-              >
-                <Settings2 className="w-4 h-4" />
-              </button>
             </div>
-
-            {showCriteriaConfig && (
-              <div className="bg-surface-container-low border border-outline-variant/40 p-4 rounded-xl space-y-3 shrink-0">
-                <span className="text-[9px] font-black text-on-surface-variant uppercase block">Manage Scoring Criteria</span>
-                
-                <div className="space-y-1.5 max-h-[120px] overflow-y-auto pr-1">
-                  {evaluationCriteria.map(crit => (
-                    <div key={crit.id} className="flex justify-between items-center text-xs bg-surface border border-outline-variant p-2 rounded-lg">
-                      <span className="font-bold">{crit.name} (max: {crit.maxScore})</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveCriterion(crit.id)}
-                        className="text-error hover:text-error-dark"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <form onSubmit={handleAddCriterion} className="flex items-center gap-2 pt-2 border-t border-outline-variant/40">
-                  <input
-                    type="text"
-                    placeholder="New Criteria (e.g. Innovation)"
-                    value={newCriterionName}
-                    onChange={(e) => setNewCriterionName(e.target.value)}
-                    className="flex-1 h-8 px-2.5 bg-surface border border-outline-variant rounded-lg text-xs outline-none"
-                  />
-                  <input
-                    type="number"
-                    value={newCriterionMax}
-                    onChange={(e) => setNewCriterionMax(e.target.value)}
-                    className="w-14 h-8 px-2 bg-surface border border-outline-variant rounded-lg text-xs outline-none text-center"
-                    placeholder="Max"
-                  />
-                  <button
-                    type="submit"
-                    className="h-8 px-3 bg-primary text-on-primary rounded-lg text-xs font-semibold hover:bg-primary/95"
-                  >
-                    Add
-                  </button>
-                </form>
-              </div>
-            )}
 
             {!currentActiveJudgingAttendee ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
                 <AlertCircle className="w-12 h-12 text-outline-variant/80 mb-2" />
                 <p className="text-xs font-bold text-on-surface">No Participant Available</p>
-                <p className="text-[10px] text-on-surface-variant mt-1">Queue is empty or criteria filters returned 0 entries.</p>
+                <p className="text-[10px] text-on-surface-variant mt-1">Select a participant from the queue to view their details.</p>
               </div>
             ) : (
-              <>
-                {/* Desktop Judging Panel */}
-                <div className="hidden lg:flex flex-1 flex-col gap-4 overflow-y-auto pr-1 min-h-0">
-                  
-                  {/* Active participant card header */}
-                  <div className="bg-surface-container-low border border-outline-variant/45 p-4 rounded-xl flex justify-between items-start gap-2 shrink-0">
+              <div className="flex-1 flex-col gap-4 overflow-y-auto pr-1 min-h-0">
+                <div className="bg-surface-container-low border border-outline-variant/45 p-6 rounded-xl space-y-6">
+                  <div className="flex justify-between items-start gap-4 flex-wrap">
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[9px] font-black text-primary bg-primary/10 border border-primary/20 px-2 py-0.2 rounded">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="font-mono text-xs font-black text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
                           {currentActiveJudgingAttendee.participantId || currentActiveJudgingAttendee.id}
                         </span>
-                        <h3 className="font-black text-sm text-on-surface">
+                        <h3 className="font-black text-xl text-on-surface">
                           {currentActiveJudgingAttendee.name}
                         </h3>
                       </div>
+                      
                       {currentActiveJudgingAttendee.teamName && (
-                        <p className="text-xs font-black text-amber-600 mt-1">
-                          👥 Team Leader: {currentActiveJudgingAttendee.teamName}
-                        </p>
+                        <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                          <p className="text-sm font-black text-amber-700">
+                            👥 Team Leader: {currentActiveJudgingAttendee.teamName}
+                          </p>
+                          {currentActiveJudgingAttendee.teamMembers && currentActiveJudgingAttendee.teamMembers.length > 0 && (
+                            <p className="text-xs text-amber-800 font-bold mt-1.5">
+                              Members: {currentActiveJudgingAttendee.teamMembers.join(', ')}
+                            </p>
+                          )}
+                        </div>
                       )}
-                      <div className="text-[10px] text-on-surface-variant mt-1.5 font-bold space-y-0.5">
-                        <p>🏫 College: <span className="text-on-surface">{currentActiveJudgingAttendee.college}</span></p>
-                        <p>📧 Email: {currentActiveJudgingAttendee.email} • 📞 Mobile: {(currentActiveJudgingAttendee as any).mobile || currentActiveJudgingAttendee.phone || 'N/A'}</p>
-                        {currentActiveJudgingAttendee.teamMembers && currentActiveJudgingAttendee.teamMembers.length > 0 && (
-                          <p className="text-amber-800 dark:text-amber-300 font-bold">
-                            👥 Members: {currentActiveJudgingAttendee.teamMembers.join(', ')}
-                          </p>
-                        )}
-                      </div>
                     </div>
 
-                    {/* Attendance check box directly inline */}
-                    <div className="flex flex-col items-end gap-1.5">
-                      <label className="flex items-center gap-1.5 cursor-pointer bg-surface border border-outline-variant px-2.5 py-1.5 rounded-lg text-[10px] font-bold">
-                        <input
-                          type="checkbox"
-                          checked={currentActiveJudgingAttendee.attendanceStatus === 'Present'}
-                          onChange={(e) => {
-                            const status = e.target.checked ? 'Present' : 'Absent';
-                            handleMarkAttendance(currentActiveJudgingAttendee.id, status);
-                            setToast({ 
-                              message: `Marked ${currentActiveJudgingAttendee.name} ${status}`, 
-                              type: 'info' 
-                            });
-                          }}
-                          disabled={isResultsPublished}
-                          className="rounded border-outline-variant text-primary focus:ring-0 cursor-pointer"
-                        />
-                        <span>Checked In</span>
-                      </label>
-                      <span className="text-[9px] text-on-surface-variant font-bold">
-                        Batch: {currentActiveJudgingAttendee.batchName || 'Unassigned'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Score Input Matrix */}
-                  <div className="space-y-3">
-                    <span className="text-[9px] font-black text-on-surface-variant uppercase tracking-wider block">Evaluation Metrics</span>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {evaluationCriteria.map(crit => {
-                        const currentVal = criteriaScores[crit.id] || '';
-                        const parsedVal = parseFloat(currentVal);
-                        const isErr = currentVal !== '' && (isNaN(parsedVal) || parsedVal < 0 || parsedVal > crit.maxScore);
-
-                        return (
-                          <div key={crit.id} className="bg-surface-container-low border border-outline-variant/40 p-3 rounded-xl space-y-1">
-                            <div className="flex justify-between items-center text-[10px] font-bold">
-                              <span className="text-on-surface">{crit.name}</span>
-                              <span className="text-on-surface-variant font-semibold">Max: {crit.maxScore}</span>
-                            </div>
-                            
-                            <input
-                              type="number"
-                              id={`score-input-${crit.id}`}
-                              value={currentVal}
-                              placeholder=""
-                              onChange={(e) => handleCriteriaScoreChange(crit.id, e.target.value)}
-                              disabled={isResultsPublished}
-                              className={`w-full h-8 px-2.5 bg-surface border rounded-lg text-xs outline-none ${
-                                isErr ? 'border-error focus:ring-error' : 'border-outline focus:border-primary'
-                              }`}
-                            />
-                            {isErr && (
-                              <span className="text-[8px] text-error font-bold block">
-                                Out of range (0-{crit.maxScore})
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Assessor Remarks */}
-                  <div className="space-y-1">
-                    <label className="block text-[9px] font-black text-on-surface-variant uppercase tracking-wider">Evaluation Remarks</label>
-                    <textarea
-                      rows={2}
-                      placeholder="Enter judging remarks, notes, or critique feedback..."
-                      value={judgingRemarks}
-                      onChange={(e) => setJudgingRemarks(e.target.value)}
-                      disabled={isResultsPublished}
-                      className="w-full p-2.5 bg-surface border border-outline-variant rounded-xl text-xs outline-none focus:border-primary placeholder:text-outline-variant/80"
-                    />
-                  </div>
-
-                  {criterionError && (
-                    <div className="bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg text-[10px] font-bold text-rose-600 flex items-center gap-1.5">
-                      <span>⚠️ {criterionError}</span>
-                    </div>
-                  )}
-
-                  {/* Score lock notification if results are published */}
-                  {isResultsPublished && (
-                    <div className="bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-lg text-[9px] font-bold text-amber-700 flex items-center gap-1.5 shrink-0">
-                      <span>🔒 Official standings have been compiled and published. Scores are locked in read-only mode.</span>
-                    </div>
-                  )}
-
-                  {/* Panel Action Buttons */}
-                  {!isResultsPublished && (
-                    <div className="flex items-center gap-3 pt-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={handleSkipEvaluation}
-                        className="h-10 px-4 border border-outline-variant hover:bg-surface-container text-on-surface-variant font-semibold rounded-xl text-xs transition-all cursor-pointer"
-                      >
-                        Skip
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSaveEvaluationInline(currentActiveJudgingAttendee, 'In Progress')}
-                        className="flex-1 h-10 border border-outline-variant hover:bg-surface-container text-on-surface-variant font-semibold rounded-xl text-xs transition-all cursor-pointer"
-                      >
-                        Save Draft
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSaveEvaluationInline(currentActiveJudgingAttendee, 'Completed')}
-                        className="flex-1 h-10 bg-primary hover:bg-primary/95 text-on-primary font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
-                      >
-                        Save & Next
-                      </button>
-                    </div>
-                  )}
-
-                </div>
-
-                {/* Mobile-only Judging Panel */}
-                <div className="lg:hidden flex flex-col gap-4 flex-grow min-h-0 overflow-y-auto">
-                  
-                  {/* Batch & Queue Progress Header */}
-                  {(() => {
-                    const batchAttendees = myAttendees.filter(a => a.batchId === currentActiveJudgingAttendee.batchId);
-                    const presentAttendees = batchAttendees.filter(a => a.attendanceStatus === 'Present');
-                    const judgedCount = presentAttendees.filter(a => a.judgingStatus === 'Completed').length;
-                    const totalCount = presentAttendees.length;
-                    const progressPercentage = totalCount > 0 ? (judgedCount / totalCount) * 100 : 0;
-
-                    return (
-                      <div className="bg-surface-container-low border border-outline-variant/40 p-4 rounded-2xl space-y-3 shrink-0">
-                        <div className="flex justify-between items-center text-[10px] font-black uppercase text-on-surface-variant tracking-wider">
-                          <span>Batch: {currentActiveJudgingAttendee.batchName || 'Unassigned'}</span>
-                          <span>Progress: {judgedCount}/{totalCount} Judged</span>
-                        </div>
-                        {/* Progress Bar */}
-                        <div className="w-full h-2 bg-surface-container-high rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-emerald-500 transition-all duration-500 rounded-full"
-                            style={{ width: `${progressPercentage}%` }}
-                          />
-                        </div>
-                        
-                        {/* Judged, Current and Pending indicator badges list */}
-                        <div className="space-y-1">
-                          <span className="text-[8px] font-bold text-on-surface-variant uppercase tracking-widest block">Roster Overview</span>
-                          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                            {presentAttendees.map(a => {
-                              const isCurrent = a.id === currentActiveJudgingAttendee.id;
-                              const isJudged = a.judgingStatus === 'Completed';
-                              
-                              return (
-                                <div 
-                                  key={a.id}
-                                  onClick={() => {
-                                    setSelectedAttendeeForJudging(a);
-                                    setMobileTab('scoring');
-                                  }}
-                                  className={`px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider shrink-0 transition-all cursor-pointer ${
-                                    isCurrent 
-                                      ? 'bg-amber-500 border-amber-600 text-white font-extrabold shadow-sm' 
-                                      : isJudged 
-                                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
-                                      : 'bg-surface border-outline-variant/30 text-on-surface-variant'
-                                  }`}
-                                >
-                                  <span className="mr-1">{isJudged ? '✓' : isCurrent ? '▶' : '○'}</span>
-                                  {a.teamName || a.name}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Large Team Info Card */}
-                  <div className="bg-surface-container-low border border-outline-variant/40 p-5 rounded-2xl space-y-4">
-                    <div className="border-b border-outline-variant/30 pb-3 flex justify-between items-start gap-2">
-                      <div className="min-w-0">
-                        <span className="font-mono text-[9px] font-black text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded leading-none shrink-0 inline-block mb-1.5">
-                          {currentActiveJudgingAttendee.participantId || currentActiveJudgingAttendee.id}
-                        </span>
-                        <h2 className="font-black text-base text-on-surface leading-tight">
-                          {currentActiveJudgingAttendee.name}
-                        </h2>
-                        {currentActiveJudgingAttendee.teamName && (
-                          <p className="text-xs font-black text-amber-600 mt-1">
-                            👥 Team Name: {currentActiveJudgingAttendee.teamName}
-                          </p>
-                        )}
-                        {currentActiveJudgingAttendee.teamMembers && currentActiveJudgingAttendee.teamMembers.length > 0 && (
-                          <p className="text-[10px] text-amber-700 font-bold mt-1">
-                            👥 Members: {currentActiveJudgingAttendee.teamMembers.join(', ')}
-                          </p>
-                        )}
-                      </div>
-
-                      <label className="flex items-center gap-1.5 cursor-pointer bg-surface border border-outline-variant px-3 py-2 rounded-xl text-xs font-bold shrink-0 shadow-sm">
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <label className="flex items-center gap-2 cursor-pointer bg-surface border border-outline-variant px-3 py-2 rounded-lg text-xs font-bold shadow-sm">
                         <input
                           type="checkbox"
                           checked={currentActiveJudgingAttendee.attendanceStatus === 'Present'}
@@ -1652,136 +1105,34 @@ export default function HostDashboard({
                           disabled={isResultsPublished}
                           className="rounded border-outline-variant text-primary focus:ring-0 cursor-pointer w-4 h-4"
                         />
-                        <span>Present</span>
+                        <span>Checked In</span>
                       </label>
-                    </div>
-                    
-                    <div className="text-[10px] text-on-surface-variant font-medium space-y-1">
-                      <p>🏫 College: <span className="text-on-surface font-semibold">{currentActiveJudgingAttendee.college}</span></p>
-                      <p>📧 Email: {currentActiveJudgingAttendee.email} <span className="opacity-40">•</span> 📞 Phone: {(currentActiveJudgingAttendee as any).mobile || currentActiveJudgingAttendee.phone || 'N/A'}</p>
+                      <span className="text-xs text-on-surface-variant font-bold bg-surface-container px-2 py-1 rounded">
+                        Batch: {currentActiveJudgingAttendee.batchName || 'Unassigned'}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Large Score Controls */}
-                  <div className="space-y-4">
-                    <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest block pl-1">Metrics Judging Form</span>
-                    
-                    <div className="space-y-3">
-                      {evaluationCriteria.map(crit => {
-                        const currentVal = criteriaScores[crit.id] || '';
-                        const parsedVal = parseFloat(currentVal);
-                        const scoreNum = isNaN(parsedVal) ? 0 : parsedVal;
-                        const isErr = currentVal !== '' && (isNaN(parsedVal) || parsedVal < 0 || parsedVal > crit.maxScore);
-
-                        const adjustScore = (delta: number) => {
-                          if (isResultsPublished) return;
-                          const nextScore = Math.max(0, Math.min(crit.maxScore, scoreNum + delta));
-                          handleCriteriaScoreChange(crit.id, String(nextScore));
-                        };
-
-                        return (
-                          <div key={crit.id} className="bg-surface-container-low border border-outline-variant/40 p-4 rounded-2xl space-y-3 shadow-xs">
-                            <div className="flex justify-between items-center text-xs font-bold">
-                              <span className="text-on-surface text-sm">{crit.name}</span>
-                              <span className="text-on-surface-variant">Max Score: {crit.maxScore}</span>
-                            </div>
-                            
-                            {/* Big Touch-Friendly Controls */}
-                            <div className="flex items-center gap-3">
-                              <button
-                                type="button"
-                                disabled={isResultsPublished}
-                                onClick={() => adjustScore(-1)}
-                                className="w-12 h-12 bg-surface-container border border-outline-variant hover:bg-surface-container-high text-on-surface text-lg font-black rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0 shadow-sm"
-                              >
-                                -
-                              </button>
-                              
-                              <div className="flex-1 relative">
-                                <input
-                                  type="number"
-                                  id={`mobile-score-input-${crit.id}`}
-                                  value={currentVal}
-                                  placeholder="0"
-                                  onChange={(e) => handleCriteriaScoreChange(crit.id, e.target.value)}
-                                  disabled={isResultsPublished}
-                                  className={`w-full h-12 text-center text-base font-black bg-surface border rounded-xl outline-none focus:ring-2 focus:ring-primary/20 ${
-                                    isErr ? 'border-error text-error' : 'border-outline text-primary'
-                                  }`}
-                                />
-                              </div>
-
-                              <button
-                                type="button"
-                                disabled={isResultsPublished}
-                                onClick={() => adjustScore(1)}
-                                className="w-12 h-12 bg-surface-container border border-outline-variant hover:bg-surface-container-high text-on-surface text-lg font-black rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0 shadow-sm"
-                              >
-                                +
-                              </button>
-                            </div>
-                            
-                            {isErr && (
-                              <span className="text-[9px] text-error font-black block text-center animate-pulse">
-                                Out of range (0 - {crit.maxScore})
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-outline-variant/30">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-wider block">Academic Details</span>
+                      <p className="text-sm font-semibold text-on-surface">🏫 {currentActiveJudgingAttendee.college}</p>
+                      <p className="text-xs text-on-surface-variant">Course/Year: {((currentActiveJudgingAttendee as any).academicInfo?.course || (currentActiveJudgingAttendee as any).course) || 'N/A'}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-black text-on-surface-variant uppercase tracking-wider block">Contact Information</span>
+                      <p className="text-sm font-semibold text-on-surface">📧 {currentActiveJudgingAttendee.email}</p>
+                      <p className="text-sm font-semibold text-on-surface">📞 {(currentActiveJudgingAttendee as any).mobile || currentActiveJudgingAttendee.phone || 'N/A'}</p>
                     </div>
                   </div>
-
-                  {/* Large Comments/Remarks Field */}
-                  <div className="space-y-1.5 bg-surface-container-low border border-outline-variant/40 p-4 rounded-2xl shadow-xs">
-                    <label className="block text-[10px] font-black text-on-surface-variant uppercase tracking-widest">Judges Remarks / Feedback</label>
-                    <textarea
-                      rows={3}
-                      placeholder="Type feedback notes, strengths, or questions answered..."
-                      value={judgingRemarks}
-                      onChange={(e) => setJudgingRemarks(e.target.value)}
-                      disabled={isResultsPublished}
-                      className="w-full p-3 bg-surface border border-outline-variant rounded-xl text-sm outline-none focus:border-primary placeholder:text-outline-variant/70 min-h-[90px]"
-                    />
+                  
+                  {/* Notes for pen and paper */}
+                  <div className="mt-8 pt-6 border-t border-outline-variant/30 text-center text-on-surface-variant/70 italic text-sm">
+                    <p>Scoring is conducted offline (pen & paper mode).</p>
+                    <p className="text-xs mt-1">Please refer to your printed evaluation sheets to record scores.</p>
                   </div>
-
-                  {criterionError && (
-                    <div className="bg-rose-500/10 border border-rose-500/20 p-3 rounded-xl text-xs font-bold text-rose-600 flex items-center gap-1.5 animate-pulse">
-                      <span>⚠️ {criterionError}</span>
-                    </div>
-                  )}
-
-                  {/* Large Action Buttons */}
-                  {!isResultsPublished && (
-                    <div className="flex flex-col gap-2.5 pt-2 shrink-0">
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={handleSkipEvaluation}
-                          className="flex-1 h-12 border border-outline hover:bg-surface-container text-on-surface-variant font-black rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-xs"
-                        >
-                          Skip
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSaveEvaluationInline(currentActiveJudgingAttendee, 'In Progress')}
-                          className="flex-1 h-12 border border-outline hover:bg-surface-container text-on-surface-variant font-black rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-xs"
-                        >
-                          Save Draft
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleSaveEvaluationInline(currentActiveJudgingAttendee, 'Completed')}
-                        className="w-full h-14 bg-primary hover:bg-primary/95 text-on-primary font-black rounded-xl text-sm uppercase tracking-wider transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        Submit Score & Next Team
-                      </button>
-                    </div>
-                  )}
-
                 </div>
-              </>
+              </div>
             )}
           </div>
         </section>
@@ -1794,7 +1145,7 @@ export default function HostDashboard({
           <div className="bg-surface border border-outline-variant/60 rounded-2xl p-4 flex flex-col gap-3 shadow-xs shrink-0">
             <span className="text-[10px] font-black text-primary uppercase tracking-wider block">Summary Stats</span>
             
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <div className="bg-surface-container-low p-2 rounded-xl text-center">
                 <span className="text-[8px] font-black text-on-surface-variant uppercase">Registered</span>
                 <p className="text-sm font-black text-on-surface mt-0.5">{totalRegistered}</p>
@@ -1807,84 +1158,56 @@ export default function HostDashboard({
                 <span className="text-[8px] font-black text-amber-600 uppercase">Pending</span>
                 <p className="text-sm font-black text-amber-600 mt-0.5">{totalPendingAttendance}</p>
               </div>
-              <div className="bg-surface-container-low p-2 rounded-xl text-center">
-                <span className="text-[8px] font-black text-primary uppercase">Evaluated</span>
-                <p className="text-sm font-black text-primary mt-0.5">
-                  {myAttendees.filter(a => a.judgingStatus === 'Completed').length}
-                </p>
-              </div>
-            </div>
-
-            <div className="border-t border-outline-variant/40 pt-2 grid grid-cols-2 gap-2">
-              <div className="text-center">
-                <span className="text-[8px] font-black text-on-surface-variant uppercase">Top Score</span>
-                <p className="text-sm font-black text-primary">
-                  {(() => {
-                    const scoredList = myAttendees.filter(a => a.judgingStatus === 'Completed' && a.score !== undefined);
-                    return scoredList.length > 0 ? Math.max(...scoredList.map(a => a.score || 0)) : 0;
-                  })()}
-                </p>
-              </div>
-              <div className="text-center">
-                <span className="text-[8px] font-black text-on-surface-variant uppercase">Average</span>
-                <p className="text-sm font-black text-on-surface">
-                  {(() => {
-                    const scoredList = myAttendees.filter(a => a.judgingStatus === 'Completed' && a.score !== undefined);
-                    return scoredList.length > 0 
-                      ? (scoredList.reduce((sum, a) => sum + (a.score || 0), 0) / scoredList.length).toFixed(1)
-                      : '0.0';
-                  })()}
-                </p>
-              </div>
             </div>
           </div>
 
-          {/* Live Leaderboard */}
+          {/* Official Winners (if published) */}
           <div className="bg-surface border border-outline-variant/60 rounded-2xl p-4 flex flex-col gap-3 shadow-xs min-h-[160px] overflow-hidden">
-            <span className="text-[10px] font-black text-primary uppercase tracking-wider block">Live Leaderboard</span>
+            <span className="text-[10px] font-black text-primary uppercase tracking-wider block">Official Winners</span>
             
             <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
-              {myAttendees
-                .filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed')
-                .sort((a, b) => (b.score || 0) - (a.score || 0))
-                .length === 0 ? (
-                <p className="text-[10px] text-on-surface-variant italic text-center py-4">No evaluations completed yet.</p>
+              {!isResultsPublished || !myAssignedEvent?.results || myAssignedEvent.results.length === 0 ? (
+                <p className="text-[10px] text-on-surface-variant italic text-center py-4">Winners have not been declared yet.</p>
               ) : (
-                myAttendees
-                  .filter(a => a.attendanceStatus === 'Present' && a.judgingStatus === 'Completed')
-                  .sort((a, b) => (b.score || 0) - (a.score || 0))
-                  .map((stud, idx) => {
-                    const isGold = idx === 0;
-                    const isSilver = idx === 1;
-                    const isBronze = idx === 2;
+                myAssignedEvent.results.map((res, idx) => {
+                  const isGold = res.rank === 1;
+                  const isSilver = res.rank === 2;
+                  const isBronze = res.rank === 3;
 
-                    return (
-                      <div 
-                        key={stud.id} 
-                        className={`flex justify-between items-center px-2.5 py-1.5 border rounded-xl transition-all ${
-                          isGold 
-                            ? 'bg-amber-50/10 border-amber-500/30 text-amber-800' 
-                            : isSilver 
-                            ? 'bg-slate-50/10 border-slate-500/20 text-slate-700'
-                            : isBronze 
-                            ? 'bg-amber-700/5 border-amber-700/10 text-amber-700' 
-                            : 'bg-surface-container-lowest border-outline-variant/30 text-on-surface-variant'
-                        }`}
-                      >
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-xs font-black w-4 shrink-0">
-                            {isGold ? '🥇' : isSilver ? '🥈' : isBronze ? '🥉' : `${idx + 1}`}
-                          </span>
-                          <span className="font-extrabold text-xs truncate">
-                            {stud.teamName ? stud.teamName : stud.name}
-                          </span>
-                        </div>
-                        <span className="font-black text-xs shrink-0">
-                          {stud.score || 0}
+                  return (
+                    <div 
+                      key={idx} 
+                      className={`flex justify-between items-center px-2.5 py-1.5 border rounded-xl transition-all ${
+                        isGold ? 'bg-amber-100 border-amber-300' :
+                        isSilver ? 'bg-slate-100 border-slate-300' :
+                        isBronze ? 'bg-orange-100/50 border-orange-200' :
+                        'bg-surface-container-low border-outline-variant/30'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`w-5 h-5 flex items-center justify-center rounded-full text-white font-black text-[10px] ${
+                          isGold ? 'bg-amber-500 shadow-sm shadow-amber-500/40' :
+                          isSilver ? 'bg-slate-400 shadow-sm shadow-slate-400/40' :
+                          isBronze ? 'bg-orange-400 shadow-sm shadow-orange-400/40' :
+                          'bg-outline text-on-surface'
+                        }`}>
+                          {res.rank}
                         </span>
+                        <div>
+                          <p className={`text-[11px] font-black ${
+                            isGold ? 'text-amber-900' :
+                            isSilver ? 'text-slate-700' :
+                            isBronze ? 'text-orange-900' :
+                            'text-on-surface'
+                          }`}>
+                            {res.participantName}
+                          </p>
+                          <p className="text-[9px] text-on-surface-variant/70 font-semibold">{res.college}</p>
+                        </div>
                       </div>
-                    );
-                  })
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>
@@ -1931,38 +1254,6 @@ export default function HostDashboard({
 
       </main>
       </div>
-      )}
-
-      {/* Confirmation Publish Modal */}
-      {isPublishConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
-          <div className="bg-surface border border-outline-variant/60 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 text-amber-600">
-              <Award className="w-6 h-6 animate-pulse shrink-0" />
-              <h3 className="text-base font-black text-on-surface">Publish Final Results?</h3>
-            </div>
-            <p className="text-xs text-on-surface-variant leading-relaxed">
-              Are you sure you want to compile and publish the official standings for <strong>{myAssignedEvent.title}</strong>? Once published, all judging scores and criteria will become **read-only** and locked permanently.
-            </p>
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                onClick={() => setIsPublishConfirmOpen(false)}
-                className="px-4 py-2 border border-outline-variant rounded-xl text-xs font-semibold text-on-surface-variant hover:bg-surface-container transition-all cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  handlePublishResults();
-                  setIsPublishConfirmOpen(false);
-                }}
-                className="px-4 py-2 bg-primary text-on-primary rounded-xl text-xs font-semibold hover:bg-primary/95 transition-all shadow-md cursor-pointer"
-              >
-                Publish
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Start Event with Batch Selection Modal */}

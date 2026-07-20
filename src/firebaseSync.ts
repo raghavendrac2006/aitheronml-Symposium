@@ -282,10 +282,9 @@ export async function saveParticipantsWithAtomicIds(
   const count = attendeeTemplates.length;
   const createdAttendees: Attendee[] = [];
 
-  // Helper for transaction retry with randomized exponential backoff
   const executeTransaction = async () => {
     let attempt = 0;
-    const maxAttempts = 6;
+    const maxAttempts = 15; // Increased for extreme load testing
     while (true) {
       try {
         await runTransaction(db, async (transaction) => {
@@ -376,7 +375,8 @@ export async function saveParticipantsWithAtomicIds(
                              err.message?.includes('Resource exhausted');
         
         if (isContention && attempt < maxAttempts) {
-          const delay = Math.random() * 400 + 100 * attempt;
+          // Increase randomized backoff: wait longer as attempts increase
+          const delay = Math.random() * 500 + 300 * attempt;
           console.warn(`Transaction contention. Retrying attempt ${attempt}/${maxAttempts} in ${delay.toFixed(0)}ms...`, err);
           await new Promise(resolve => setTimeout(resolve, delay));
         } else {
