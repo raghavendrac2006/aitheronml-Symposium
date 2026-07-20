@@ -4,9 +4,10 @@ import {
   Search, Bell, User, Plus, FileText, Layers, HelpCircle as QuizIcon, 
   Camera, Map, Brain, Image as ImageIcon, Check, X, LogOut, ArrowUpRight, 
   MapPin, Clock, Edit3, Trash2, CheckCircle2, AlertCircle, Building, Award, Unlock,
-  Menu, ChevronLeft, ChevronRight, QrCode, Utensils
+  Menu, ChevronLeft, ChevronRight, QrCode, Utensils, Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import * as XLSX from 'xlsx';
 import { SymposiumEvent, Attendee, TrackType, EventStatus, UserSession, Batch } from '../types';
 import ParticipantProfile from './ParticipantProfile';
 import PublicRegistration from './PublicRegistration';
@@ -629,62 +630,101 @@ export default function AdminDashboard({
 
 
   const handleDownloadAllData = () => {
-    // Generate CSV contents
-    const headers = [
-      'Student Name',
-      'Registration Type',
-      'Team Name',
-      'Participant ID',
-      'Email ID',
-      'Mobile Number',
-      'Registered Event'
-    ];
+    try {
+      const wb = XLSX.utils.book_new();
 
-    const rows: string[][] = [];
+      const headers = [
+        'Student Name',
+        'Registration Type',
+        'Team Name',
+        'Participant ID',
+        'Email ID',
+        'Mobile Number',
+        'College',
+        'Event',
+        'Status',
+        'Attendance'
+      ];
 
-    attendees.forEach(a => {
-      // Leader row
-      rows.push([
-        a.name,
-        a.regType || 'individual',
-        a.teamName || 'N/A',
-        a.participantId || a.id,
-        a.email,
-        a.phone,
-        a.registeredEventTitle
-      ]);
+      const eventsMap: Record<string, string[][]> = {};
+      
+      // Initialize map with headers
+      events.forEach(e => {
+        eventsMap[e.id] = [headers];
+      });
+      eventsMap['uncategorized'] = [headers];
 
-      // Team members rows
-      if (a.regType === 'team' && a.teamMembers) {
-        a.teamMembers.forEach(m => {
-          rows.push([
-            m.name,
-            'team',
-            a.teamName || 'N/A',
-            a.participantId || a.id, // shares identical participant ID
-            m.email,
-            m.phone,
-            a.registeredEventTitle
-          ]);
-        });
+      attendees.forEach(a => {
+        const targetEventId = a.registeredEventId || 'uncategorized';
+        const targetList = eventsMap[targetEventId] || eventsMap['uncategorized'];
+
+        // Leader row
+        targetList.push([
+          a.name,
+          a.regType || 'individual',
+          a.teamName || 'N/A',
+          a.participantId || a.id,
+          a.email,
+          a.phone,
+          a.college,
+          a.registeredEventTitle || 'General',
+          a.paymentStatus || 'Pending',
+          a.attendanceStatus || 'Pending'
+        ]);
+
+        // Team members rows
+        if (a.regType === 'team' && a.teamMembers) {
+          a.teamMembers.forEach(m => {
+            targetList.push([
+              m.name,
+              'team',
+              a.teamName || 'N/A',
+              a.participantId || a.id,
+              m.email,
+              m.phone,
+              a.college,
+              a.registeredEventTitle || 'General',
+              a.paymentStatus || 'Pending',
+              a.attendanceStatus || 'Pending'
+            ]);
+          });
+        }
+      });
+
+      let hasData = false;
+
+      // Add one sheet per event
+      events.forEach(e => {
+        const data = eventsMap[e.id];
+        if (data && data.length > 1) { // Only create if there's actual participant data
+          // Safe sheet name (max 31 chars, no special chars)
+          const sheetName = (e.title || e.id).substring(0, 31).replace(/[\\/?*[\]]/g, '');
+          const ws = XLSX.utils.aoa_to_sheet(data);
+          XLSX.utils.book_append_sheet(wb, ws, sheetName);
+          hasData = true;
+        }
+      });
+
+      // Add uncategorized if any
+      const uncatData = eventsMap['uncategorized'];
+      if (uncatData && uncatData.length > 1) {
+        const ws = XLSX.utils.aoa_to_sheet(uncatData);
+        XLSX.utils.book_append_sheet(wb, ws, "Other Participants");
+        hasData = true;
       }
-    });
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(val => `"${(val || '').replace(/"/g, '""')}"`).join(','))
-    ].join('\n');
+      if (!hasData) {
+        // Fallback if no attendees exist
+        const ws = XLSX.utils.aoa_to_sheet([headers]);
+        XLSX.utils.book_append_sheet(wb, ws, "All Events");
+      }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `symposium_all_students_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setToast({ message: 'Symposium data exported successfully to CSV!', type: 'success' });
+      XLSX.writeFile(wb, `symposium_all_students_${new Date().toISOString().split('T')[0]}.xlsx`);
+      setToast({ message: 'Symposium data exported successfully to Excel!', type: 'success' });
+    } catch (err) {
+      console.error("Export error: ", err);
+      setToast({ message: 'Error exporting data. Check console.', type: 'error' });
+    }
   };
 
   const handleSaveEventEdits = async () => {
@@ -1457,8 +1497,8 @@ export default function AdminDashboard({
                     onClick={handleDownloadAllData}
                     className="h-10 px-4 bg-primary text-on-primary font-bold rounded-xl text-xs flex items-center gap-1.5 hover:bg-primary/95 transition-all shadow-xs cursor-pointer shrink-0"
                   >
-                    <span className="material-symbols-outlined !text-sm">download</span>
-                    <span>Export All Students (CSV)</span>
+                    <Download className="w-4 h-4" />
+                    <span>Export All Students (Excel)</span>
                   </button>
                 )}
               </div>

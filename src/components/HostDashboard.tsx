@@ -3,9 +3,10 @@ import {
   LayoutDashboard, Calendar, Users, CheckCircle, Award, Play, Edit3, Clock, 
   MapPin, Bell, LogOut, Check, X, Shield, ChevronRight, CheckCircle2, UserCheck, 
   AlertCircle, Trash2, Settings2, Plus, Info, Lock, Unlock, HelpCircle, FileText, ClipboardList, Layers, RotateCcw,
-  Search, LogIn, Trophy
+  Search, LogIn, Trophy, Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import * as XLSX from 'xlsx';
 import { SymposiumEvent, Attendee, ParticipantResult, MAP_EMAIL_TO_EVENT_ID, Batch } from '../types';
 import { INITIAL_EVENTS } from '../initialData';
 import ParticipantProfile from './ParticipantProfile';
@@ -194,6 +195,60 @@ export default function HostDashboard({
       setJudgingRemarks('');
     }
   }, [currentActiveJudgingAttendeeId, evaluationCriteria]);
+
+  const handleExportParticipants = () => {
+    if (!myAssignedEvent) return;
+    
+    try {
+      const wb = XLSX.utils.book_new();
+      const headers = ['Student Name', 'Registration Type', 'Team Name', 'Participant ID', 'Email', 'Mobile', 'College', 'Event', 'Status', 'Attendance'];
+      const wsData = [headers];
+
+      myAttendees.forEach(a => {
+        // Leader
+        wsData.push([
+          a.name,
+          a.regType || 'individual',
+          a.teamName || 'N/A',
+          a.participantId || a.id,
+          a.email,
+          a.phone,
+          a.college,
+          a.registeredEventTitle || myAssignedEvent.title,
+          a.paymentStatus || 'Pending',
+          a.attendanceStatus || 'Pending'
+        ]);
+
+        // Team members
+        if (a.regType === 'team' && a.teamMembers) {
+          a.teamMembers.forEach(m => {
+            wsData.push([
+              m.name,
+              'team',
+              a.teamName || 'N/A',
+              a.participantId || a.id,
+              m.email,
+              m.phone,
+              a.college,
+              a.registeredEventTitle || myAssignedEvent.title,
+              a.paymentStatus || 'Pending',
+              a.attendanceStatus || 'Pending'
+            ]);
+          });
+        }
+      });
+
+      const sheetName = myAssignedEvent.title.substring(0, 31).replace(/[\\/?*[\]]/g, '');
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName || 'Participants');
+      
+      const fileName = `${myAssignedEvent.id}_participants_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+    } catch (err) {
+      console.error("Failed to export participants:", err);
+      alert("Failed to export participants. Please check the console for errors.");
+    }
+  };
 
   const handleSaveEvaluationInline = async (att: Attendee, status: 'Completed' | 'In Progress') => {
     let total = 0;
@@ -877,6 +932,14 @@ export default function HostDashboard({
             className="h-10 px-4 bg-primary text-on-primary font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Award className="w-4 h-4" /> Publish Results
+          </button>
+
+          {/* Export Participants CSV/Excel */}
+          <button
+            onClick={handleExportParticipants}
+            className="h-10 px-4 bg-surface-container border border-outline-variant hover:bg-surface-container-high text-on-surface-variant font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+          >
+            <Download className="w-4 h-4" /> Export Participants
           </button>
 
           {/* Declare Winners Toggle Button */}
