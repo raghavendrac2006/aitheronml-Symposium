@@ -10,6 +10,7 @@ import { SymposiumEvent, Attendee, ParticipantResult, MAP_EMAIL_TO_EVENT_ID, Bat
 import { INITIAL_EVENTS } from '../initialData';
 import ParticipantProfile from './ParticipantProfile';
 import HostRegistrationTab from './HostRegistrationTab';
+import ManualWinnersEntry from './ManualWinnersEntry';
 
 
 interface HostDashboardProps {
@@ -38,7 +39,7 @@ export default function HostDashboard({
   onLogout
 }: HostDashboardProps) {
   // Navigation active tab (kept for state compatibility, not used for rendering tabs)
-  const [activeTab, setActiveTab] = useState<'overview' | 'participants' | 'batches' | 'attendance' | 'judging' | 'results' | 'registration'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'participants' | 'batches' | 'attendance' | 'judging' | 'results' | 'registration' | 'winners'>('overview');
   
   // Selected Profile State (for detail modal)
   const [selectedAttendeeForProfile, setSelectedAttendeeForProfile] = useState<Attendee | null>(null);
@@ -878,9 +879,20 @@ export default function HostDashboard({
             <Award className="w-4 h-4" /> Publish Results
           </button>
 
-
-
-          {/* Registration Tab Toggle */}
+          {/* Declare Winners Toggle Button */}
+          <button 
+            onClick={() => setActiveTab(activeTab === 'winners' ? 'overview' : 'winners')}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-300 shadow-sm cursor-pointer ${
+              activeTab === 'winners' 
+                ? 'bg-amber-500 text-white shadow-amber-500/25 ring-2 ring-amber-500/50' 
+                : 'bg-surface border border-outline-variant text-on-surface hover:bg-surface-container hover:border-amber-500/50 hover:text-amber-600'
+            }`}
+          >
+            <Trophy className={`w-4 h-4 ${activeTab === 'winners' ? 'text-white' : 'text-amber-500'}`} />
+            <span className="hidden sm:inline">Declare Winners</span>
+          </button>
+          
+          {/* Check-in Desk Toggle Button */}
           <button
             onClick={() => setActiveTab(activeTab === 'registration' ? 'overview' : 'registration')}
             className={`h-10 px-4 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer ${
@@ -911,7 +923,15 @@ export default function HostDashboard({
       </header>
 
       {/* Main Workspace Layout */}
-      {activeTab === 'registration' ? (
+      {activeTab === 'winners' ? (
+        <div className="flex-1 overflow-y-auto bg-surface relative z-10">
+          <ManualWinnersEntry 
+            event={myAssignedEvent}
+            attendees={attendees}
+            onClose={() => setActiveTab('overview')}
+          />
+        </div>
+      ) : activeTab === 'registration' ? (
         <div className="flex-1 overflow-y-auto bg-surface relative z-10">
           <HostRegistrationTab 
             hostAssignedEventId={myAssignedEvent?.id || ''} 
