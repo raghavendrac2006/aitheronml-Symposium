@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Calendar, Users, CheckCircle, Award, Play, Edit3, Clock, 
   MapPin, Bell, LogOut, Check, X, Shield, ChevronRight, CheckCircle2, UserCheck, 
   AlertCircle, Trash2, Settings2, Plus, Info, Lock, Unlock, HelpCircle, FileText, ClipboardList, Layers, RotateCcw,
-  Search, LogIn
+  Search, LogIn, Trophy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SymposiumEvent, Attendee, ParticipantResult, MAP_EMAIL_TO_EVENT_ID, Batch } from '../types';
