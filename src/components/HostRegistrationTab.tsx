@@ -287,11 +287,6 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
         setStatus('error');
         setStatusDetails({ message: lastRes?.message || 'Error checking in' });
       }
-        } else {
-          setStatus('error');
-          setStatusDetails({ message: res.message });
-        }
-      }
     } catch (err: any) {
       setStatus('error');
       setStatusDetails({ message: err.message });
