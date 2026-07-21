@@ -273,9 +273,10 @@ export async function saveAttendeeToFirestore(attendee: Attendee) {
   }
 }
 
+// Create participants sequentially using a transaction to guarantee atomic counter updates
 export async function saveParticipantsWithAtomicIds(
-  attendeeTemplates: Omit<Attendee, 'id' | 'participantId' | 'secureToken'>[],
-  isSpot: boolean,
+  attendeeTemplates: Omit<Attendee, 'id' | 'participantId'>[],
+  isSpot: boolean = false,
   createdBy: string = 'system'
 ): Promise<Attendee[]> {
   const counterRef = doc(db, 'counters', 'symposium');
@@ -335,7 +336,7 @@ export async function saveParticipantsWithAtomicIds(
               createdAt: template.createdAt || new Date().toISOString(),
               updatedAt: new Date().toISOString(),
               createdBy: createdBy,
-              secureToken: `${baseId}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`
+              secureToken: template.secureToken // Use the pre-generated token from template!
             } as Attendee;
 
             createdAttendees.push(attendeeObj);
@@ -477,7 +478,7 @@ export async function saveParticipantsWithAtomicIds(
           createdAt: template.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           createdBy: createdBy,
-          secureToken: `${baseId}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`
+          secureToken: template.secureToken // Exact same token as online transaction
         } as Attendee;
 
         localAttendees.push(attendeeObj);

@@ -262,7 +262,8 @@ export default function PublicRegistration({
           memberCount: regType === 'team' ? 1 + teamMembersInput.length : undefined,
           registrationDate: new Date().toISOString(),
           accessLevel: regType === 'team' ? 'Team Leader Pass' : 'Individual Pass',
-          _tempMembersInput: regType === 'team' ? teamMembersInput : undefined
+          _tempMembersInput: regType === 'team' ? teamMembersInput : undefined,
+          secureToken: Math.random().toString(36).substr(2, 6).toUpperCase()
         };
       });
 
