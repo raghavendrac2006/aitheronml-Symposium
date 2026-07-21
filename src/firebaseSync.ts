@@ -374,8 +374,17 @@ export async function saveParticipantsWithAtomicIds(
   };
 
   try {
-    // Try online transaction
-    await executeTransaction();
+    // Try online transaction with a 4-second timeout to prevent indefinite hanging on slow/blocked networks
+    await Promise.race([
+      executeTransaction(),
+      new Promise((_, reject) => {
+        setTimeout(() => {
+          const timeoutErr = new Error("Transaction timed out (network slow or blocked)");
+          (timeoutErr as any).code = 'unavailable'; // Trigger offline fallback
+          reject(timeoutErr);
+        }, 4000);
+      })
+    ]);
 
     // Asynchronously update event counters to avoid transaction contention and speed up the UI response
     setTimeout(() => {
