@@ -22,6 +22,10 @@ export default function RegistrationSuccess({
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
+  const numMembers = (attendee.teamName && attendee.teamMembers) ? attendee.teamMembers.length + 1 : 1;
+  const numEvents = secondAttendee ? 2 : 1;
+  const totalAmount = numMembers * numEvents * 100;
+
   useEffect(() => {
     let isMounted = true;
     const initQrAndDownload = async () => {
@@ -113,6 +117,34 @@ export default function RegistrationSuccess({
               <p className="text-[11px] text-white font-semibold leading-relaxed mt-0.5 opacity-95">
                 Please download this entry pass immediately. You must present this QR Code pass at the symposium registration desk for verification and entry check-in on the event day.
               </p>
+            </div>
+          </div>
+
+          {/* Payment Calculation Box */}
+          <div className="mb-6 p-4 rounded-2xl flex items-start gap-3 text-left shadow-md border bg-primary-container text-on-primary-container border-primary/20">
+            <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5 text-primary font-bold">
+              ₹
+            </div>
+            <div className="flex-1 w-full">
+              <h4 className="text-xs font-black uppercase text-primary tracking-wider">Registration Fee Due</h4>
+              <p className="text-[11px] font-semibold leading-relaxed mt-0.5 opacity-90 text-on-primary-container">
+                Please pay this exact amount at the registration desk on the event day.
+              </p>
+              
+              <div className="mt-3 p-3 bg-surface/50 rounded-xl border border-primary/10">
+                <div className="flex justify-between items-center text-xs mb-1.5">
+                  <span className="text-on-surface-variant font-semibold">Participants:</span>
+                  <span className="font-bold text-on-surface">{numMembers} {numMembers > 1 ? 'Members' : 'Person'}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs mb-2.5">
+                  <span className="text-on-surface-variant font-semibold">Events Registered:</span>
+                  <span className="font-bold text-on-surface">{numEvents} {numEvents > 1 ? 'Events' : 'Event'}</span>
+                </div>
+                <div className="pt-2 border-t border-primary/20 flex justify-between items-center">
+                  <span className="text-xs font-black uppercase text-primary tracking-wider">Total Amount</span>
+                  <span className="text-lg font-black text-primary">₹{totalAmount}</span>
+                </div>
+              </div>
             </div>
           </div>
  
