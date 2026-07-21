@@ -288,41 +288,46 @@ function AppContent() {
           setIsLoading(false);
         });
 
-        // B. Listen to Participants (Attendees)
-        unsubscribeAttendees = subscribeWithRetry('participants', (snapshot) => {
+        // B. Listen to Participants (Attendees) - ONLY FOR AUTHENTICATED USERS (Admins/Hosts) to save quota!
+        if (session !== null) {
+          unsubscribeAttendees = subscribeWithRetry('participants', (snapshot) => {
+            const fbAttendees: Attendee[] = [];
+            snapshot.forEach((docSnap) => {
+              fbAttendees.push(docSnap.data() as Attendee);
+            });
+            
+            let finalAttendees = fbAttendees.length > 0 ? fbAttendees : INITIAL_ATTENDEES;
+            const fbAttendeeIds = new Set(finalAttendees.map(a => a.id));
+            const missingInitialAttendees = INITIAL_ATTENDEES.filter(a => !fbAttendeeIds.has(a.id));
+            if (missingInitialAttendees.length > 0) {
+              finalAttendees = [...finalAttendees, ...missingInitialAttendees];
+            }
 
-
-          const fbAttendees: Attendee[] = [];
-          snapshot.forEach((docSnap) => {
-            fbAttendees.push(docSnap.data() as Attendee);
+            const migrated = finalAttendees.map(migrateAttendee);
+            const filtered = filterTeamMembers(migrated);
+            setAttendees(filtered);
+            localStorage.setItem('ai_symposium_attendees', JSON.stringify(filtered));
+            localStorage.setItem('ai_symposium_attendees_last_saved', JSON.stringify(filtered));
+            setIsLoading(false);
+          }, (error) => {
+            console.error("Firestore onSnapshot error for participants, falling back to cache:", error);
+            const storedAttendees = localStorage.getItem('ai_symposium_attendees');
+            let finalStoredAttendees = storedAttendees ? JSON.parse(storedAttendees) : INITIAL_ATTENDEES;
+            const storedAttendeeIds = new Set(finalStoredAttendees.map((a: any) => a.id));
+            const missingInitialAttendees = INITIAL_ATTENDEES.filter(a => !storedAttendeeIds.has(a.id));
+            if (missingInitialAttendees.length > 0) {
+              finalStoredAttendees = [...finalStoredAttendees, ...missingInitialAttendees];
+            }
+            const migrated = finalStoredAttendees.map(migrateAttendee);
+            setAttendees(filterTeamMembers(migrated));
+            setIsLoading(false);
           });
-          
-          let finalAttendees = fbAttendees.length > 0 ? fbAttendees : INITIAL_ATTENDEES;
-          const fbAttendeeIds = new Set(finalAttendees.map(a => a.id));
-          const missingInitialAttendees = INITIAL_ATTENDEES.filter(a => !fbAttendeeIds.has(a.id));
-          if (missingInitialAttendees.length > 0) {
-            finalAttendees = [...finalAttendees, ...missingInitialAttendees];
-          }
-
-          const migrated = finalAttendees.map(migrateAttendee);
-          const filtered = filterTeamMembers(migrated);
-          setAttendees(filtered);
-          localStorage.setItem('ai_symposium_attendees', JSON.stringify(filtered));
-          localStorage.setItem('ai_symposium_attendees_last_saved', JSON.stringify(filtered));
-          setIsLoading(false);
-        }, (error) => {
-          console.error("Firestore onSnapshot error for participants, falling back to cache:", error);
+        } else {
+          // If public user, just load from cache initially (they don't need real-time participant updates)
           const storedAttendees = localStorage.getItem('ai_symposium_attendees');
           let finalStoredAttendees = storedAttendees ? JSON.parse(storedAttendees) : INITIAL_ATTENDEES;
-          const storedAttendeeIds = new Set(finalStoredAttendees.map((a: any) => a.id));
-          const missingInitialAttendees = INITIAL_ATTENDEES.filter(a => !storedAttendeeIds.has(a.id));
-          if (missingInitialAttendees.length > 0) {
-            finalStoredAttendees = [...finalStoredAttendees, ...missingInitialAttendees];
-          }
-          const migrated = finalStoredAttendees.map(migrateAttendee);
-          setAttendees(filterTeamMembers(migrated));
-          setIsLoading(false);
-        });
+          setAttendees(filterTeamMembers(finalStoredAttendees.map(migrateAttendee)));
+        }
 
         // C. Listen to Batches
         unsubscribeBatches = subscribeWithRetry('batches', (snapshot) => {
