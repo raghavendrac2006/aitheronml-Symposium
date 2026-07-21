@@ -357,10 +357,12 @@ export async function saveParticipantsWithAtomicIds(
         return; // Success, exit retry loop
       } catch (err: any) {
         attempt++;
-        const isContention = err.code === 'aborted' || 
+        const isQuotaExceeded = err.message?.toLowerCase().includes('quota exceeded');
+        const isContention = !isQuotaExceeded && (
+                             err.code === 'aborted' || 
                              err.code === 'resource-exhausted' || 
                              err.message?.includes('contention') || 
-                             err.message?.includes('Resource exhausted');
+                             err.message?.includes('Resource exhausted'));
         
         if (isContention && attempt < maxAttempts) {
           // Increase randomized backoff: wait longer as attempts increase
@@ -425,7 +427,9 @@ export async function saveParticipantsWithAtomicIds(
     const isNetworkError = (typeof navigator !== 'undefined' && !navigator.onLine) || 
                            error.code === 'unavailable' || 
                            error.code === 'failed-precondition' ||
-                           error.message?.includes('offline');
+                           error.message?.includes('offline') ||
+                           error.message?.toLowerCase().includes('quota exceeded') ||
+                           error.code === 'resource-exhausted'; // Resource exhausted usually means quota exceeded here since we caught contention above
 
     if (isNetworkError) {
       console.warn("Firestore transaction failed because the client is offline. Falling back to local ID generation.", error);
