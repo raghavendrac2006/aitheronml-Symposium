@@ -1082,7 +1082,7 @@ export default function HostDashboard({
                           </p>
                           {currentActiveJudgingAttendee.teamMembers && currentActiveJudgingAttendee.teamMembers.length > 0 && (
                             <p className="text-xs text-amber-800 font-bold mt-1.5">
-                              Members: {currentActiveJudgingAttendee.teamMembers.join(', ')}
+                              Members: {currentActiveJudgingAttendee.teamMembers.map((m: any) => m.name || m).join(', ')}
                             </p>
                           )}
                         </div>
