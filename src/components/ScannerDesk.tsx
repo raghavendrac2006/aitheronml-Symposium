@@ -24,6 +24,8 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
     id?: string;
     timestamp?: string;
     paymentStatus?: 'Paid' | 'Pending' | 'Waived';
+    numMembers?: number;
+    totalAmount?: number;
   } | null>(null);
 
   // For verifying payment status tick in activation mode
@@ -189,6 +191,12 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
         const localMatch = attendees.find(a => a.participantId === participantId || a.id === participantId);
         const initialPaymentStatus = localMatch?.paymentStatus || 'Pending';
 
+        // Caculate payment amount based on Members * Events * 50
+        const allIds = text.match(/CSM-\d{6}(?:-SPOT)?/gi);
+        const numEvents = allIds ? allIds.length : 1;
+        const numMembers = (localMatch?.teamName && localMatch?.teamMembers) ? localMatch.teamMembers.length + 1 : 1;
+        const totalAmount = numMembers * numEvents * 50;
+
         if (res.success) {
           setStatus('success');
           setStatusDetails({
@@ -196,7 +204,9 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
             name: res.name || localMatch?.name || 'Participant',
             id: res.id || participantId,
             timestamp: res.timestamp,
-            paymentStatus: initialPaymentStatus
+            paymentStatus: initialPaymentStatus,
+            numMembers,
+            totalAmount
           });
           setIsPaymentTicked(initialPaymentStatus === 'Paid');
         } else {
@@ -306,27 +316,39 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
             <div>
               <span className="block text-[9px] text-emerald-200 font-bold uppercase tracking-widest">Payment Status</span>
               <span className="text-xs font-semibold">{isAlreadyPaid ? 'Paid & Verified' : 'Unpaid (Verify details)'}</span>
+              {statusDetails.totalAmount !== undefined && !isAlreadyPaid && (
+                <div className="mt-1 text-sm font-black text-white">
+                  Amount Due: ₹{statusDetails.totalAmount}
+                </div>
+              )}
             </div>
 
-            <label className="relative flex items-center gap-2 cursor-pointer select-none">
-              <input 
-                type="checkbox" 
-                checked={isPaymentTicked}
-                disabled={isAlreadyPaid}
-                onChange={(e) => setIsPaymentTicked(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className={`w-10 h-6 rounded-full transition-colors relative ${
-                isPaymentTicked ? 'bg-emerald-400' : 'bg-white/20'
-              } border border-white/20`}>
-                <div className={`w-4.5 h-4.5 rounded-full bg-white absolute top-0.75 transition-all shadow-sm flex items-center justify-center ${
-                  isPaymentTicked ? 'left-4.5' : 'left-0.75'
-                }`}>
-                  {isPaymentTicked && <Check className="w-3 h-3 text-emerald-600" />}
+            <div className="flex flex-col items-end gap-1">
+              <label className="relative flex items-center gap-2 cursor-pointer select-none">
+                <input 
+                  type="checkbox" 
+                  checked={isPaymentTicked}
+                  disabled={isAlreadyPaid}
+                  onChange={(e) => setIsPaymentTicked(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className={`w-10 h-6 rounded-full transition-colors relative ${
+                  isPaymentTicked ? 'bg-emerald-400' : 'bg-white/20'
+                } border border-white/20`}>
+                  <div className={`w-4.5 h-4.5 rounded-full bg-white absolute top-0.75 transition-all shadow-sm flex items-center justify-center ${
+                    isPaymentTicked ? 'left-4.5' : 'left-0.75'
+                  }`}>
+                    {isPaymentTicked && <Check className="w-3 h-3 text-emerald-600" />}
+                  </div>
                 </div>
-              </div>
-              <span className="text-xs font-bold">Paid</span>
-            </label>
+                <span className="text-xs font-bold">Paid</span>
+              </label>
+              {statusDetails.numMembers !== undefined && (
+                <span className="text-[9px] text-emerald-200 font-bold uppercase tracking-widest mt-1">
+                  Members: {statusDetails.numMembers}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

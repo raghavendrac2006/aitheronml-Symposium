@@ -19,8 +19,10 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [statusDetails, setStatusDetails] = useState<{
     message: string;
-    attendee?: Attendee;
+    attendee?: Attendee & { scannedToken?: string | null };
     timestamp?: string;
+    numMembers?: number;
+    totalAmount?: number;
   } | null>(null);
 
   // Active searched participant (before action button is pressed in manual mode)
@@ -190,10 +192,17 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
       }
 
       // Valid event match!
+      const allIds = text.match(/CSM-\d{6}(?:-SPOT)?/gi);
+      const numEvents = allIds ? allIds.length : 1;
+      const numMembers = (match?.teamName && match?.teamMembers) ? match.teamMembers.length + 1 : 1;
+      const totalAmount = numMembers * numEvents * 50;
+
       setStatus('success');
       setStatusDetails({
         message: "Participant Verified for Event",
-        attendee: { ...match, scannedToken: parsedQR.token }
+        attendee: { ...match, scannedToken: parsedQR.token },
+        numMembers,
+        totalAmount
       });
       setVerificationMode(true); // Wait for proceed
     } catch (err: any) {
@@ -497,7 +506,7 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
                           <p className="text-lg font-black text-amber-800">{statusDetails?.attendee?.teamName}</p>
                           {statusDetails?.attendee?.teamMembers && (
                             <p className="text-sm font-bold text-amber-700/80 mt-1">
-                              Members: {statusDetails?.attendee?.teamMembers.join(', ')}
+                              Members: {statusDetails?.attendee?.teamMembers.map((m: any) => m.name || m).join(', ')}
                             </p>
                           )}
                         </div>
@@ -507,13 +516,15 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
                       <div className="bg-surface-container border border-outline-variant p-4 rounded-xl">
                         <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Payment Status</p>
                         {statusDetails?.attendee?.paymentStatus === 'Paid' ? (
-                          <div className="bg-green-500/10 text-green-700 px-4 py-3 rounded-lg font-bold flex items-center gap-2">
-                            <Check className="w-5 h-5" /> Payment Received
+                          <div className="bg-green-500/10 text-green-700 px-4 py-3 rounded-lg font-bold flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-2"><Check className="w-5 h-5" /> Payment Received</span>
+                            {statusDetails?.totalAmount !== undefined && <span>₹{statusDetails.totalAmount}</span>}
                           </div>
                         ) : (
                           <div className="space-y-3">
-                            <div className="bg-amber-500/10 text-amber-700 px-4 py-3 rounded-lg font-bold flex items-center gap-2">
-                              <AlertTriangle className="w-5 h-5" /> Payment Pending
+                            <div className="bg-amber-500/10 text-amber-700 px-4 py-3 rounded-lg font-bold flex items-center justify-between gap-2">
+                              <span className="flex items-center gap-2"><AlertTriangle className="w-5 h-5" /> Payment Pending</span>
+                              {statusDetails?.totalAmount !== undefined && <span>₹{statusDetails.totalAmount} Due</span>}
                             </div>
                             <button
                               onClick={handleMarkAsPaid}
