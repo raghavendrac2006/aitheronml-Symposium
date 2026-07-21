@@ -350,20 +350,7 @@ export async function saveParticipantsWithAtomicIds(
             transaction.set(participantRef, sanitizeForFirestore(att));
           }
 
-          // 3. Increment registeredCount for the respective events
-          const eventCounts: Record<string, number> = {};
-          for (const att of createdAttendees) {
-            const eId = att.registeredEventId || att.eventId;
-            if (eId) {
-              eventCounts[eId] = (eventCounts[eId] || 0) + 1;
-            }
-          }
-          for (const eId of Object.keys(eventCounts)) {
-            const eventRef = doc(db, EVENTS_COL, eId);
-            transaction.update(eventRef, {
-              registeredCount: increment(eventCounts[eId])
-            });
-          }
+          // 3. Increment registeredCount is moved outside the transaction to improve speed and reduce contention
         });
         
         return; // Success, exit retry loop
@@ -389,6 +376,24 @@ export async function saveParticipantsWithAtomicIds(
   try {
     // Try online transaction
     await executeTransaction();
+
+    // Asynchronously update event counters to avoid transaction contention and speed up the UI response
+    setTimeout(() => {
+      const eventCounts: Record<string, number> = {};
+      for (const att of createdAttendees) {
+        const eId = att.registeredEventId || att.eventId;
+        if (eId) {
+          eventCounts[eId] = (eventCounts[eId] || 0) + 1;
+        }
+      }
+      for (const eId of Object.keys(eventCounts)) {
+        import('firebase/firestore').then(({ updateDoc }) => {
+          updateDoc(doc(db, EVENTS_COL, eId), {
+            registeredCount: increment(eventCounts[eId])
+          }).catch(err => console.warn("Failed to increment event count:", err));
+        });
+      }
+    }, 0);
 
     // Successfully committed to Firestore, now update local cache
     const cached = getCachedAttendees();

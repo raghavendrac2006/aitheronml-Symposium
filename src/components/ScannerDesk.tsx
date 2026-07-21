@@ -114,12 +114,8 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
             (decodedText) => {
               // Successfully decoded code
               if (html5QrCode.isScanning) {
-                html5QrCode.stop().then(() => {
-                  handleScanTrigger(decodedText);
-                }).catch(err => {
-                  console.error("Failed to stop camera scanner", err);
-                  handleScanTrigger(decodedText);
-                });
+                html5QrCode.pause(); // Pause is instantaneous
+                handleScanTrigger(decodedText);
               }
             },
             (errorMessage) => {
@@ -466,18 +462,27 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
           <div className="relative overflow-hidden rounded-2xl bg-black aspect-square border border-outline-variant max-w-sm mx-auto shadow-inner">
             <div id={qrRegionId} className="w-full h-full object-cover"></div>
             
-            {/* Holographic scanner target reticle overlay */}
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-              <div className="w-[70%] h-[70%] border-2 border-dashed border-primary/40 rounded-xl relative">
-                {/* Visual corners */}
-                <div className="absolute -top-1.5 -left-1.5 w-4 h-4 border-t-4 border-l-4 border-primary" />
-                <div className="absolute -top-1.5 -right-1.5 w-4 h-4 border-t-4 border-r-4 border-primary" />
-                <div className="absolute -bottom-1.5 -left-1.5 w-4 h-4 border-b-4 border-l-4 border-primary" />
-                <div className="absolute -bottom-1.5 -right-1.5 w-4 h-4 border-b-4 border-r-4 border-primary" />
-                {/* Glowing scanning laser line */}
-                <div className="w-full h-0.5 bg-primary/80 absolute top-0 animate-laser shadow-lg shadow-primary" />
+            {loading && (
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm text-white">
+                <div className="w-10 h-10 border-4 border-white/20 border-t-primary rounded-full animate-spin mb-3"></div>
+                <p className="font-bold tracking-wider text-xs uppercase animate-pulse">Processing...</p>
               </div>
-            </div>
+            )}
+
+            {/* Holographic scanner target reticle overlay */}
+            {!loading && (
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                <div className="w-[70%] h-[70%] border-2 border-dashed border-primary/40 rounded-xl relative">
+                  {/* Visual corners */}
+                  <div className="absolute -top-1.5 -left-1.5 w-4 h-4 border-t-4 border-l-4 border-primary" />
+                  <div className="absolute -top-1.5 -right-1.5 w-4 h-4 border-t-4 border-r-4 border-primary" />
+                  <div className="absolute -bottom-1.5 -left-1.5 w-4 h-4 border-b-4 border-l-4 border-primary" />
+                  <div className="absolute -bottom-1.5 -right-1.5 w-4 h-4 border-b-4 border-r-4 border-primary" />
+                  {/* Glowing scanning laser line */}
+                  <div className="w-full h-0.5 bg-primary/80 absolute top-0 animate-laser shadow-lg shadow-primary" />
+                </div>
+              </div>
+            )}
           </div>
 
           {cameraError && (

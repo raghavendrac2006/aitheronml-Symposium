@@ -67,14 +67,14 @@ export const ROUTE_TO_EVENT_ID: Record<string, string> = {
   '/dumbcharades': 'dumb_charades',
 };
 
-class GlobalErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, errorMsg: string}> {
+class GlobalErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: Error | null}> {
   constructor(props: {children: React.ReactNode}) {
     super(props);
-    this.state = { hasError: false, errorMsg: '' };
+    this.state = { hasError: false, error: null };
   }
 
   static getDerivedStateFromError(error: Error) {
-    return { hasError: true, errorMsg: error.message };
+    return { hasError: true, error: error };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
