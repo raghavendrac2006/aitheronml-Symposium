@@ -177,9 +177,13 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
 
     try {
       let allMatches: Attendee[] = [];
-      for (const pid of parsedQR.ids) {
+      for (let i = 0; i < parsedQR.ids.length; i++) {
+          const pid = parsedQR.ids[i];
+          const token = parsedQR.tokens[i];
           const match = attendees.find(a => a.participantId === pid || a.id === pid);
-          if (match) allMatches.push(match);
+          if (match) {
+            allMatches.push({ ...match, scannedToken: token });
+          }
       }
       
       if (allMatches.length === 0) {
@@ -241,7 +245,7 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
 
       for (const att of statusDetails.allAttendees) {
         const pid = att.participantId || att.id;
-        const matchedToken = parseParticipantQR(scannedInput).tokens[parseParticipantQR(scannedInput).ids.indexOf(pid)] || null;
+        const matchedToken = (att as any).scannedToken || null;
         
         // Pass the hostAssignedEventId for the primary event check-in, 
         // but for other events, pass their respective event ID so it counts as check-in for those!
