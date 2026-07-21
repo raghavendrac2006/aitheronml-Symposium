@@ -26,6 +26,7 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
     paymentStatus?: 'Paid' | 'Pending' | 'Waived';
     numMembers?: number;
     totalAmount?: number;
+    allAttendees?: Attendee[];
   } | null>(null);
 
   // For verifying payment status tick in activation mode
@@ -63,13 +64,13 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
 
   // Search local state for visual confirmation in manual mode
   useEffect(() => {
-    const parsedId = parseParticipantQR(scannedInput).id;
-    if (!parsedId) {
+    const parsedQR = parseParticipantQR(scannedInput);
+    if (!parsedQR.ids.length) {
       setMatchedAttendee(null);
       return;
     }
 
-    const match = attendees.find(a => a.participantId === parsedId || a.id === parsedId);
+    const match = attendees.find(a => parsedQR.ids.includes(a.participantId || '') || parsedQR.ids.includes(a.id));
     if (match) {
       setMatchedAttendee(match);
     } else {
@@ -77,15 +78,21 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
     }
   }, [scannedInput, attendees]);
 
-  // Helper to extract Participant ID from scanned QR data
-  function parseParticipantQR(text: string): { id: string, token: string | null } {
-    if (!text) return { id: '', token: null };
+  // Helper to extract all Participant IDs from scanned QR data
+  function parseParticipantQR(text: string): { ids: string[], tokens: (string | null)[] } {
+    if (!text) return { ids: [], tokens: [] };
     const cleanText = text.trim();
-    const idMatch = cleanText.match(/CSM-\d{6}(?:-SPOT)?/i);
-    const tokenMatch = cleanText.match(/\[T:([a-zA-Z0-9-]+)\]/i);
+    const idMatches = [...cleanText.matchAll(/(CSM-\d{6}(?:-SPOT)?)/gi)];
+    const tokenMatches = [...cleanText.matchAll(/\[T:([a-zA-Z0-9-]+)\]/gi)];
+    
+    // Fallback if no exact match but raw text seems like an ID
+    if (idMatches.length === 0 && cleanText.toUpperCase().startsWith('CSM-')) {
+       return { ids: [cleanText.toUpperCase()], tokens: [null] };
+    }
+
     return {
-      id: idMatch ? idMatch[0].toUpperCase() : cleanText.toUpperCase(),
-      token: tokenMatch ? tokenMatch[1] : null
+      ids: idMatches.map(m => m[1].toUpperCase()),
+      tokens: tokenMatches.map(m => m[1] || null)
     };
   }
 
@@ -168,8 +175,7 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
 
   const handleScanTrigger = async (text: string) => {
     const parsedQR = parseParticipantQR(text);
-    const participantId = parsedQR.id;
-    if (!participantId) {
+    if (!parsedQR.ids.length) {
       setStatus('error');
       setStatusDetails({
         message: "Invalid QR Code layout. Format must contain a participant sequential ID."
@@ -181,59 +187,78 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
 
     try {
       if (mode === 'checkin') {
-        const res = await checkInParticipantTransaction(
-          participantId,
-          parsedQR.token,
-          scanMethod === 'manual'
-        );
+        let lastRes: any = null;
+        let allAttendees: Attendee[] = [];
         
-        // Find matching local payment status as fallback
-        const localMatch = attendees.find(a => a.participantId === participantId || a.id === participantId);
-        const initialPaymentStatus = localMatch?.paymentStatus || 'Pending';
+        // Match all attendees from the QR code
+        for (let i = 0; i < parsedQR.ids.length; i++) {
+            const pid = parsedQR.ids[i];
+            const ptoken = parsedQR.tokens[i];
+            
+            const res = await checkInParticipantTransaction(
+              pid,
+              ptoken,
+              scanMethod === 'manual'
+            );
+            
+            const localMatch = attendees.find(a => a.participantId === pid || a.id === pid);
+            if (localMatch) {
+              allAttendees.push(localMatch);
+            }
+            lastRes = res; // we'll use the last response for the main status message
+        }
 
-        // Caculate payment amount based on Members * Events * 50
-        const allIds = text.match(/CSM-\d{6}(?:-SPOT)?/gi);
-        const numEvents = allIds ? allIds.length : 1;
-        const numMembers = (localMatch?.teamName && localMatch?.teamMembers) ? localMatch.teamMembers.length + 1 : 1;
+        const primaryMatch = allAttendees[0];
+        const initialPaymentStatus = primaryMatch?.paymentStatus || 'Pending';
+
+        // Calculate payment amount based on Members * Events * 50
+        const numEvents = parsedQR.ids.length;
+        const numMembers = (primaryMatch?.teamName && primaryMatch?.teamMembers) ? primaryMatch.teamMembers.length + 1 : 1;
         const totalAmount = numMembers * numEvents * 50;
 
-        if (res.success) {
+        if (lastRes && lastRes.success) {
           setStatus('success');
           setStatusDetails({
-            message: res.message,
-            name: res.name || localMatch?.name || 'Participant',
-            id: res.id || participantId,
-            timestamp: res.timestamp,
+            message: "Checked In Successfully",
+            name: primaryMatch?.name || 'Participant',
+            id: parsedQR.ids.join(' & '),
+            timestamp: lastRes.timestamp,
             paymentStatus: initialPaymentStatus,
             numMembers,
-            totalAmount
+            totalAmount,
+            allAttendees
           });
           setIsPaymentTicked(initialPaymentStatus === 'Paid');
-        } else {
+        } else if (lastRes) {
           setStatus('error');
           setStatusDetails({
-            message: res.message,
-            name: res.name || localMatch?.name,
-            id: res.id || participantId,
-            timestamp: res.timestamp,
-            paymentStatus: initialPaymentStatus
+            message: lastRes.message,
+            name: primaryMatch?.name,
+            id: parsedQR.ids.join(' & '),
+            timestamp: lastRes.timestamp,
+            paymentStatus: initialPaymentStatus,
+            allAttendees
           });
         }
       } else if (mode === 'food') {
         // Canteen Food redemption mode
+        // For food, we just take the first ID, because one person only eats once, or maybe all of them?
+        // Let's redeem food for the primary ID.
+        const pid = parsedQR.ids[0];
+        const ptoken = parsedQR.tokens[0];
         const res = await redeemFoodTransaction(
-          participantId,
-          parsedQR.token,
+          pid,
+          ptoken,
           scanMethod === 'manual'
         );
-        const localMatch = attendees.find(a => a.participantId === participantId || a.id === participantId);
+        const localMatch = attendees.find(a => a.participantId === pid || a.id === pid);
         
         if (res.success) {
           setStatus('success');
           setStatusDetails({
             message: res.message,
             name: res.name || localMatch?.name || 'Participant',
-            id: res.id || participantId,
+            id: pid,
             timestamp: res.timestamp
           });
         } else {
@@ -241,7 +266,7 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
           setStatusDetails({
             message: res.message,
             name: res.name || localMatch?.name,
-            id: res.id || participantId,
+            id: pid,
             timestamp: res.timestamp
           });
         }
@@ -273,13 +298,16 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
     try {
       // If verification box was ticked and payment was previously pending, write to database
       if (isPaymentTicked && statusDetails.paymentStatus !== 'Paid') {
-        const docRef = doc(db, 'participants', statusDetails.id);
-        await updateDoc(docRef, { paymentStatus: 'Paid' });
-        
-        // Also update local props list value reactively
-        const match = attendees.find(a => a.id === statusDetails.id);
-        if (match) {
-          match.paymentStatus = 'Paid';
+        const ids = statusDetails.id.split(' & ');
+        for (const pid of ids) {
+          const docRef = doc(db, 'participants', pid);
+          await updateDoc(docRef, { paymentStatus: 'Paid' });
+          
+          // Also update local props list value reactively
+          const match = attendees.find(a => a.id === pid || a.participantId === pid);
+          if (match) {
+            match.paymentStatus = 'Paid';
+          }
         }
       }
       handleReset();
@@ -319,6 +347,16 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
               {statusDetails.totalAmount !== undefined && !isAlreadyPaid && (
                 <div className="mt-1 text-sm font-black text-white">
                   Amount Due: ₹{statusDetails.totalAmount}
+                </div>
+              )}
+              {statusDetails.allAttendees && statusDetails.allAttendees.length > 1 && (
+                <div className="mt-2 space-y-1">
+                  <span className="block text-[9px] text-emerald-200 font-bold uppercase tracking-widest">Registered Events</span>
+                  {statusDetails.allAttendees.map((att, idx) => (
+                    <div key={idx} className="text-xs text-white bg-white/10 px-2 py-1 rounded">
+                      {att.registeredEventTitle || 'Unknown Event'}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

@@ -23,6 +23,7 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
     timestamp?: string;
     numMembers?: number;
     totalAmount?: number;
+    allAttendees?: Attendee[];
   } | null>(null);
 
   // Active searched participant (before action button is pressed in manual mode)
@@ -60,13 +61,13 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
 
   // Search local state for visual confirmation in manual mode
   useEffect(() => {
-    const parsedId = parseParticipantQR(scannedInput).id;
-    if (!parsedId) {
+    const parsedQR = parseParticipantQR(scannedInput);
+    if (!parsedQR.ids.length) {
       setMatchedAttendee(null);
       return;
     }
 
-    const match = attendees.find(a => a.participantId === parsedId || a.id === parsedId);
+    const match = attendees.find(a => parsedQR.ids.includes(a.participantId || '') || parsedQR.ids.includes(a.id));
     if (match) {
       setMatchedAttendee(match);
     } else {
@@ -74,14 +75,20 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
     }
   }, [scannedInput, attendees]);
 
-  function parseParticipantQR(text: string): { id: string, token: string | null } {
-    if (!text) return { id: '', token: null };
+  function parseParticipantQR(text: string): { ids: string[], tokens: (string | null)[] } {
+    if (!text) return { ids: [], tokens: [] };
     const cleanText = text.trim();
-    const idMatch = cleanText.match(/CSM-\d{6}(?:-SPOT)?/i);
-    const tokenMatch = cleanText.match(/\[T:([a-zA-Z0-9-]+)\]/i);
+    const idMatches = [...cleanText.matchAll(/(CSM-\d{6}(?:-SPOT)?)/gi)];
+    const tokenMatches = [...cleanText.matchAll(/\[T:([a-zA-Z0-9-]+)\]/gi)];
+    
+    // Fallback if no exact match but raw text seems like an ID
+    if (idMatches.length === 0 && cleanText.toUpperCase().startsWith('CSM-')) {
+       return { ids: [cleanText.toUpperCase()], tokens: [null] };
+    }
+
     return {
-      id: idMatch ? idMatch[0].toUpperCase() : cleanText.toUpperCase(),
-      token: tokenMatch ? tokenMatch[1] : null
+      ids: idMatches.map(m => m[1].toUpperCase()),
+      tokens: tokenMatches.map(m => m[1] || null)
     };
   }
 
@@ -158,8 +165,7 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
 
   const handleScanTrigger = async (text: string) => {
     const parsedQR = parseParticipantQR(text);
-    const participantId = parsedQR.id;
-    if (!participantId) {
+    if (!parsedQR.ids.length) {
       setStatus('error');
       setStatusDetails({
         message: "Invalid QR Code layout. Format must contain a participant sequential ID."
@@ -170,19 +176,26 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
     setLoading(true);
 
     try {
-      const match = attendees.find(a => a.participantId === participantId || a.id === participantId);
+      let allMatches: Attendee[] = [];
+      for (const pid of parsedQR.ids) {
+          const match = attendees.find(a => a.participantId === pid || a.id === pid);
+          if (match) allMatches.push(match);
+      }
       
-      if (!match) {
+      if (allMatches.length === 0) {
         setStatus('error');
         setStatusDetails({
-          message: `Participant with ID ${participantId} not found.`
+          message: `Participant(s) not found.`
         });
         setLoading(false);
         return;
       }
 
-      const participantEventId = match.registeredEventId || match.eventId;
-      if (participantEventId !== hostAssignedEventId) {
+      // Find the specific attendee that matches this host's assigned event
+      const primaryMatchIndex = allMatches.findIndex(m => (m.registeredEventId || m.eventId) === hostAssignedEventId);
+      const primaryMatch = primaryMatchIndex !== -1 ? allMatches[primaryMatchIndex] : null;
+
+      if (!primaryMatch) {
         setStatus('error');
         setStatusDetails({
           message: "This participant is not registered for this event."
@@ -192,17 +205,17 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
       }
 
       // Valid event match!
-      const allIds = text.match(/CSM-\d{6}(?:-SPOT)?/gi);
-      const numEvents = allIds ? allIds.length : 1;
-      const numMembers = (match?.teamName && match?.teamMembers) ? match.teamMembers.length + 1 : 1;
+      const numEvents = parsedQR.ids.length;
+      const numMembers = (primaryMatch?.teamName && primaryMatch?.teamMembers) ? primaryMatch.teamMembers.length + 1 : 1;
       const totalAmount = numMembers * numEvents * 50;
 
       setStatus('success');
       setStatusDetails({
         message: "Participant Verified for Event",
-        attendee: { ...match, scannedToken: parsedQR.token },
+        attendee: { ...primaryMatch, scannedToken: parsedQR.tokens[primaryMatchIndex] || null },
         numMembers,
-        totalAmount
+        totalAmount,
+        allAttendees: allMatches
       });
       setVerificationMode(true); // Wait for proceed
     } catch (err: any) {
@@ -217,22 +230,41 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
   };
 
   const handleProceedCheckIn = async () => {
-    if (!statusDetails?.attendee) return;
+    if (!statusDetails?.attendee || !statusDetails?.allAttendees) return;
     
     setLoading(true);
-    const participantId = statusDetails.attendee.participantId || statusDetails.attendee.id;
     
     try {
-      const res = await hostCheckInParticipantTransaction(
-        participantId, 
-        hostAssignedEventId, 
-        statusDetails.attendee.scannedToken || null,
-        scanMethod === 'manual'
-      );
+      let lastRes: any = null;
+      let someSuccess = false;
+      let alreadyCheckedInCount = 0;
+
+      for (const att of statusDetails.allAttendees) {
+        const pid = att.participantId || att.id;
+        const matchedToken = parseParticipantQR(scannedInput).tokens[parseParticipantQR(scannedInput).ids.indexOf(pid)] || null;
+        
+        // Pass the hostAssignedEventId for the primary event check-in, 
+        // but for other events, pass their respective event ID so it counts as check-in for those!
+        const eventIdToCheckIn = att.registeredEventId || att.eventId;
+
+        const res = await hostCheckInParticipantTransaction(
+          pid, 
+          eventIdToCheckIn, 
+          matchedToken,
+          scanMethod === 'manual'
+        );
+        
+        if (res.success) {
+          someSuccess = true;
+        } else if (res.message.includes("Already Checked In")) {
+          alreadyCheckedInCount++;
+        }
+        lastRes = res;
+      }
       
-      if (res.success) {
+      if (someSuccess) {
         setVerificationMode(false); // Finished verification, now show true success briefly
-        setStatusDetails(prev => prev ? { ...prev, message: "Checked In Successfully!" } : null);
+        setStatusDetails(prev => prev ? { ...prev, message: "Checked In Successfully for all events!" } : null);
         
         // Add to recent scans
         setRecentScans(prev => {
@@ -245,13 +277,16 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
         setTimeout(() => {
           handleReset();
         }, 2500);
-      } else {
-        if (res.message.includes("Already Checked In")) {
+      } else if (alreadyCheckedInCount === statusDetails.allAttendees.length) {
           setVerificationMode(false);
           setStatusDetails(prev => prev ? { ...prev, message: "Participant Already Checked In" } : null);
           setTimeout(() => {
             handleReset();
           }, 3000);
+      } else {
+        setStatus('error');
+        setStatusDetails({ message: lastRes?.message || 'Error checking in' });
+      }
         } else {
           setStatus('error');
           setStatusDetails({ message: res.message });
@@ -266,12 +301,17 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
   };
 
   const handleMarkAsPaid = async () => {
-    if (!statusDetails?.attendee) return;
+    if (!statusDetails?.attendee || !statusDetails?.allAttendees) return;
     setLoading(true);
-    const participantId = statusDetails.attendee.participantId || statusDetails.attendee.id;
     try {
-      const res = await updatePaymentStatusTransaction(participantId, 'Paid');
-      if (res.success) {
+      let someSuccess = false;
+      for (const att of statusDetails.allAttendees) {
+        const pid = att.participantId || att.id;
+        const res = await updatePaymentStatusTransaction(pid, 'Paid');
+        if (res.success) someSuccess = true;
+      }
+      
+      if (someSuccess) {
         setStatusDetails(prev => {
           if (!prev || !prev.attendee) return prev;
           return {
@@ -459,7 +499,7 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
                   <CheckCircle className="w-12 h-12" />
                 </div>
                 <h3 className="text-3xl font-black text-green-700 mb-2">{statusDetails?.message}</h3>
-                <p className="text-green-700/80 font-medium">{statusDetails?.attendee?.name}</p>
+                <p className="text-emerald-900 break-words">{statusDetails?.attendee?.phone}</p>
               </>
             ) : (
               // Verification Mode (GREEN Screen waiting for PROCEED action)
@@ -495,6 +535,21 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
                         <p className="text-sm font-medium text-on-surface">{statusDetails?.attendee?.email}</p>
                         <p className="text-sm font-medium text-on-surface">{(statusDetails?.attendee as any)?.mobile || statusDetails?.attendee?.phone}</p>
                       </div>
+
+                      {statusDetails?.allAttendees && statusDetails.allAttendees.length > 1 && (
+                        <div className="pt-2 border-t border-outline-variant/50">
+                          <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Also Registered For:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {statusDetails.allAttendees
+                              .filter(a => (a.registeredEventId || a.eventId) !== hostAssignedEventId)
+                              .map((a, i) => (
+                                <span key={i} className="px-3 py-1.5 bg-secondary-container text-on-secondary-container text-xs font-bold rounded-lg border border-outline-variant/30">
+                                  {a.registeredEventTitle || 'Unknown Event'}
+                                </span>
+                              ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                     
                     <div className="space-y-4">
