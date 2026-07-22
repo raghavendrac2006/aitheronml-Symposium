@@ -4,7 +4,7 @@ import { Attendee } from '../types';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { CheckCircle, XCircle, QrCode, Search, UserCheck, Utensils, Keyboard, Camera, Check } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 
 interface ScannerDeskProps {
   mode: 'checkin' | 'food';
@@ -114,9 +114,10 @@ export default function ScannerDesk({ mode, attendees }: ScannerDeskProps) {
           html5QrCode.start(
             { facingMode: "environment" },
             {
-              fps: 10,
+              fps: 25,
+              formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
               qrbox: (width, height) => {
-                const size = Math.min(width, height) * 0.7;
+                const size = Math.min(width, height) * 0.85;
                 return { width: size, height: size };
               }
             },

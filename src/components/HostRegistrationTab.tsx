@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { hostCheckInParticipantTransaction, updatePaymentStatusTransaction } from '../firebaseSync';
 import { Attendee } from '../types';
 import { CheckCircle, XCircle, QrCode, Search, Keyboard, Check, AlertTriangle, User, Users, CheckCircle2, RotateCcw, UserCheck } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface HostRegistrationTabProps {
@@ -109,9 +109,10 @@ export default function HostRegistrationTab({ hostAssignedEventId, attendees }: 
           html5QrCode.start(
             { facingMode: "environment" },
             {
-              fps: 10,
+              fps: 25,
+              formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
               qrbox: (width, height) => {
-                const size = Math.min(width, height) * 0.7;
+                const size = Math.min(width, height) * 0.85;
                 return { width: size, height: size };
               }
             },
