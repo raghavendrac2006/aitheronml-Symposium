@@ -150,7 +150,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
 
       let msg = 'Authentication failed. Please check your credentials.';
       if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        msg = 'Invalid password. If using default accounts, please use password "12345678".';
+        msg = 'You have entered the wrong password. Try again.';
       } else if (err.code === 'auth/invalid-email') {
         msg = 'Please enter a valid email address.';
       } else if (err.code === 'auth/network-request-failed') {
