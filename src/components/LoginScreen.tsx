@@ -78,74 +78,81 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
 
       // Auto-bootstrap default credentials in Firebase Auth if they don't exist yet!
       if (isDefaultSuperadmin || isOfficialHost || isRegistrationTeam) {
+        let authSuccess = false;
         try {
           await createUserWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
+          authSuccess = true;
         } catch (regErr: any) {
           console.warn("Auto registration or double-check failed", regErr);
           if (regErr.code === 'auth/email-already-in-use') {
             try {
               await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
+              authSuccess = true;
             } catch (signInErr) {
               console.warn("Subsequent sign-in failed", signInErr);
             }
           }
         }
 
-        const role = trimmedEmail.includes('superadmin') ? 'superadmin' : trimmedEmail === 'registration@aitheronml.in' ? 'registration' : 'host';
-        const name = MAP_EMAIL_TO_NAME[trimmedEmail] || (trimmedEmail === 'registration@aitheronml.in' ? 'Registration Team' : trimmedEmail.includes('superadmin') ? 'Super Admin' : 'Event Host');
-        const assignedEventId = MAP_EMAIL_TO_EVENT_ID[trimmedEmail] || '';
-        
-        try {
-          await setDoc(doc(db, 'users', trimmedEmail), {
-            name,
-            email: trimmedEmail,
-            role,
-            assignedEventId,
-            status: 'active'
-          });
-        } catch (firestoreErr) {
-          console.warn("Failed to set bootstrapped profile in Firestore", firestoreErr);
-        }
-
-        // Always allow login for default credentials even if Firestore permission check was denied
-        onLogin(trimmedEmail, role as 'superadmin' | 'host' | 'registration', name, assignedEventId);
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Check local storage / local users if Firebase auth failed and is offline
-      try {
-        const storedUsers = localStorage.getItem('custom_users');
-        const usersList = storedUsers ? JSON.parse(storedUsers) : [];
-        
-        // Always include default users in local fallback list so they work 100% of the time offline
-        if (!usersList.some((u: any) => u.email === 'superadmin@gmail.com')) {
-          usersList.push({ email: 'superadmin@gmail.com', pass: '12345678', role: 'superadmin', name: 'Super Admin' });
-        }
-        if (!usersList.some((u: any) => u.email === 'registration@aitheronml.in')) {
-          usersList.push({ email: 'registration@aitheronml.in', pass: '12345678', role: 'registration', name: 'Registration Team' });
-        }
-        
-        Object.entries(MAP_EMAIL_TO_EVENT_ID).forEach(([hostEmail, evId]) => {
-          if (!usersList.some((u: any) => u.email === hostEmail)) {
-            usersList.push({
-              email: hostEmail,
-              pass: '12345678',
-              role: 'host',
-              name: MAP_EMAIL_TO_NAME[hostEmail],
-              assignedEventId: evId
+        if (authSuccess) {
+          const role = trimmedEmail.includes('superadmin') ? 'superadmin' : trimmedEmail === 'registration@aitheronml.in' ? 'registration' : 'host';
+          const name = MAP_EMAIL_TO_NAME[trimmedEmail] || (trimmedEmail === 'registration@aitheronml.in' ? 'Registration Team' : trimmedEmail.includes('superadmin') ? 'Super Admin' : 'Event Host');
+          const assignedEventId = MAP_EMAIL_TO_EVENT_ID[trimmedEmail] || '';
+          
+          try {
+            await setDoc(doc(db, 'users', trimmedEmail), {
+              name,
+              email: trimmedEmail,
+              role,
+              assignedEventId,
+              status: 'active'
             });
+          } catch (firestoreErr) {
+            console.warn("Failed to set bootstrapped profile in Firestore", firestoreErr);
           }
-        });
 
-        const matchedUser = usersList.find((u: any) => u.email.toLowerCase() === trimmedEmail && u.pass === trimmedPassword);
-        if (matchedUser) {
-          onLogin(matchedUser.email, matchedUser.role, matchedUser.name, matchedUser.assignedEventId);
+          // Always allow login for default credentials even if Firestore permission check was denied
+          onLogin(trimmedEmail, role as 'superadmin' | 'host' | 'registration', name, assignedEventId);
           setIsSubmitting(false);
           return;
         }
-      } catch (cacheErr) {
-        console.error("Failed to parse cached users", cacheErr);
+      }
+
+      // Check local storage / local users if Firebase auth failed and is offline
+      if (err.code === 'auth/network-request-failed') {
+        try {
+          const storedUsers = localStorage.getItem('custom_users');
+          const usersList = storedUsers ? JSON.parse(storedUsers) : [];
+          
+          // Always include default users in local fallback list so they work 100% of the time offline
+          if (!usersList.some((u: any) => u.email === 'superadmin@gmail.com')) {
+            usersList.push({ email: 'superadmin@gmail.com', pass: '12345678', role: 'superadmin', name: 'Super Admin' });
+          }
+          if (!usersList.some((u: any) => u.email === 'registration@aitheronml.in')) {
+            usersList.push({ email: 'registration@aitheronml.in', pass: '12345678', role: 'registration', name: 'Registration Team' });
+          }
+          
+          Object.entries(MAP_EMAIL_TO_EVENT_ID).forEach(([hostEmail, evId]) => {
+            if (!usersList.some((u: any) => u.email === hostEmail)) {
+              usersList.push({
+                email: hostEmail,
+                pass: '12345678',
+                role: 'host',
+                name: MAP_EMAIL_TO_NAME[hostEmail],
+                assignedEventId: evId
+              });
+            }
+          });
+
+          const matchedUser = usersList.find((u: any) => u.email.toLowerCase() === trimmedEmail && u.pass === trimmedPassword);
+          if (matchedUser) {
+            onLogin(matchedUser.email, matchedUser.role, matchedUser.name, matchedUser.assignedEventId);
+            setIsSubmitting(false);
+            return;
+          }
+        } catch (cacheErr) {
+          console.error("Failed to parse cached users", cacheErr);
+        }
       }
 
       let msg = 'Authentication failed. Please check your credentials.';
