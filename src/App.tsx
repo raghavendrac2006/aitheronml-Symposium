@@ -130,8 +130,20 @@ function AppContent() {
   // Session State
   const [session, setSession] = useState<UserSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [publicRegSuccessAttendee, setPublicRegSuccessAttendee] = useState<Attendee | null>(null);
-  const [publicRegSuccessSecondAttendee, setPublicRegSuccessSecondAttendee] = useState<Attendee | null>(null);
+  const [publicRegSuccessAttendee, setPublicRegSuccessAttendee] = useState<Attendee | null>(() => {
+    try {
+      const saved = localStorage.getItem('symposium_registration');
+      if (saved) return JSON.parse(saved).attendee;
+    } catch (e) {}
+    return null;
+  });
+  const [publicRegSuccessSecondAttendee, setPublicRegSuccessSecondAttendee] = useState<Attendee | null>(() => {
+    try {
+      const saved = localStorage.getItem('symposium_registration');
+      if (saved) return JSON.parse(saved).secondAttendee;
+    } catch (e) {}
+    return null;
+  });
 
   // Core Data States
   const [events, setEvents] = useState<SymposiumEvent[]>([]);
@@ -557,6 +569,7 @@ function AppContent() {
                 onReturnHome={() => {
                   setPublicRegSuccessAttendee(null);
                   setPublicRegSuccessSecondAttendee(null);
+                  try { localStorage.removeItem('symposium_registration'); } catch (e) {}
                 }}
                 isSpotSuccess={false}
               />
@@ -576,11 +589,20 @@ function AppContent() {
                   // We do not manually mutate registeredCount to avoid overwriting backend increments.
 
                   setPublicRegSuccessAttendee(newAtt);
+                  let second = null;
                   if (extra && extra.length > 0) {
-                    setPublicRegSuccessSecondAttendee(extra[0]);
+                    second = extra[0];
+                    setPublicRegSuccessSecondAttendee(second);
                   } else {
                     setPublicRegSuccessSecondAttendee(null);
                   }
+                  
+                  try {
+                    localStorage.setItem('symposium_registration', JSON.stringify({
+                      attendee: newAtt,
+                      secondAttendee: second
+                    }));
+                  } catch (e) {}
                 }}
                 onBackToLogin={() => {}}
               />
