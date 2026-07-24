@@ -417,25 +417,32 @@ export async function saveParticipantsWithAtomicIds(
   } catch (error: any) {
     console.warn("Firestore transaction failed online. Falling back to robust local ID generation and background sync queueing.", error);
 
-    // Fallback: Client-side generation using local state + high-entropy timestamp seed to guarantee cross-device uniqueness
+    // Fallback: Client-side sequential generation using local cache
     const cachedAttendees = getCachedAttendees();
-    const timeSeed = Math.floor((Date.now() % 1000000) / 10);
-    const randSalt = Math.floor(Math.random() * 90) + 10;
-    const fallbackBaseNum = timeSeed * 100 + randSalt;
+    let nextNum = 1;
+    if (cachedAttendees.length > 0) {
+      const symIds = cachedAttendees.map(a => {
+        const cleanId = (a.participantId || a.id || '').replace('-SPOT', '');
+        const m = cleanId.match(/^(?:SYM|CSM)-(\d+)$/);
+        return m ? parseInt(m[1], 10) : 0;
+      });
+      const maxId = Math.max(...symIds, 0);
+      if (maxId > 0) {
+        nextNum = maxId + 1;
+      }
+    }
 
     const localAttendees: Attendee[] = [];
     for (let i = 0; i < count; i++) {
-      let num = fallbackBaseNum + i;
+      let num = nextNum + i;
       let baseId = `CSM-${String(num).padStart(6, '0')}`;
       let finalId = isSpot ? `${baseId}-SPOT` : baseId;
 
-      // Guarantee zero ID collision locally or in cached list
-      let salt = 1;
+      // Guarantee zero ID collision locally or in cached list by incrementing sequentially
       while (cachedAttendees.some(a => a.id === finalId) || localAttendees.some(a => a.id === finalId)) {
-        num = num + salt * 17 + Math.floor(Math.random() * 90 + 10);
+        num++;
         baseId = `CSM-${String(num).padStart(6, '0')}`;
         finalId = isSpot ? `${baseId}-SPOT` : baseId;
-        salt++;
       }
 
       const template = attendeeTemplates[i] as any;

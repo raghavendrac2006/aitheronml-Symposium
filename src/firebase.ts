@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { 
-  initializeFirestore, 
+  getFirestore, 
   collection, 
   doc, 
   getDocs, 
@@ -33,9 +33,7 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-export const db = initializeFirestore(app, {
-  experimentalAutoDetectLongPolling: true
-});
+export const db = getFirestore(app);
 export const auth = getAuth(app);
 setPersistence(auth, inMemoryPersistence).catch(console.error);
 
