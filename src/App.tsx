@@ -132,20 +132,8 @@ function AppContent() {
   // Session State
   const [session, setSession] = useState<UserSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [publicRegSuccessAttendee, setPublicRegSuccessAttendee] = useState<Attendee | null>(() => {
-    try {
-      const saved = localStorage.getItem('symposium_registration');
-      if (saved) return JSON.parse(saved).attendee;
-    } catch (e) {}
-    return null;
-  });
-  const [publicRegSuccessSecondAttendee, setPublicRegSuccessSecondAttendee] = useState<Attendee | null>(() => {
-    try {
-      const saved = localStorage.getItem('symposium_registration');
-      if (saved) return JSON.parse(saved).secondAttendee;
-    } catch (e) {}
-    return null;
-  });
+  const [publicRegSuccessAttendee, setPublicRegSuccessAttendee] = useState<Attendee | null>(null);
+  const [publicRegSuccessSecondAttendee, setPublicRegSuccessSecondAttendee] = useState<Attendee | null>(null);
 
   // Core Data States
   const [events, setEvents] = useState<SymposiumEvent[]>([]);
