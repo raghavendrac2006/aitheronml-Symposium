@@ -377,17 +377,8 @@ export async function saveParticipantsWithAtomicIds(
   };
 
   try {
-    // Try online transaction with a 4-second timeout to prevent indefinite hanging on slow/blocked networks
-    await Promise.race([
-      executeTransaction(),
-      new Promise((_, reject) => {
-        setTimeout(() => {
-          const timeoutErr = new Error("Transaction timed out (network slow or blocked)");
-          (timeoutErr as any).code = 'unavailable'; // Trigger offline fallback
-          reject(timeoutErr);
-        }, 4000);
-      })
-    ]);
+    // Execute online transaction directly without artificial timeout to guarantee atomic sequential IDs
+    await executeTransaction();
 
     // Asynchronously update event counters to avoid transaction contention and speed up the UI response
     setTimeout(() => {
@@ -426,7 +417,7 @@ export async function saveParticipantsWithAtomicIds(
   } catch (error: any) {
     console.warn("Firestore transaction failed online. Falling back to robust local ID generation and background sync queueing.", error);
 
-    // Fallback: Client-side generation using local state and queueing
+    // Fallback: Client-side generation using local state and queueing with zero-collision guarantee
     const cachedAttendees = getCachedAttendees();
     let nextNum = 1;
     if (cachedAttendees.length > 0) {
@@ -438,16 +429,25 @@ export async function saveParticipantsWithAtomicIds(
       const maxId = Math.max(...symIds, 0);
       nextNum = maxId + 1;
     } else {
-      nextNum = (Math.floor(Date.now() / 1000) % 900000) + 100000;
+      nextNum = Math.floor(Date.now() / 1000) * 100 + Math.floor(Math.random() * 90 + 10);
     }
 
     const localAttendees: Attendee[] = [];
     for (let i = 0; i < count; i++) {
-      const num = nextNum + i;
-      const baseId = `CSM-${String(num).padStart(6, '0')}`;
-      const finalId = isSpot ? `${baseId}-SPOT` : baseId;
-      const template = attendeeTemplates[i] as any;
+      let num = nextNum + i;
+      let baseId = `CSM-${String(num).padStart(6, '0')}`;
+      let finalId = isSpot ? `${baseId}-SPOT` : baseId;
 
+      // Guarantee zero ID collision locally or in cached list
+      let salt = 1;
+      while (cachedAttendees.some(a => a.id === finalId) || localAttendees.some(a => a.id === finalId)) {
+        num = num + salt * 7 + Math.floor(Math.random() * 90 + 10);
+        baseId = `CSM-${String(num).padStart(6, '0')}`;
+        finalId = isSpot ? `${baseId}-SPOT` : baseId;
+        salt++;
+      }
+
+      const template = attendeeTemplates[i] as any;
       const sharedTeamId = template.regType === 'team' ? finalId : '';
       const teamMembersDataForLeader: any[] = [];
 
@@ -476,7 +476,7 @@ export async function saveParticipantsWithAtomicIds(
         createdAt: template.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         createdBy: createdBy,
-        secureToken: template.secureToken // Exact same token as online transaction
+        secureToken: template.secureToken
       } as Attendee;
 
       localAttendees.push(attendeeObj);
