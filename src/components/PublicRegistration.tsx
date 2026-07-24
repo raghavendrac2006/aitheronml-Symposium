@@ -283,7 +283,8 @@ export default function PublicRegistration({
 
     } catch (err: any) {
       console.error("Registration failed:", err);
-      setError('Registration failed. Firestore write unsuccessful.');
+      const detail = err?.message || err?.code || 'Please check your connection and try again.';
+      setError(`Registration system error: ${detail}`);
     } finally {
       setLoading(false);
     }

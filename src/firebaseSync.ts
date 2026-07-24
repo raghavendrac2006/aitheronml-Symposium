@@ -424,86 +424,81 @@ export async function saveParticipantsWithAtomicIds(
     return createdAttendees;
 
   } catch (error: any) {
-    const isNetworkError = (typeof navigator !== 'undefined' && !navigator.onLine) || 
-                           error.code === 'unavailable' || 
-                           error.code === 'failed-precondition' ||
-                           error.message?.includes('offline') ||
-                           error.message?.toLowerCase().includes('quota exceeded') ||
-                           error.code === 'resource-exhausted'; // Resource exhausted usually means quota exceeded here since we caught contention above
+    console.warn("Firestore transaction failed online. Falling back to robust local ID generation and background sync queueing.", error);
 
-    if (isNetworkError) {
-      console.warn("Firestore transaction failed because the client is offline. Falling back to local ID generation.", error);
-
-      // Fallback: Client-side generation using local state
-      const cachedAttendees = getCachedAttendees();
-      let nextNum = 1;
-      if (cachedAttendees.length > 0) {
-        const symIds = cachedAttendees.map(a => {
-          const cleanId = (a.participantId || a.id || '').replace('-SPOT', '');
-          const m = cleanId.match(/^(?:SYM|CSM)-(\d+)$/);
-          return m ? parseInt(m[1], 10) : 0;
-        });
-        const maxId = Math.max(...symIds, 0);
-        nextNum = maxId + 1;
-      }
-
-      const localAttendees: Attendee[] = [];
-      for (let i = 0; i < count; i++) {
-        const num = nextNum + i;
-        const baseId = `CSM-${String(num).padStart(6, '0')}`;
-        const finalId = isSpot ? `${baseId}-SPOT` : baseId;
-        const template = attendeeTemplates[i] as any;
-
-        const sharedTeamId = template.regType === 'team' ? finalId : '';
-        const teamMembersDataForLeader: any[] = [];
-
-        if (template.regType === 'team' && template._tempMembersInput) {
-          template._tempMembersInput.forEach((m: any) => {
-            teamMembersDataForLeader.push({
-              name: m.name.trim(),
-              phone: m.phone.trim(),
-              email: m.email.trim().toLowerCase(),
-              college: template.college,
-              branch: template.branch,
-              year: template.year,
-              participantId: finalId
-            });
-          });
-        }
-
-        const { _tempMembersInput, ...cleanTemplate } = template;
-
-        const attendeeObj: Attendee = {
-          ...cleanTemplate,
-          id: finalId,
-          participantId: finalId,
-          teamId: sharedTeamId,
-          teamMembers: template.regType === 'team' ? teamMembersDataForLeader : undefined,
-          createdAt: template.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          createdBy: createdBy,
-          secureToken: template.secureToken // Exact same token as online transaction
-        } as Attendee;
-
-        localAttendees.push(attendeeObj);
-      }
-
-      // Update local cache
-      for (const att of localAttendees) {
-        cachedAttendees.push(att);
-      }
-      localStorage.setItem('ai_symposium_attendees', JSON.stringify(cachedAttendees));
-
-      // Queue offline sync operations for each fallback attendee
-      for (const att of localAttendees) {
-        queueSyncOperation('save', PARTICIPANTS_COL, att.id, att);
-      }
-
-      return localAttendees;
+    // Fallback: Client-side generation using local state and queueing
+    const cachedAttendees = getCachedAttendees();
+    let nextNum = 1;
+    if (cachedAttendees.length > 0) {
+      const symIds = cachedAttendees.map(a => {
+        const cleanId = (a.participantId || a.id || '').replace('-SPOT', '');
+        const m = cleanId.match(/^(?:SYM|CSM)-(\d+)$/);
+        return m ? parseInt(m[1], 10) : 0;
+      });
+      const maxId = Math.max(...symIds, 0);
+      nextNum = maxId + 1;
     } else {
-      console.error("Firestore transaction failed due to write collision or database error. Aborting.", error);
-      throw error; // Propagate to let the UI display failure & allow retry
+      nextNum = (Math.floor(Date.now() / 1000) % 900000) + 100000;
     }
+
+    const localAttendees: Attendee[] = [];
+    for (let i = 0; i < count; i++) {
+      const num = nextNum + i;
+      const baseId = `CSM-${String(num).padStart(6, '0')}`;
+      const finalId = isSpot ? `${baseId}-SPOT` : baseId;
+      const template = attendeeTemplates[i] as any;
+
+      const sharedTeamId = template.regType === 'team' ? finalId : '';
+      const teamMembersDataForLeader: any[] = [];
+
+      if (template.regType === 'team' && template._tempMembersInput) {
+        template._tempMembersInput.forEach((m: any) => {
+          teamMembersDataForLeader.push({
+            name: m.name.trim(),
+            phone: m.phone.trim(),
+            email: m.email.trim().toLowerCase(),
+            college: template.college,
+            branch: template.branch,
+            year: template.year,
+            participantId: finalId
+          });
+        });
+      }
+
+      const { _tempMembersInput, ...cleanTemplate } = template;
+
+      const attendeeObj: Attendee = {
+        ...cleanTemplate,
+        id: finalId,
+        participantId: finalId,
+        teamId: sharedTeamId,
+        teamMembers: template.regType === 'team' ? teamMembersDataForLeader : undefined,
+        createdAt: template.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: createdBy,
+        secureToken: template.secureToken // Exact same token as online transaction
+      } as Attendee;
+
+      localAttendees.push(attendeeObj);
+    }
+
+    // Update local cache
+    for (const att of localAttendees) {
+      cachedAttendees.push(att);
+    }
+    localStorage.setItem('ai_symposium_attendees', JSON.stringify(cachedAttendees));
+
+    // Queue offline sync operations for each fallback attendee
+    for (const att of localAttendees) {
+      queueSyncOperation('save', PARTICIPANTS_COL, att.id, att);
+    }
+
+    // Also trigger background Firestore save
+    for (const att of localAttendees) {
+      saveAttendeeToFirestore(att).catch(e => console.warn("Background save fallback retry error:", e));
+    }
+
+    return localAttendees;
   }
 }
 
