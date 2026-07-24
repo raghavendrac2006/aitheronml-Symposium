@@ -127,7 +127,7 @@ function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
-  const isPublicReg = searchParams.get('mode') === 'register' || searchParams.get('register') === 'true';
+  const isPublicReg = searchParams.get('mode') === 'register' || searchParams.get('register') === 'true' || location.pathname === '/register';
 
   // Session State
   const [session, setSession] = useState<UserSession | null>(null);
