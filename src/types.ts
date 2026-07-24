@@ -156,17 +156,17 @@ export const MAP_EMAIL_TO_EVENT_ID: Record<string, string> = {
 };
 
 export const MAP_EMAIL_TO_NAME: Record<string, string> = {
-  'paperpresentation@aitheronml.in': 'Paper Presentation Host',
-  'projectexpo@aitheronml.in': 'Project Expo Host',
-  'aiagent@aitheronml.in': 'AI Agent Challenge Host',
-  'aivideo@aitheronml.in': 'AI Video Generation Host',
-  'dsa@aitheronml.in': 'DSA Challenge Host',
-  'vibecoding@aitheronml.in': 'Vibe Coding Host',
-  'techquiz@aitheronml.in': 'Technical Quiz Host',
-  'photography@aitheronml.in': 'Photography Host',
-  'logo@aitheronml.in': 'Logo Identification Host',
-  'treasurehunt@aitheronml.in': 'Treasure Hunt Host',
-  'freefire@aitheronml.in': 'Freefire Host',
+  'paperpresentation@aitheronml.in': 'Gauthami & Charan.P',
+  'projectexpo@aitheronml.in': 'Mounika & B Pavani',
+  'aiagent@aitheronml.in': 'Tharun K & O S Praveen',
+  'aivideo@aitheronml.in': 'Vignati & Akshaya',
+  'dsa@aitheronml.in': 'C.Raghavendra & Kesiya',
+  'vibecoding@aitheronml.in': 'Deekshitha & B S Nandini',
+  'techquiz@aitheronml.in': 'Charan Teja & Akash',
+  'photography@aitheronml.in': 'Arif & Nikitha',
+  'logo@aitheronml.in': 'Pranav & Zaara',
+  'treasurehunt@aitheronml.in': 'Vivek & Indumathi',
+  'freefire@aitheronml.in': 'Thoufiq & Sarkesh',
 };
 
 export function normalizeEmail(emailStr: string): string {

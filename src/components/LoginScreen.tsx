@@ -52,7 +52,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         if (userDoc.exists()) {
           const data = userDoc.data();
           role = data.role || role;
-          name = data.name || name;
+          name = MAP_EMAIL_TO_NAME[trimmedEmail] || data.name || name;
           const dbAssignedEventId = data.assignedEventId;
           assignedEventId = (dbAssignedEventId && dbAssignedEventId !== 'none') ? dbAssignedEventId : assignedEventId;
         } else {

@@ -197,7 +197,7 @@ function AppContent() {
             setSession({
               email: email,
               role: (data.role || role) as 'superadmin' | 'host' | 'registration',
-              name: data.name || name,
+              name: MAP_EMAIL_TO_NAME[email] || data.name || name,
               assignedEventId: (dbAssignedEventId && dbAssignedEventId !== 'none') ? dbAssignedEventId : assignedEventId
             });
           } else {
