@@ -146,7 +146,8 @@ export const MAP_EMAIL_TO_EVENT_ID: Record<string, string> = {
   'projectexpo@aitheronml.in': 'project_expo',
   'aiagent@aitheronml.in': 'ai_agent_challenge',
   'aivideo@aitheronml.in': 'ai_video_generation',
-  'dsa@aitheronml.in': 'dsa_challenge',
+  'uiux@aitheronml.in': 'ui_ux_design_thrive',
+  'dsa@aitheronml.in': 'ui_ux_design_thrive',
   'vibecoding@aitheronml.in': 'vibe_coding',
   'techquiz@aitheronml.in': 'technical_quiz',
   'photography@aitheronml.in': 'photography',
@@ -160,6 +161,7 @@ export const MAP_EMAIL_TO_NAME: Record<string, string> = {
   'projectexpo@aitheronml.in': 'Mounika & B Pavani',
   'aiagent@aitheronml.in': 'Tharun K & O S Praveen',
   'aivideo@aitheronml.in': 'Vignati & Akshaya',
+  'uiux@aitheronml.in': 'C.Raghavendra & Kesiya',
   'dsa@aitheronml.in': 'C.Raghavendra & Kesiya',
   'vibecoding@aitheronml.in': 'Deekshitha & B S Nandini',
   'techquiz@aitheronml.in': 'Charan Teja & Akash',
@@ -183,7 +185,7 @@ export function normalizeEmail(emailStr: string): string {
   else if (username.startsWith('project')) normUsername = 'projectexpo';
   else if (username.startsWith('aiagent') || username.startsWith('agent')) normUsername = 'aiagent';
   else if (username.startsWith('aivideo') || username.startsWith('video')) normUsername = 'aivideo';
-  else if (username.startsWith('dsa')) normUsername = 'dsa';
+  else if (username.startsWith('uiux') || username.startsWith('ui') || username.startsWith('ux') || username.startsWith('dsa')) normUsername = 'uiux';
   else if (username.startsWith('vibe')) normUsername = 'vibecoding';
   else if (username.startsWith('techquiz') || username.startsWith('quiz')) normUsername = 'techquiz';
   else if (username.startsWith('photograph')) normUsername = 'photography';
@@ -198,6 +200,7 @@ export function normalizeEmail(emailStr: string): string {
     'projectexpo',
     'aiagent',
     'aivideo',
+    'uiux',
     'dsa',
     'vibecoding',
     'techquiz',

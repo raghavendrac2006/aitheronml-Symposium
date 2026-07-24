@@ -35,6 +35,7 @@ const MAPPED_EVENT_IDS: Record<string, string> = {
   'ev-2': 'poster_presentation',
   'ev-4': 'photography',
   'ev-5': 'treasure_hunt',
+  'dsa_challenge': 'ui_ux_design_thrive',
 };
 
 function migrateAttendee(a: Attendee): Attendee {
@@ -58,7 +59,8 @@ export const ROUTE_TO_EVENT_ID: Record<string, string> = {
   '/projectexpo': 'project_expo',
   '/aiagent': 'ai_agent_challenge',
   '/aivideo': 'ai_video_generation',
-  '/dsa': 'dsa_challenge',
+  '/uiux': 'ui_ux_design_thrive',
+  '/dsa': 'ui_ux_design_thrive',
   '/techquiz': 'technical_quiz',
   '/photography': 'photography',
   '/logo': 'logo_identification',
@@ -713,7 +715,22 @@ function AppContent() {
             />
           ))} />
 
-          <Route path="/dsa" element={requireHost('dsa_challenge', (
+          <Route path="/uiux" element={requireHost('ui_ux_design_thrive', (
+            <HostDashboard 
+              user={session!}
+              events={events}
+              attendees={attendees}
+              batches={batches}
+              isOnline={isOnline}
+              onUpdateEvents={updateEventsState}
+              onUpdateAttendees={updateAttendeesState}
+              onSaveBatch={handleSaveBatch}
+              onDeleteBatch={handleDeleteBatch}
+              onLogout={handleLogout}
+            />
+          ))} />
+
+          <Route path="/dsa" element={requireHost('ui_ux_design_thrive', (
             <HostDashboard 
               user={session!}
               events={events}
