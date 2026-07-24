@@ -486,15 +486,16 @@ export async function saveParticipantsWithAtomicIds(
     }
     localStorage.setItem('ai_symposium_attendees', JSON.stringify(cachedAttendees));
 
-    // Queue offline sync operations for each fallback attendee
+    // Queue sync operations and guarantee immediate write to Firestore
     for (const att of localAttendees) {
       queueSyncOperation('save', PARTICIPANTS_COL, att.id, att);
+      try {
+        await saveAttendeeToFirestore(att);
+      } catch (e) {
+        console.warn("Direct fallback save retry warning:", e);
+      }
     }
-
-    // Also trigger background Firestore save
-    for (const att of localAttendees) {
-      saveAttendeeToFirestore(att).catch(e => console.warn("Background save fallback retry error:", e));
-    }
+    triggerPendingSync();
 
     return localAttendees;
   }
