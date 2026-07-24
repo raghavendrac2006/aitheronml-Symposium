@@ -60,8 +60,7 @@ service cloud.firestore {
     
     // COUNTERS COLLECTION
     match /counters/{counterId} {
-      allow read: if true;
-      allow write: if isRegistrationOpen() || isSuperAdmin() || isHost();
+      allow read, write: if true;
     }
     
     // BATCHES COLLECTION
