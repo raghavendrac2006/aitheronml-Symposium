@@ -39,23 +39,17 @@ service cloud.firestore {
     
     // PARTICIPANTS COLLECTION
     match /participants/{participantId} {
-      allow read: if true;
-      allow create: if isRegistrationOpen() || isSuperAdmin() || isHost();
-      allow update, delete: if isSuperAdmin() || isHost();
+      allow read, write: if true;
     }
     
     // EVENTS COLLECTION
     match /events/{eventId} {
-      allow read: if true;
-      allow create, delete: if isSuperAdmin() || isHost();
-      allow update: if isSuperAdmin() || isHost() || (isRegistrationOpen() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['registeredCount']));
+      allow read, write: if true;
     }
     
     // TEAMS COLLECTION
     match /teams/{teamId} {
-      allow read: if true;
-      allow create: if isRegistrationOpen() || isSuperAdmin() || isHost();
-      allow update, delete: if isSuperAdmin() || isHost();
+      allow read, write: if true;
     }
     
     // COUNTERS COLLECTION

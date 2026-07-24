@@ -754,6 +754,19 @@ export async function checkInParticipantTransaction(
 }> {
   const docRef = doc(db, 'participants', participantId);
   try {
+    // Fail-safe auto recovery: if document missing from Firestore, check local cache and sync to Firestore
+    try {
+      const initialSnap = await getDoc(docRef);
+      if (!initialSnap.exists()) {
+        const localMatch = getCachedAttendees().find(a => a.id === participantId || a.participantId === participantId);
+        if (localMatch) {
+          await setDoc(docRef, sanitizeForFirestore(localMatch));
+        }
+      }
+    } catch (e) {
+      console.warn("Pre-check auto recovery failed:", e);
+    }
+
     const result = await runTransaction(db, async (transaction) => {
       const docSnap = await transaction.get(docRef);
       if (!docSnap.exists()) {
