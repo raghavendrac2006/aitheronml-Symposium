@@ -1,0 +1,94 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email.matches('.*superadmin.*') || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'superadmin')
+      );
+    }
+
+    function isHost() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'host'
+      );
+    }
+
+    function isRegistrationOpen() {
+      return exists(/databases/$(database)/documents/events/registration_settings) == false ||
+             get(/databases/$(database)/documents/events/registration_settings).data.registrationOpen == true;
+    }
+
+    // USERS COLLECTION
+    match /users/{email} {
+      allow read: if true;
+      allow write: if isSuperAdmin() || (isSignedIn() && request.auth.token.email == email);
+    }
+    
+    // PARTICIPANTS COLLECTION
+    match /participants/{participantId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+    
+    // EVENTS COLLECTION
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+    
+    // TEAMS COLLECTION
+    match /teams/{teamId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+    
+    // COUNTERS COLLECTION
+    match /counters/{counterId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+    
+    // BATCHES COLLECTION
+    match /batches/{batchId} {
+      allow read: if true;
+      allow write: if isSuperAdmin() || isHost();
+    }
+    
+    // HOSTS COLLECTION
+    match /hosts/{hostId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+    
+    // JUDGES COLLECTION
+    match /judges/{judgeId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+    
+    // RESULTS COLLECTION
+    match /results/{resultId} {
+      allow read: if true;
+      allow write: if isSuperAdmin() || isHost();
+    }
+
+    // SETTINGS COLLECTION
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+  }
+}

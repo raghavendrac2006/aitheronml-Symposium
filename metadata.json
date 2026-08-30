@@ -1,0 +1,6 @@
+{
+  "name": "AItheronML Symposium OS",
+  "description": "Comprehensive Symposium Management OS for Kuppam Engineering College, featuring dedicated portals for Super Admins and Hosts to manage participants, symposia, track submissions, and event progress.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
