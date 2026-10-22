@@ -11,6 +11,9 @@ interface LoginScreenProps {
 }
 
 export default function LoginScreen({ onLogin }: LoginScreenProps) {
+  // Demo credentials (superadmin) – used for quick demo login
+  const DEMO_EMAIL = "superadmin@gmail.com";
+  const DEMO_PASSWORD = "demoSuperAdminPass";
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -27,6 +30,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
   const [regSuccess, setRegSuccess] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
+  // Normal login flow – unchanged
     e.preventDefault();
     setError(null);
     setIsSubmitting(true);
@@ -146,6 +150,44 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         msg = 'Network connection failed. Operating in offline/cached fallback mode.';
       }
       setError(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Demo login – directly authenticate with hardcoded superadmin credentials
+  const handleDemoLogin = async () => {
+    setError(null);
+    setIsSubmitting(true);
+    setEmail(DEMO_EMAIL);
+    setPassword(DEMO_PASSWORD);
+
+    try {
+      // Try sign-in first
+      try {
+        await signInWithEmailAndPassword(auth, DEMO_EMAIL, DEMO_PASSWORD);
+      } catch {
+        // If account doesn't exist yet, create it (auto-bootstrap)
+        await createUserWithEmailAndPassword(auth, DEMO_EMAIL, DEMO_PASSWORD);
+      }
+
+      // Ensure Firestore profile exists
+      try {
+        await setDoc(doc(db, 'users', DEMO_EMAIL), {
+          name: 'Super Admin',
+          email: DEMO_EMAIL,
+          role: 'superadmin',
+          assignedEventId: '',
+          status: 'active'
+        });
+      } catch (fsErr) {
+        console.warn('Demo login: Firestore profile write skipped', fsErr);
+      }
+
+      onLogin(DEMO_EMAIL, 'superadmin', 'Super Admin', '');
+    } catch (err: any) {
+      console.error('Demo login failed', err);
+      setError('Demo login failed. Please try again or log in manually.');
     } finally {
       setIsSubmitting(false);
     }
@@ -376,6 +418,23 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
           </div>
         </div>
       </main>
+
+      {/* Demo Login floating button – bottom right */}
+      <button
+        id="demo-login-btn"
+        onClick={handleDemoLogin}
+        disabled={isSubmitting}
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold shadow-lg transition-all hover:scale-105 active:scale-95 cursor-pointer"
+        style={{
+          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+          color: '#fff',
+          border: '1px solid rgba(255,255,255,0.15)',
+          backdropFilter: 'blur(8px)',
+        }}
+      >
+        <Key className="w-4 h-4" />
+        <span>Demo Login</span>
+      </button>
 
       {/* Footer */}
       <footer className="w-full text-center z-20 pb-4">
