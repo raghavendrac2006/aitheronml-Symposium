@@ -13,7 +13,7 @@ interface LoginScreenProps {
 export default function LoginScreen({ onLogin }: LoginScreenProps) {
   // Demo credentials (superadmin) – used for quick demo login
   const DEMO_EMAIL = "superadmin@gmail.com";
-  const DEMO_PASSWORD = "demoSuperAdminPass";
+  const DEMO_PASSWORD = "12345678";
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
